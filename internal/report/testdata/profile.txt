@@ -26,7 +26,11 @@ Caching
   Reads, % of volume            91.9%   [derived]
   Writes, % of cost             52.4%   [derived]
 
-Tool results (observed content, not billed tokens)
+Retrieved content (observed size of what entered context)
+  Total                          10 B   [observed]
+  tool output                10 B  100.0%   [observed]
+
+Tool results by tool
   Bash                         10 B         1 calls
   Agent                         0 B         1 calls
 

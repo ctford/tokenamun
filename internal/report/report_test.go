@@ -41,6 +41,44 @@ func TestProfileGoldenOutput(t *testing.T) {
 	compareGolden(t, "profile.json", append(pretty, '\n'))
 }
 
+func TestRetrievalGoldenOutput(t *testing.T) {
+	s, err := ingest.Load(model.SessionRef{
+		ID:         "retrieval-fixture",
+		Transcript: filepath.Join("..", "ingest", "testdata", "retrieval.jsonl"),
+		Origin:     model.FromLocal,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := BuildRetrieval(s)
+
+	var text bytes.Buffer
+	if err := RenderRetrieval(&text, r); err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "retrieval.txt", text.Bytes())
+
+	pretty, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "retrieval.json", append(pretty, '\n'))
+	walkQuantities(t, "retrieval", mustTree(t, r))
+}
+
+func mustTree(t *testing.T, v any) any {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tree any
+	if err := json.Unmarshal(raw, &tree); err != nil {
+		t.Fatal(err)
+	}
+	return tree
+}
+
 // Every quantity the JSON contract exposes must carry a provenance label and a
 // unit. This is the check that stops an unlabelled number reaching an agent.
 func TestEveryReportedQuantityIsLabelled(t *testing.T) {

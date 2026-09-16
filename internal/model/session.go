@@ -54,6 +54,10 @@ type ToolCall struct {
 	IsError       bool   `json:"is_error"`
 	Resolved      bool   `json:"resolved"`
 	InvocationSeq int    `json:"invocation_seq"`
+	// Command is the shell command line, when the tool was Bash. Kept because
+	// file reads go through the shell in auto mode, so it is the only way to
+	// attribute that output to a path.
+	Command string `json:"command,omitempty"`
 }
 
 // Warning is something the reader needs to know about the data rather than
@@ -65,16 +69,30 @@ type Warning struct {
 
 // Session is a parsed transcript in normalized form.
 type Session struct {
-	Ref         SessionRef        `json:"ref"`
-	Invocations []ModelInvocation `json:"invocations"`
-	ToolCalls   []ToolCall        `json:"tool_calls"`
-	Prompts     int               `json:"user_prompts"`
-	Branch      string            `json:"branch,omitempty"`
-	CWD         string            `json:"cwd,omitempty"`
-	Warnings    []Warning         `json:"warnings,omitempty"`
+	Ref         SessionRef         `json:"ref"`
+	Invocations []ModelInvocation  `json:"invocations"`
+	ToolCalls   []ToolCall         `json:"tool_calls"`
+	Retrievals  []RetrievedContent `json:"retrievals,omitempty"`
+	Repeats     []Repeat           `json:"repeats,omitempty"`
+	Prompts     int                `json:"user_prompts"`
+	Branch      string             `json:"branch,omitempty"`
+	CWD         string             `json:"cwd,omitempty"`
+	Warnings    []Warning          `json:"warnings,omitempty"`
 	// TranscriptLines and AssistantEntries support the dedup diagnostic.
-	TranscriptLines  int `json:"transcript_lines"`
-	AssistantEntries int `json:"assistant_entries"`
+	TranscriptLines  int            `json:"transcript_lines"`
+	AssistantEntries int            `json:"assistant_entries"`
+	Estimator        TokenEstimator `json:"token_estimator"`
+}
+
+// TokenEstimator records how content token counts were arrived at, so the
+// report can print the method next to the numbers.
+type TokenEstimator struct {
+	Method          string  `json:"method"`
+	BytesPerToken   float64 `json:"bytes_per_token"`
+	PerCallOverhead float64 `json:"per_call_overhead_tokens"`
+	Residual        float64 `json:"unattributed_share"`
+	Calibrated      bool    `json:"calibrated"`
+	Samples         int     `json:"samples"`
 }
 
 // Usage totals the session's deduplicated invocations.

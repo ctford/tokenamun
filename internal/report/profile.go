@@ -22,6 +22,8 @@ type Profile struct {
 	Session       SessionInfo     `json:"session"`
 	Usage         UsageReport     `json:"usage"`
 	Caching       CachingReport   `json:"caching"`
+	Retrieved     RetrievalTotals `json:"retrieved_content"`
+	ByCategory    []CategoryTotal `json:"retrieved_by_category"`
 	Tools         []ToolSummary   `json:"tools"`
 	Warnings      []model.Warning `json:"warnings,omitempty"`
 	Notes         []string        `json:"notes"`
@@ -94,6 +96,8 @@ func BuildProfile(s *model.Session) Profile {
 		writeShare = (promptCost - float64(u.Input)*w.Input - float64(u.CacheRead)*w.CacheRead) / promptCost
 	}
 
+	retrieval := BuildRetrieval(s)
+
 	ttl := "none observed"
 	switch {
 	case u.CacheCreation1h > 0 && u.CacheCreation5m > 0:
@@ -106,12 +110,7 @@ func BuildProfile(s *model.Session) Profile {
 
 	return Profile{
 		SchemaVersion: SchemaVersion,
-		Session: SessionInfo{
-			ID: s.Ref.ID, Origin: s.Ref.Origin, Current: s.Ref.Current,
-			Models: s.Models(), Branch: s.Branch,
-			Calls: len(s.Invocations), Prompts: s.Prompts,
-			Duration: s.Duration().Round(time.Second).String(),
-		},
+		Session:       sessionInfo(s),
 		Usage: UsageReport{
 			Input:           model.Obs(float64(u.Input), model.Tokens),
 			CacheRead:       model.Obs(float64(u.CacheRead), model.Tokens),
@@ -131,13 +130,25 @@ func BuildProfile(s *model.Session) Profile {
 			TTL1h:             model.Obs(float64(u.CacheCreation1h), model.Tokens),
 			TTLBucket:         ttl,
 		},
-		Tools:    toolSummaries(s),
-		Warnings: s.Warnings,
+		Retrieved:  retrieval.Total,
+		ByCategory: retrieval.ByCategory,
+		Tools:      toolSummaries(s),
+		Warnings:   s.Warnings,
 		Notes: []string{
 			"prompt_volume is raw tokens moved; prompt_cost is what they cost. They are different quantities and must not be added.",
 			"EIT is an effective input-equivalent token: one full-price input token of the same model.",
 			"Tool result bytes are observed content size, not billed tokens.",
 		},
+	}
+}
+
+// sessionInfo identifies what was profiled.
+func sessionInfo(s *model.Session) SessionInfo {
+	return SessionInfo{
+		ID: s.Ref.ID, Origin: s.Ref.Origin, Current: s.Ref.Current,
+		Models: s.Models(), Branch: s.Branch,
+		Calls: len(s.Invocations), Prompts: s.Prompts,
+		Duration: s.Duration().Round(time.Second).String(),
 	}
 }
 
@@ -218,8 +229,30 @@ func RenderText(w io.Writer, p Profile) error {
 	pct(b, "  Writes, % of cost", p.Caching.WriteShareOfCost)
 	b.WriteString("\n")
 
+	if p.Retrieved.Items.Value > 0 {
+		b.WriteString("Retrieved content (observed size of what entered context)\n")
+		fmt.Fprintf(b, "%-22s %14s   [%s]\n", "  Total", bytesStr(p.Retrieved.Bytes.Value), p.Retrieved.Bytes.Prov)
+		for i, c := range p.ByCategory {
+			if i >= 5 {
+				break
+			}
+			fmt.Fprintf(b, "  %-18s %12s %6.1f%%   [%s]\n", trunc(string(c.Category), 18),
+				bytesStr(c.Bytes.Value), c.Share.Value*100, c.Confidence)
+		}
+		if p.Retrieved.Redundant.Value > 0 {
+			fmt.Fprintf(b, "%-22s %14s   [%s]  (%.1f%% of retrieved bytes)\n", "  Retrieved again",
+				bytesStr(p.Retrieved.Redundant.Value), p.Retrieved.Redundant.Prov,
+				p.Retrieved.RedundantShare.Value*100)
+		}
+		if p.Retrieved.Withheld.Value > 0 {
+			fmt.Fprintf(b, "%-22s %14s   [%s]  (kept out of context, never paid for)\n", "  Withheld by harness",
+				bytesStr(p.Retrieved.Withheld.Value), p.Retrieved.Withheld.Prov)
+		}
+		b.WriteString("\n")
+	}
+
 	if len(p.Tools) > 0 {
-		b.WriteString("Tool results (observed content, not billed tokens)\n")
+		b.WriteString("Tool results by tool\n")
 		for _, t := range p.Tools {
 			fmt.Fprintf(b, "  %-20s %12s  %8s calls\n", trunc(t.Name, 20),
 				bytesStr(t.ResultBytes.Value), num(int(t.Calls.Value)))

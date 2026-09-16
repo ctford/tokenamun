@@ -6,6 +6,7 @@ package claudecode
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -114,6 +115,21 @@ func (c Content) Len() int {
 		n += len(b.Text) + b.Content.Len()
 	}
 	return n
+}
+
+// String flattens the content to the text that entered the context. Used for
+// hashing, so that identical retrievals can be recognised.
+func (c Content) String() string {
+	if len(c.Blocks) == 0 {
+		return c.Text
+	}
+	var b strings.Builder
+	b.WriteString(c.Text)
+	for _, blk := range c.Blocks {
+		b.WriteString(blk.Text)
+		b.WriteString(blk.Content.String())
+	}
+	return b.String()
 }
 
 // ToolUses returns the tool calls in an assistant message.

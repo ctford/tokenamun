@@ -129,11 +129,13 @@ counterfactual.
 
 ## Status
 
-Experimental and partly built. `tokenamun sessions` and `tokenamun profile`
-work today against both sources, with deduplicated token accounting and
-cache-weighted cost. Retrieved-content classification, carry, cache-miss
-attribution, code scans, counterfactuals and the treemap are planned and not
-yet implemented — see the milestones in [`docs/plan.md`](docs/plan.md).
+Experimental and partly built. Working today, against both sources:
+`tokenamun sessions`, `tokenamun profile` (deduplicated token accounting and
+cache-weighted cost) and `tokenamun retrieval` (what entered the context, by
+category, with repeated-retrieval detection). Carry, cache-miss attribution,
+code scans, counterfactuals and the treemap are planned — see the milestones in
+[`docs/plan.md`](docs/plan.md). Activity classification is deliberately last:
+it is inferred, and the observed answers are the ones worth trusting.
 
 ```
 go build ./cmd/tokenamun && ./tokenamun profile current

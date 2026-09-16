@@ -1,0 +1,34 @@
+TOKENAMUN  retrieved content
+
+Session retrieval-fixture
+  API calls          7
+
+Retrieved content (what entered the context)
+  Items                             7   [observed]
+  Bytes                       13.2 KB   [observed]
+  Estimated tokens              3,750   [derived-approx]
+  Withheld                    38.2 KB   [observed]  (kept out of context by the harness)
+
+By category
+  tests                    5.1 KB   38.5%     1 items   [derived]
+  adrs                     2.9 KB   22.2%     1 items   [inferred]
+  mcp output               2.1 KB   16.3%     1 items   [observed]
+  source code              1.8 KB   13.3%     1 items   [derived]
+  tool output               900 B    6.7%     1 items   [observed]
+  instructions              408 B    3.0%     2 items   [inferred]
+
+Largest retrievals
+  internal/payment/charge_test.go              5.1 KB  call 6  all 140 lines
+  docs/adr/0007-retry-policy.md                2.9 KB  call 2
+  (mcp__github__list_issues output)            2.1 KB  call 3
+  internal/payment/charge.go                   1.8 KB  call 0  lines 10-29 of 500
+  (Bash output)                                 900 B  call 1
+  CLAUDE.md                                     204 B  call 4
+  CLAUDE.md                                     204 B  call 5
+
+Repeated retrieval
+  Redundant share                1.5%   [derived]
+  CLAUDE.md                                   2x      204 B redundant
+
+Token estimate: uncalibrated: the fit implied non-positive content cost; using the default byte ratio
+

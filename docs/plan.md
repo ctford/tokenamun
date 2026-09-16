@@ -180,10 +180,18 @@ creation spiked (a cache miss re-paying for a prefix). Caching applies to the
 the cheapest genuine finding this tool can produce, and it needs no
 counterfactual at all.
 
-### Activity classification
+### Activity classification, deferred
 
-Deliberately weak in v0.1, and replaceable: `Classifier` is an interface, the
-default implementation is rules over a sliding window of tool calls.
+**Not in v0.1.** The core question is what consumed tokens and context, and
+that is answerable from observed data. Activity type -- was this planning or
+debugging -- is inferred, is the weakest thing the tool would report, and
+answers a question nobody has asked yet. Building it early would also invite
+exactly the misreading the epistemics exist to prevent: a confident-looking
+"planning: 34%" sitting next to genuinely observed token figures.
+
+So it waits until the observed and derived analyses are done and have proved
+useful. The design below stands for when it is wanted; `Classifier` is an
+interface so the first implementation can be crude without being permanent.
 
 Evidence available: tool name and arguments; `permissionMode` and `mode` entries
 (plan mode is *observed*, which is a gift); `EnterPlanMode`/`ExitPlanMode`
@@ -313,7 +321,7 @@ context-window visualisation.
 ```
 tokenamun profile   [session]              # the overview
 tokenamun retrieval [session]              # per-item, per-category, duplicates
-tokenamun activities [session]             # inferred phases, with confidence
+tokenamun activities [session]             # (deferred) inferred phases
 tokenamun carry     [session]              # preamble + cost-of-carry ranking
 tokenamun cache     [session]              # cache misses, causes, what they cost
 tokenamun hotspots  [session]              # code metrics x token spend
@@ -410,15 +418,19 @@ provenance, `schema_version`, golden tests. At this point Claude Code can use it
 
 **M5 — code scans.** `internal/codescan`, `tokenamun scan`, `tokenamun hotspots`.
 
-**M6 — inference and counterfactuals.** Activity classifier, `activities`,
-`compare`, `what-if` with `repeated-retrieval` and `output-compression`,
-`caveman` prototype plus `--replay-with`.
+**M6 — counterfactuals.** `compare`, `what-if` with `cache-ttl`,
+`repeated-retrieval` and `output-compression`, `caveman` prototype plus
+`--replay-with`, and `series`.
 
 **M7 — treemap.** HTML report.
 
+**Later — activity classification.** `activities`, once the observed and
+derived analyses have proved useful and there is a reason to want inference.
+
 M1–M4 is the spec's "first useful milestone" — point it at a real session and
 understand where the tokens and content went. M5 and M6 are where the evidence
-becomes actionable. M7 is the demo.
+becomes actionable. M7 is the demo. Everything inferred comes after all of it,
+because the observed answers are the ones worth trusting.
 
 ## Experiments
 

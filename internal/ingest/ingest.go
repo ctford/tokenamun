@@ -13,10 +13,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/ctford/tokenamun/internal/claudecode"
+	"github.com/ctford/tokenamun/internal/content"
 	"github.com/ctford/tokenamun/internal/model"
+	"github.com/ctford/tokenamun/internal/tokens"
 )
 
 // maxLine is generous enough for a transcript line carrying a large tool
@@ -79,6 +82,8 @@ func Parse(r io.Reader, ref model.SessionRef) (*model.Session, error) {
 	}
 
 	resolveTools(s, toolIndex)
+	estimate(s)
+	findRepeats(s)
 	diagnose(s)
 	return s, nil
 }
@@ -101,8 +106,9 @@ func absorb(s *model.Session, e claudecode.Entry, byRequest, toolIndex map[strin
 			return
 		}
 		if results := e.Message.ToolResults(); len(results) > 0 {
+			meta := claudecode.ParseResultMeta(e.ToolUseResult)
 			for _, b := range results {
-				absorbResult(s, b, toolIndex)
+				absorbResult(s, b, meta, toolIndex)
 			}
 			return
 		}
@@ -167,12 +173,22 @@ func absorbAssistant(s *model.Session, e claudecode.Entry, byRequest, toolIndex 
 			Name:          b.Name,
 			InputBytes:    len(b.Input),
 			InvocationSeq: idx,
+			Command:       commandOf(b.Input),
 		})
 	}
 }
 
-// absorbResult attaches an observed tool result to its call.
-func absorbResult(s *model.Session, b claudecode.Block, toolIndex map[string]int) {
+// absorbResult attaches an observed tool result to its call and records what
+// entered the context as retrieved content.
+//
+// Size comes from the tool_result block, which is what the model received.
+// The transcript's toolUseResult field is richer but does not measure the
+// same thing: on real sessions it disagrees by more than an order of
+// magnitude, because large output is spilled to a file and the model is shown
+// only an excerpt. It is used here for path, line range and truncation only.
+func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMeta, toolIndex map[string]int) {
+	bytesIn := b.Content.Len()
+
 	idx, ok := toolIndex[b.ToolUseID]
 	if !ok {
 		// A result with no matching call: the call may predate a resumed
@@ -181,16 +197,86 @@ func absorbResult(s *model.Session, b claudecode.Block, toolIndex map[string]int
 			Seq:           len(s.ToolCalls),
 			ID:            b.ToolUseID,
 			Name:          "(unpaired)",
-			ResultBytes:   b.Content.Len(),
+			ResultBytes:   bytesIn,
 			IsError:       b.IsError,
 			Resolved:      true,
 			InvocationSeq: -1,
 		})
 		return
 	}
-	s.ToolCalls[idx].ResultBytes = b.Content.Len()
-	s.ToolCalls[idx].IsError = b.IsError
-	s.ToolCalls[idx].Resolved = true
+	tc := &s.ToolCalls[idx]
+	tc.ResultBytes = bytesIn
+	tc.IsError = b.IsError
+	tc.Resolved = true
+
+	if bytesIn == 0 {
+		return
+	}
+	cat, prov, path := categorise(tc.Name, tc.Command, meta)
+	s.Retrievals = append(s.Retrievals, model.RetrievedContent{
+		Seq:           len(s.Retrievals),
+		ToolID:        tc.ID,
+		Tool:          tc.Name,
+		Category:      cat,
+		CategoryProv:  prov,
+		Path:          path,
+		Bytes:         bytesIn,
+		Hash:          tokens.Hash(b.Content.String()),
+		InvocationSeq: tc.InvocationSeq,
+		StartLine:     meta.StartLine,
+		Lines:         meta.Lines,
+		TotalLines:    meta.TotalLines,
+		Partial:       meta.Partial(),
+		Truncated:     meta.Truncated,
+		WithheldBytes: withheld(meta, bytesIn),
+		IsError:       b.IsError,
+	})
+}
+
+// categorise decides what a payload is, and how confident that is.
+//
+// A path reported by the tool is observed, so classifying from it is derived.
+// A path parsed out of a shell command line is a guess, so it is inferred.
+// Output that cannot be attributed to a path is tool output rather than a
+// speculative category.
+func categorise(tool, command string, meta claudecode.ResultMeta) (model.Category, model.Provenance, string) {
+	if meta.Path != "" {
+		if cat, ok := content.Classify(meta.Path); ok {
+			return cat, model.Derived, meta.Path
+		}
+		return model.CatOther, model.Derived, meta.Path
+	}
+	if command != "" {
+		if paths := content.PathsFromCommand(command); len(paths) > 0 {
+			if cat, ok := content.Classify(paths[0]); ok {
+				return cat, model.Inferred, paths[0]
+			}
+		}
+	}
+	return content.ClassifyTool(tool), model.Observed, ""
+}
+
+// withheld reports how much content the harness kept out of context. It is
+// observed, and it is a saving the session already enjoyed.
+func withheld(meta claudecode.ResultMeta, shown int) int {
+	if meta.PersistedBytes > shown {
+		return meta.PersistedBytes - shown
+	}
+	return 0
+}
+
+// commandOf pulls the command line out of a Bash tool input.
+func commandOf(input json.RawMessage) string {
+	if len(input) == 0 || input[0] != '{' {
+		return ""
+	}
+	var in struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return ""
+	}
+	return in.Command
 }
 
 // usageOf converts an API usage object, preferring the reported cache-creation
@@ -271,4 +357,88 @@ func hasSidechain(s *model.Session) bool {
 		}
 	}
 	return false
+}
+
+// estimate calibrates a token estimator against the session's own observed
+// prompt growth and applies it to every retrieval.
+//
+// Two passes are needed because the calibration depends on the whole session:
+// per-call prompt sizes are observed, so the growth between calls is the
+// evidence, and the fit is only as good as the session that produced it.
+func estimate(s *model.Session) {
+	byInvocation := map[int]int{}
+	for _, r := range s.Retrievals {
+		byInvocation[r.InvocationSeq] += r.Bytes
+	}
+
+	var samples []tokens.Sample
+	for k := 1; k < len(s.Invocations); k++ {
+		prev, cur := s.Invocations[k-1], s.Invocations[k]
+		// A model switch rebuilds the whole prefix, so the growth across that
+		// boundary is not content arriving.
+		if prev.Model != cur.Model {
+			continue
+		}
+		samples = append(samples, tokens.Sample{
+			PromptGrowth: cur.Usage.PromptTokens() - prev.Usage.PromptTokens(),
+			OutputTokens: prev.Usage.Output,
+			ResultBytes:  byInvocation[prev.Seq],
+		})
+	}
+
+	ratio := tokens.Calibrate(samples)
+	s.Estimator = model.TokenEstimator{
+		Method:          ratio.Describe(),
+		BytesPerToken:   ratio.BytesPerToken,
+		PerCallOverhead: ratio.PerCallOverhead,
+		Residual:        ratio.Residual,
+		Calibrated:      ratio.Calibrated,
+		Samples:         ratio.Samples,
+	}
+	for i := range s.Retrievals {
+		s.Retrievals[i].Tokens = ratio.Count(s.Retrievals[i].Bytes)
+		s.Retrievals[i].TokensProv = ratio.Provenance()
+	}
+}
+
+// findRepeats groups byte-identical retrievals. This is the strongest
+// counterfactual available: content fetched twice could have been fetched
+// once, which is arithmetic rather than modelling.
+func findRepeats(s *model.Session) {
+	type group struct {
+		r     model.RetrievedContent
+		count int
+		seqs  []int
+	}
+	groups := map[string]*group{}
+	var order []string
+	for _, r := range s.Retrievals {
+		g, ok := groups[r.Hash]
+		if !ok {
+			g = &group{r: r}
+			groups[r.Hash] = g
+			order = append(order, r.Hash)
+		}
+		g.count++
+		g.seqs = append(g.seqs, r.InvocationSeq)
+	}
+	for _, h := range order {
+		g := groups[h]
+		if g.count < 2 {
+			continue
+		}
+		s.Repeats = append(s.Repeats, model.Repeat{
+			Hash:      h,
+			Category:  g.r.Category,
+			Path:      g.r.Path,
+			Tool:      g.r.Tool,
+			Count:     g.count,
+			Bytes:     g.r.Bytes,
+			WasteByte: g.r.Bytes * (g.count - 1),
+			Seqs:      g.seqs,
+		})
+	}
+	sort.SliceStable(s.Repeats, func(i, j int) bool {
+		return s.Repeats[i].WasteByte > s.Repeats[j].WasteByte
+	})
 }

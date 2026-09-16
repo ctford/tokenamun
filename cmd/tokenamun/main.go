@@ -28,6 +28,7 @@ const usage = `tokenamun - a profiler for coding-agent token usage
 Usage:
   tokenamun sessions              list the sessions it can see
   tokenamun profile [session]     where the tokens went, and what they cost
+  tokenamun retrieval [session]   what content entered the context, and from where
   tokenamun version
 
 Session selector:
@@ -71,6 +72,8 @@ func run(args []string) error {
 		return cmdSessions(*dir, *source, *asJSON)
 	case "profile":
 		return cmdProfile(*dir, *source, selector, *asJSON)
+	case "retrieval":
+		return cmdRetrieval(*dir, *source, selector, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
 		fmt.Println("validated against Entire CLI 0.10.2 and Claude Code 2.1.x transcripts")
@@ -142,15 +145,7 @@ func cmdSessions(dir, source string, asJSON bool) error {
 }
 
 func cmdProfile(dir, source, selector string, asJSON bool) error {
-	refs, err := discover(dir, source)
-	if err != nil {
-		return err
-	}
-	ref, err := selectSession(refs, selector)
-	if err != nil {
-		return err
-	}
-	s, err := ingest.Load(ref)
+	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
@@ -159,6 +154,31 @@ func cmdProfile(dir, source, selector string, asJSON bool) error {
 		return writeJSON(p)
 	}
 	return report.RenderText(os.Stdout, p)
+}
+
+func cmdRetrieval(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return err
+	}
+	r := report.BuildRetrieval(s)
+	if asJSON {
+		return writeJSON(r)
+	}
+	return report.RenderRetrieval(os.Stdout, r)
+}
+
+// loadSelected resolves a selector and parses the transcript it names.
+func loadSelected(dir, source, selector string) (*model.Session, error) {
+	refs, err := discover(dir, source)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := selectSession(refs, selector)
+	if err != nil {
+		return nil, err
+	}
+	return ingest.Load(ref)
 }
 
 // selectSession resolves a selector against the discovered sessions.
