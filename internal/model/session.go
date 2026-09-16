@@ -1,0 +1,126 @@
+package model
+
+import "time"
+
+// Origin records where a session's transcript came from. The two sources carry
+// different evidence, so it is not a cosmetic field: Entire adds checkpoints,
+// git attribution and files_touched that a local transcript does not have.
+type Origin string
+
+const (
+	// FromEntire is a session recorded by Entire inside a repository.
+	FromEntire Origin = "entire"
+	// FromLocal is a Claude Code session read from ~/.claude/projects.
+	FromLocal Origin = "local"
+)
+
+// SessionRef is a transcript we know about but have not yet parsed.
+type SessionRef struct {
+	ID         string    `json:"id"`
+	Transcript string    `json:"transcript"`
+	Origin     Origin    `json:"origin"`
+	Repo       string    `json:"repo,omitempty"`
+	Modified   time.Time `json:"modified"`
+	// Current is true when this is the session the tool is running inside,
+	// which means the transcript is still being appended to.
+	Current bool `json:"current"`
+}
+
+// ModelInvocation is one API call. Building these correctly -- one per
+// requestId, not one per transcript line -- is the tool's central correctness
+// rule. See METHODOLOGY.md section 2.
+type ModelInvocation struct {
+	Seq       int        `json:"seq"`
+	RequestID string     `json:"request_id"`
+	MessageID string     `json:"message_id"`
+	Model     string     `json:"model"`
+	Version   string     `json:"version"`
+	Effort    string     `json:"effort"`
+	Timestamp time.Time  `json:"timestamp"`
+	Sidechain bool       `json:"sidechain"`
+	Usage     TokenUsage `json:"usage"`
+	// Entries is how many transcript lines collapsed into this call. Greater
+	// than one is normal and is why naive summing overstates.
+	Entries int `json:"entries"`
+}
+
+// ToolCall pairs a tool invocation with its result.
+type ToolCall struct {
+	Seq           int    `json:"seq"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	InputBytes    int    `json:"input_bytes"`
+	ResultBytes   int    `json:"result_bytes"`
+	IsError       bool   `json:"is_error"`
+	Resolved      bool   `json:"resolved"`
+	InvocationSeq int    `json:"invocation_seq"`
+}
+
+// Warning is something the reader needs to know about the data rather than
+// about the session. Warnings are reported, never swallowed.
+type Warning struct {
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+}
+
+// Session is a parsed transcript in normalized form.
+type Session struct {
+	Ref         SessionRef        `json:"ref"`
+	Invocations []ModelInvocation `json:"invocations"`
+	ToolCalls   []ToolCall        `json:"tool_calls"`
+	Prompts     int               `json:"user_prompts"`
+	Branch      string            `json:"branch,omitempty"`
+	CWD         string            `json:"cwd,omitempty"`
+	Warnings    []Warning         `json:"warnings,omitempty"`
+	// TranscriptLines and AssistantEntries support the dedup diagnostic.
+	TranscriptLines  int `json:"transcript_lines"`
+	AssistantEntries int `json:"assistant_entries"`
+}
+
+// Usage totals the session's deduplicated invocations.
+func (s *Session) Usage() TokenUsage {
+	var t TokenUsage
+	for _, inv := range s.Invocations {
+		t = t.Add(inv.Usage)
+	}
+	return t
+}
+
+// Models lists the distinct models used, in first-seen order. A session with
+// more than one has paid for at least one cache-invalidating model switch.
+func (s *Session) Models() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, inv := range s.Invocations {
+		if inv.Model != "" && !seen[inv.Model] {
+			seen[inv.Model] = true
+			out = append(out, inv.Model)
+		}
+	}
+	return out
+}
+
+// Warn appends a warning.
+func (s *Session) Warn(code, detail string) {
+	s.Warnings = append(s.Warnings, Warning{Code: code, Detail: detail})
+}
+
+// Duration is the span between the first and last observed API call.
+func (s *Session) Duration() time.Duration {
+	var first, last time.Time
+	for _, inv := range s.Invocations {
+		if inv.Timestamp.IsZero() {
+			continue
+		}
+		if first.IsZero() || inv.Timestamp.Before(first) {
+			first = inv.Timestamp
+		}
+		if inv.Timestamp.After(last) {
+			last = inv.Timestamp
+		}
+	}
+	if first.IsZero() {
+		return 0
+	}
+	return last.Sub(first)
+}

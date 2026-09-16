@@ -1,0 +1,38 @@
+TOKENAMUN
+
+Session fixture-session
+  Source             local
+  Model              claude-opus-5, <synthetic>
+  API calls          3
+  User prompts       1
+  Duration           25s
+
+Observed tokens
+  Input                             5   [observed]
+  Cache read                   17,000   [observed]
+  Cache creation                1,500   [observed]
+  Output                           90   [observed]
+  of which thinking                20   [observed]
+
+Cost (cache-weighted)
+  Prompt volume                18,505   [derived]
+  Prompt cost                   3,580   [derived]
+  Output cost                     450   [derived]
+  Total cost                    4,030   [derived]
+  Volume overstates by           5.2x   [derived]
+
+Caching
+  Observed TTL                     5m   [observed]
+  Reads, % of volume            91.9%   [derived]
+  Writes, % of cost             52.4%   [derived]
+
+Tool results (observed content, not billed tokens)
+  Bash                         10 B         1 calls
+  Agent                         0 B         1 calls
+
+Data notes
+  ! unresolved_tool_calls: 1 tool calls have no result in this transcript (interrupted, denied, or still running)
+  ! entries_collapsed: 5 assistant entries collapsed into 3 API calls; summing per entry would overstate usage by 67%
+  ! zero_prompt_calls: 1 calls reported no prompt tokens (API errors or synthetic entries) and are excluded from cost
+  ! subagent_usage_missing: 1 Agent calls were made but no sidechain invocations are present; subagent token usage is not in this transcript
+
