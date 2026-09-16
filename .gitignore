@@ -1,0 +1,19 @@
+# Build output
+/tokenamun
+/dist/
+*.test
+*.out
+
+# Never commit profiled repositories' data — see AGENTS.md
+.entire/
+*.jsonl
+!testdata/**/*.jsonl
+tool-results/
+*.html
+!internal/report/templates/*.html
+
+# Local config and credentials
+.env
+.env.*
+.tokenamun.yml
+/.cache/
