@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Installed by scripts/install-hooks.sh. Runs the same checks as CI, in fast
+# mode. Skip a one-off with `git commit --no-verify`.
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/scripts/checks.sh" fast
