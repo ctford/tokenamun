@@ -72,9 +72,16 @@ changing the plan first.
    distinguish them.
 3. **Retrieved-content tokens and billed tokens are different quantities and are
    never added together.**
+4. **Volume is not cost.** Rankings are in effective input-equivalent tokens,
+   weighted by the Anthropic prompt-cache class each re-send was actually billed
+   at — cache read 0.1×, 5-minute write 1.25×, 1-hour write 2×. Raw token counts
+   overstate cost by ~6× on real sessions. Raw volume may be shown alongside;
+   it is never shown alone, and nothing is called expensive on volume alone.
 
 If a change makes one of those harder to hold, that is the thing to discuss, not
-route around.
+route around. [`METHODOLOGY.md`](METHODOLOGY.md) is the canonical statement of
+all four and of how every reported number is computed; if you change the
+accounting, you change that document in the same commit.
 
 ## Conventions
 
@@ -98,6 +105,13 @@ route around.
   `schema_version` and golden tests. Changing a key is a breaking change even
   while the project is experimental — bump and note it.
 * **No network in tests.** `--tokenizer=api` is exercised against a fake.
+* **Commit as you go.** Small, working commits at each natural checkpoint rather
+  than one large drop at the end — a milestone is several commits, not one. Run
+  the private-data check in the section above before each `git add`, and keep the
+  message about *why* the change was made. Don't push without being asked.
+* **Iconography: no pyramids.** Tutankhamun reigned around 1330 BC, roughly
+  twelve centuries after the pyramid age. If this project ever gets a logo or
+  README art, the Egyptian references need to be New Kingdom, not Old.
 
 ## Things not to build
 

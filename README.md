@@ -74,6 +74,14 @@ it (the observed session preamble is a ceiling) and count which tools were
 actually used versus available, but it will not hand you a schema-token figure
 it cannot observe.
 
+**Volume is not cost, and reporting volume as cost would be the easiest way to
+make this tool misleading.** Anthropic prompt caching means most of what moves
+through the context is billed at a tenth of list price, while the cache *writes*
+that are 6% of the volume are 43% of the cost. On the reference dataset, raw
+prompt volume overstates cost by 6.0×. Tokenamun therefore ranks everything in
+cache-weighted effective input-equivalents and never calls a retrieval expensive
+on volume alone — see [`METHODOLOGY.md`](METHODOLOGY.md#3-volume-is-not-cost).
+
 **Retrieved tokens are not billed tokens, and the gap is enormous.** On our
 reference dataset, ~711K tokens of unique tool-result content sat behind ~856M
 tokens of billed input. Content is cheap to retrieve and expensive to *carry*:
@@ -111,10 +119,19 @@ not "this developer uses 2.3× more tokens than that one". Treating token spend
 as a productivity metric is a known anti-pattern and this tool is not an
 instrument for it.
 
+## How the numbers are computed
+
+[**`METHODOLOGY.md`**](METHODOLOGY.md) is the document to read before making a
+decision from this tool's output. It defines the provenance labels, the
+cache-weighted cost model, how context carry is attributed, how cache expiry is
+detected and what it cost on real sessions, and the limits of every
+counterfactual.
+
 ## Status
 
 Nothing is implemented yet. The research and plan are:
 
+* [`METHODOLOGY.md`](METHODOLOGY.md) — how every number is computed and labelled
 * [`SPEC.md`](SPEC.md) — what we're building and why
 * [`docs/research-entire.md`](docs/research-entire.md) — what Entire's data actually contains, measured
 * [`docs/plan.md`](docs/plan.md) — architecture and v0.1 implementation plan
