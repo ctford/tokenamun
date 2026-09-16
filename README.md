@@ -129,7 +129,17 @@ counterfactual.
 
 ## Status
 
-Nothing is implemented yet. The research and plan are:
+Experimental and partly built. `tokenamun sessions` and `tokenamun profile`
+work today against both sources, with deduplicated token accounting and
+cache-weighted cost. Retrieved-content classification, carry, cache-miss
+attribution, code scans, counterfactuals and the treemap are planned and not
+yet implemented — see the milestones in [`docs/plan.md`](docs/plan.md).
+
+```
+go build ./cmd/tokenamun && ./tokenamun profile current
+```
+
+The research and plan are:
 
 * [`METHODOLOGY.md`](METHODOLOGY.md) — how every number is computed and labelled
 * [`SPEC.md`](SPEC.md) — what we're building and why
@@ -137,3 +147,4 @@ Nothing is implemented yet. The research and plan are:
 * [`docs/plan.md`](docs/plan.md) — architecture and v0.1 implementation plan
 * [`docs/interventions.md`](docs/interventions.md) — which proposed optimisations Tokenamun can produce evidence for
 * [`docs/optimisation-claims.md`](docs/optimisation-claims.md) — survey of what the tools and techniques claim, and how good the evidence is
+* [`docs/experiments.md`](docs/experiments.md) — using it for before/after experiments, and what it can't do for you

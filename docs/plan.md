@@ -319,6 +319,7 @@ tokenamun cache     [session]              # cache misses, causes, what they cos
 tokenamun hotspots  [session]              # code metrics x token spend
 tokenamun scan      [path]                 # code metrics alone
 tokenamun compare   <a> <b>                # sessions or checkpoints
+tokenamun series    <label>                # probe runs: median, range, payback
 tokenamun what-if   <intervention> [session]
 tokenamun sessions                         # list what's available
 tokenamun treemap   [session] -o out.html
@@ -418,6 +419,21 @@ provenance, `schema_version`, golden tests. At this point Claude Code can use it
 M1–M4 is the spec's "first useful milestone" — point it at a real session and
 understand where the tokens and content went. M5 and M6 are where the evidence
 becomes actionable. M7 is the demo.
+
+## Experiments
+
+[`experiments.md`](experiments.md) works through what a real published
+experiment needs and what this tool can and cannot supply. The short version:
+Tokenamun measures, a driver script orchestrates, and the experimenter records
+the outcome of each run because no profiler can see whether the work was any
+good.
+
+One command earns its place in v0.1 from that analysis: `tokenamun series`
+takes labelled probe runs and reports median and range per step rather than a
+point value, plus payback against a measured intervention cost. It is a table
+and a division over measurements `profile` and `scan` already produce. Medians
+rather than points because a behavioural effect at n=1 is not a measurement,
+and "the agent explored less" is a behavioural effect.
 
 ## Experiments, later
 
