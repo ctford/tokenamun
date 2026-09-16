@@ -146,20 +146,51 @@ the TTL apart, the prefix stays warm indefinitely. Once a gap exceeds the TTL,
 the entire prefix is rewritten at the write multiplier — and in a long session
 the prefix is enormous.
 
-Tokenamun detects an **expired prefix** at call *k* when
-`cache_creation / promptTokens > 0.5` and `cache_creation > 2,000`. That is a
-`derived` classification with stated thresholds, not an observation, so it is
-labelled and the thresholds are configurable. It validates well: in one session
-47 of 48 detected cold calls were preceded by a gap of more than 5 minutes, and
-cache reads on those calls collapsed to a small constant while creation rose to
-95–100% of the prompt.
+### Attributing cache misses to a cause
+
+TTL expiry is only one of about nine things that invalidate a Claude Code cache.
+Model switches, effort changes, fast-mode toggles, MCP server connect/disconnect,
+plugin toggles, whole-tool deny rules, compaction, image eviction and Claude Code
+upgrades all do it too. Counting every large cache write as an expiry would
+inflate the expiry figure and point at the wrong fix.
+
+Tokenamun flags a **large miss** at call *k* when
+`cache_creation / promptTokens > 0.5` and `cache_creation > 2,000`, then assigns
+a cause, testing the observable ones first because those misses would have
+happened under any TTL:
+
+| Cause | Evidence | Provenance |
+| --- | --- | --- |
+| `model_switch` | `message.model` differs from the previous call | observed |
+| `claude_code_upgrade` | the transcript's `version` differs | observed |
+| `compaction_or_reset` | prompt size dropped >40% | observed |
+| `effort_change` | the `effort` field differs | observed |
+| `ttl_expiry` | none of the above, and the start-to-start gap exceeds the TTL | derived, by elimination |
+| `unexplained` | none of the above | — |
+
+MCP, plugin and tool-set changes are **not** observable from the transcript, so
+they land in `unexplained` rather than being guessed at. Attribution on the
+reference dataset:
+
+| Cause | calls | re-created tokens | EIT | avoidable by TTL |
+| --- | --- | --- | --- | --- |
+| `ttl_expiry` | 98 | 45,523,022 | 56,903,778 | yes |
+| `session_start` | 7 | 160,795 | 200,994 | no |
+| `unexplained` | 1 | 988,890 | 1,236,112 | no |
+| `model_switch` | 1 | 49,522 | 61,902 | no |
+| `compaction_or_reset` | 1 | 35,225 | 44,031 | no |
+
+Expiry dominates, but that is a result rather than an assumption, and on another
+dataset it could easily be model switching instead. Cache reads on expiry calls
+collapse to a small constant while creation rises to 95–100% of the prompt,
+which is the corroborating signature.
 
 What this cost on the reference dataset, where **all** caching used the
 5-minute TTL (zero 1-hour writes observed):
 
 | Lever | raw tokens | EIT | share of effective input bill |
 | --- | --- | --- | --- |
-| Expired-prefix re-creation after a >5-minute gap | 45,572,544 | 56,965,680 | **40.0%** |
+| Re-creation attributed to TTL expiry | 45,523,022 | 56,903,778 | **40.0%** |
 | Session preamble, carried on every call (if always cached) | 69,609,464 | 6,960,946 | 4.9% |
 | All output tokens, at 5× | 1,537,275 | 7,686,375 | 5.1% of total bill |
 
@@ -196,8 +227,29 @@ numerator and cannot supply the denominator, and says so every time.
 
 ### Worked example: 1-hour TTL
 
-The highest-value intervention on the reference dataset, computed the way every
-what-if is:
+The highest-value intervention on the reference dataset — and, importantly, one
+the user can actually perform.
+
+**This is a real setting, not a thought experiment.** Claude Code decides the
+TTL per request across two buckets, and both are configurable:
+
+* Main conversation — `promptCacheTtl` setting, or `CLAUDE_CODE_PROMPT_CACHE_TTL`
+* Everything else (subagents, workflows, forks, compaction, session titles) —
+  `subagentPromptCacheTtl`, or `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`
+
+Each takes `5m` or `1h` and both require Claude Code v2.1.242 or later. The
+reference sessions ran v2.1.245–2.1.251, so the control was available and simply
+wasn't set.
+
+The default depends on how you pay: the main conversation gets the 1-hour TTL by
+default **only** on a Claude subscription within plan usage. On an API key, a
+cloud provider, or a subscription that has moved onto usage credits, it is 5
+minutes. The reference dataset reports `ephemeral_1h_input_tokens: 0` and
+49,284,083 tokens of `ephemeral_5m` writes, so it was in the five-minute bucket
+throughout — which Tokenamun can state as an observation rather than an
+inference. The `subagent` bucket defaults to 5 minutes regardless of billing.
+
+Computed the way every what-if is:
 
 ```
 Intervention: cache-ttl (5-minute -> 1-hour)
@@ -223,15 +275,35 @@ Counterfactual
 
 Unknown
   behavioural_change        the agent's trajectory is assumed identical
-  ttl_control               TTL is set by the harness, not by the user
   idle_gap_distribution     future sessions may pause differently
+  other_bucket              subagent/compaction requests need their own setting
+  provider_support          1h availability varies on Bedrock and via gateways
   task_success              not observable from this data
 ```
 
 Note the shape: the doubled write price is charged honestly against the saving,
-and the largest `unknown` is that this is not even the user's setting to change.
-The finding is still worth having — it tells you what to ask your harness for,
-and it tells you that compressing tool output is the wrong place to start here.
+the 10 gaps longer than an hour are charged at the higher write rate because a
+1-hour TTL would not have saved them, and the direction of the result is not
+assumed. The same arithmetic on a session made of short bursts that never idle
+past five minutes comes out **negative** — you would pay the 2× write premium for
+a lifetime you never use, which is exactly what the Claude Code documentation
+warns about. That is the whole reason to compute it per session rather than
+repeat someone's percentage.
+
+Two consequences worth drawing out:
+
+* Compressing tool output is the wrong place to start on *this* dataset. But
+  compression is not worthless here either, and for a reason the read-side
+  arithmetic misses: expiry re-creation cost is (number of expiries) × (prefix
+  size at expiry), so anything that shrinks the prefix also shrinks every future
+  rewrite at 1.25× rather than 0.1×. Compression's value is mostly on the write
+  side, which is not how it is usually sold.
+* Claude Code already surfaces part of this live — `/usage` shows a
+  `Prompt cache (main)` line with hit ratio, miss count, warm state and a likely
+  cause for the most recent miss (v2.1.251+, cause text v2.1.260+). Tokenamun is
+  not competing with that. Its contribution is retrospective and cost-weighted:
+  every miss in the session's history, attributed to a cause, priced, and
+  comparable across sessions.
 
 ## 7. What Tokenamun cannot measure
 

@@ -33,6 +33,20 @@ Verdict column:
 | Code Mode MCP / code execution over MCP | **detectable** | We can identify the pattern the technique targets — large intermediate payloads that arrive in context and are then echoed back out in a subsequent tool input. Tool inputs are observed (537 KB of them in one reference session), so the round-trip is visible. Sizing the fix needs a counterfactual about code the agent never wrote. |
 | Fewer, smaller skills | **detectable** | Entire records explicit, confidence-tagged skill invocations, so we can report which skills actually fired. Definition sizes are on disk, not in the transcript, so the cost is a local file measurement rather than an observation. |
 
+## Cache hygiene
+
+Absent from the radar blips entirely, and the largest measured lever in our
+reference dataset. Anthropic prompt caching prices reads at 0.1× and writes at
+1.25× (5-minute TTL) or 2× (1-hour), so when a prefix expires the whole
+conversation is rewritten at the write rate.
+
+| intervention | verdict | what Tokenamun can say |
+| --- | --- | --- |
+| Longer cache TTL (`promptCacheTtl: 1h`) | **measurable** + **counterfactual** | Which TTL each call actually used is observed (`ephemeral_5m` vs `ephemeral_1h`). Misses are attributed per cause, so the expiry share is derived rather than assumed. On the reference dataset TTL expiry was **40% of the effective input bill**, and a 1-hour TTL nets −29.4% after charging the doubled write price. It can also come out negative on short-burst sessions, which is the point of computing it. |
+| Avoiding mid-session cache invalidation | **measurable** | Model switches, effort changes, compaction and Claude Code upgrades are each observable and separately priced. "Your four `/model` switches cost X" is a derived number, and `opusplan` makes every plan-mode toggle a model switch. |
+| Shorter sessions / fewer long idle gaps | **measurable** | Expiry cost scales with prefix size, so late expiries are the expensive ones. Tokenamun can show the cost of each expiry against where in the session it happened. |
+| Shrinking the prefix (instructions, tool output) | **re-valued upward** | Expiry cost is (expiries) × (prefix size at expiry). Compression's biggest effect is not the 0.1× reads it avoids but the 1.25× rewrites it shrinks — which is not how compression is usually sold. |
+
 ## Changing how work is structured
 
 | intervention | verdict | what Tokenamun can say |
@@ -66,18 +80,23 @@ It is also the failure mode this tool is closest to. A profiler that reports
 Ranked by evidence quality rather than by claimed upside, which is the inversion
 this whole document exists to make possible:
 
-1. **Repeated retrieval** — observed, per-session, with a near-derived
+1. **Cache hygiene.** Observed TTL, per-cause miss attribution, and the largest
+   number we measured by a wide margin: 40% of the effective input bill went on
+   re-creating prefixes that expired while someone was thinking. One setting,
+   already available in the Claude Code version those sessions ran. Nothing on
+   the radar comes close on this dataset, and nobody is talking about it.
+2. **Repeated retrieval** — observed, per-session, with a near-derived
    counterfactual. Also the one most likely to be free: nobody wants the same
    file three times.
-2. **Cost of carry on large late-arriving content** — observed token cost,
+3. **Cost of carry on large late-arriving content** — observed token cost,
    observed call count, arithmetic in between. Tells you *which* retrievals were
    expensive decisions rather than which were large.
-3. **Preamble size** — observed exactly, bounded in decomposition. Cheap to
+4. **Preamble size** — observed exactly, bounded in decomposition. Cheap to
    check, and the multiplier by call count is usually the surprise.
-4. **Tool output compression** — observed eligible volume, counterfactual
+5. **Tool output compression** — observed eligible volume, counterfactual
    saving, honest unknowns. The upside is real but the behavioural risk is the
    part nobody measures.
-5. **MCP and tool-schema interventions** — plausible, possibly large, and
+6. **MCP and tool-schema interventions** — plausible, possibly large, and
    **unmeasurable from this data**. If you want evidence here, the measurement
    has to happen at the request layer, not the transcript layer. That is a
    different tool, and saying so is more useful than a fabricated percentage.

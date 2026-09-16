@@ -48,10 +48,12 @@ internal/
   content/                classification (source/test/ADR/spec/docs/plan/tool
                           output/MCP/instructions/other), rules-driven
   tokens/                 counting: calibrated estimator | count_tokens API
+  cost/                   per-model class weights, effective input-equivalents
   analysis/
     profile.go              session roll-up
     retrieval.go            per-item, per-category, duplicates
     carry.go                context deltas, attribution, cost-of-carry
+    cache.go                miss detection, cause attribution, expiry cost
     activity.go             inferred phase classification
     compare.go              A vs B
   codescan/               code metrics: size, complexity, duplication
@@ -271,6 +273,13 @@ v0.1 ships:
 * **`output-compression`** — a labelled prototype estimator over eligible tool
   output. Ratios are configurable and printed with the result, so the reader can
   see the assumption they're trusting.
+* **`cache-ttl`** — the one with the best evidence on real data, and a real
+  setting behind it (`promptCacheTtl` / `CLAUDE_CODE_PROMPT_CACHE_TTL`, Claude
+  Code v2.1.242+). Takes the observed per-cause miss attribution, isolates the
+  misses a longer TTL would have prevented, charges the doubled write premium
+  against the saving, and charges gaps longer than an hour at the higher rate
+  too. Can legitimately come out negative on short-burst sessions, and must be
+  allowed to.
 * **`repeated-retrieval`** — the strongest one, because the counterfactual is
   nearly derived: identical content retrieved N times could have been retrieved
   once. Reduction = observed duplicate bytes × carry.
@@ -306,6 +315,7 @@ tokenamun profile   [session]              # the overview
 tokenamun retrieval [session]              # per-item, per-category, duplicates
 tokenamun activities [session]             # inferred phases, with confidence
 tokenamun carry     [session]              # preamble + cost-of-carry ranking
+tokenamun cache     [session]              # cache misses, causes, what they cost
 tokenamun hotspots  [session]              # code metrics x token spend
 tokenamun scan      [path]                 # code metrics alone
 tokenamun compare   <a> <b>                # sessions or checkpoints
@@ -387,9 +397,12 @@ The deliverable is trustworthy arithmetic; everything later is built on it.
 duplicate detection, calibrated counting. `tokenamun retrieval`, plus retrieval
 sections in `profile`.
 
-**M3 — carry.** Prompt-size trajectory, preamble, delta attribution,
-cost-of-carry. `tokenamun carry`. This is the milestone that changes what the
-tool is for, so it comes before the softer analyses.
+**M3 — carry and cache.** Cost weighting (`internal/cost`), prompt-size
+trajectory, preamble, delta attribution, cost-of-carry, cache-miss cause
+attribution and expiry cost. `tokenamun carry` and `tokenamun cache`, plus
+`what-if cache-ttl`. This is the milestone that changes what the tool is for —
+on the reference dataset it is where the 40% finding lives — so it comes before
+the softer analyses.
 
 **M4 — JSON, and the agent-facing contract.** `--json` everywhere with
 provenance, `schema_version`, golden tests. At this point Claude Code can use it.
