@@ -119,3 +119,4 @@ Nothing is implemented yet. The research and plan are:
 * [`docs/research-entire.md`](docs/research-entire.md) — what Entire's data actually contains, measured
 * [`docs/plan.md`](docs/plan.md) — architecture and v0.1 implementation plan
 * [`docs/interventions.md`](docs/interventions.md) — which proposed optimisations Tokenamun can produce evidence for
+* [`docs/optimisation-claims.md`](docs/optimisation-claims.md) — survey of what the tools and techniques claim, and how good the evidence is

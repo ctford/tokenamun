@@ -6,7 +6,9 @@ Tokenamun is an **experimental** profiler for coding-agent token usage. It reads
 session data that Entire has already recorded and reports where tokens went.
 [`SPEC.md`](SPEC.md) is the brief, [`docs/plan.md`](docs/plan.md) is the
 architecture and milestone plan, and [`docs/research-entire.md`](docs/research-entire.md)
-records what the data actually contains. Read the research notes before touching
+records what the data actually contains.
+[`docs/optimisation-claims.md`](docs/optimisation-claims.md) surveys the claims
+this tool exists to adjudicate. Read the research notes before touching
 the adapters — most of the non-obvious design decisions are consequences of
 something measured there.
 

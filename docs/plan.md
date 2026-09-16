@@ -163,6 +163,21 @@ This changes what the profile says. "You read a 5K-token file" is not the
 finding. "You read a 5K-token file at call 20 of 691, so it was re-sent 671
 times for ~3.4M tokens of billed input" is the finding.
 
+**Carry is reported per token class, never as one number.** A cache read costs
+roughly a tenth of a fresh input token, so 3.4M carried tokens that stayed
+cached and 3.4M that kept being re-created are very different findings. Carry
+therefore splits into `cache_read`, `cache_creation` and `input` components,
+taken from the observed per-call classes rather than assumed. A price table is
+configuration, so dollars are opt-in — but the *classes* are observed and always
+shown.
+
+This also gives `profile` a caching-health line that is entirely observed:
+`cache_read` versus `cache_creation` over the session, and every call where
+creation spiked (a cache miss re-paying for a prefix). Caching applies to the
+93–99% of spend that is input, so "is your caching actually working" is probably
+the cheapest genuine finding this tool can produce, and it needs no
+counterfactual at all.
+
 ### Activity classification
 
 Deliberately weak in v0.1, and replaceable: `Classifier` is an interface, the
@@ -230,6 +245,27 @@ type Intervention interface {
 returns an empty `unknown` fails a test — there is always something we can't
 know.
 
+Three rules on top, each of which exists because published optimisation claims
+get it wrong (see [`optimisation-claims.md`](optimisation-claims.md)):
+
+* **Baseline first.** The observed quantity the intervention targets is printed
+  before any counterfactual. Most headline percentages in circulation are
+  properties of the author's baseline rather than of the technique, and a reader
+  can only spot that if they can see ours.
+* **Cache-aware, or the sign can be wrong.** Any intervention that rewrites
+  context invalidates the cached prefix from that point, converting cheap cache
+  reads into full-price input. `Result` therefore carries a
+  `cache_invalidation` term: tokens saved after the change point, minus reads
+  repriced at the change point. Where the invalidation point can't be
+  determined, it goes in `unknown` rather than being netted out silently. A 30%
+  token reduction that increases the bill is a real outcome and we should be
+  able to report it.
+* **No reduction without the outcome caveat.** We cannot see whether the task
+  still succeeded, and an agent that fails consumes the fewest tokens of all.
+  Every counterfactual states that success rate is not in this data. The metric
+  worth borrowing from the literature is tokens-to-success; we can supply the
+  numerator and must be explicit that we cannot supply the denominator.
+
 v0.1 ships:
 
 * **`output-compression`** — a labelled prototype estimator over eligible tool
@@ -243,7 +279,11 @@ v0.1 ships:
   says so. The design point is a `--replay-with=<cmd>` hook: pipe observed
   eligible content through any real compressor and compare counts. That makes
   the analysis honest *and* extensible to Headroom, RTK or anything else on the
-  radar.
+  radar This is a priority, not a nicety: Caveman's published output
+  saving is 65% and an independent test measured 8.5%, and Headroom's headline
+  60–95% is its JSON case against a stated 20% for coding agents. Piping a given
+  repo's own observed content through the real compressor is the only way to
+  settle which number applies to that repo.
 
 `mcp-to-cli` gets an interface and a stub that reports `not measurable from this
 data`. There were zero `mcp__*` calls in the reference dataset and the schema
