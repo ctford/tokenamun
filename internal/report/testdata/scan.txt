@@ -1,0 +1,24 @@
+TOKENAMUN  code scan
+
+Tree (test tree)
+  Files measured                    3   [observed]
+  Files skipped                     0   [observed]
+  Lines                            40   [observed]
+  Code lines                       37   [observed]
+  Large files                       0   [derived]
+  Duplicate runs                    1   [derived]
+  Duplicated lines                  9   [derived]
+
+Most complex functions
+  internal/pay/charge.go                          6  Charge   [derived]
+  internal/billing/credit.go                      3  Credit   [derived]
+  internal/pay/refund.go                          3  Refund   [derived]
+
+Largest files
+  internal/pay/charge.go                                 16 lines
+  internal/billing/credit.go                             12 lines
+  internal/pay/refund.go                                 12 lines
+
+Duplicated code
+    9 lines  internal/billing/credit.go:4  internal/pay/refund.go:4
+

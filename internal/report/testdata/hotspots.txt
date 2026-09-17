@@ -1,0 +1,21 @@
+TOKENAMUN  hotspots
+
+Session carry-fixture
+  API calls          8
+
+Files by what they cost to carry, against what they are like
+  FILE                                    CARRY(EIT)  FETCH   BYTES  LINES  CPLX
+  internal/payment/charge.go                   1,970      2  7.0 KB    480    21
+  docs/adr/0003-retries.md                        66      1  3.9 KB      -     -
+  LINES and CPLX are '-' where the file is not in the scanned tree.
+
+Unattributed
+  Retrievals                        3   [observed]
+  Bytes                        1.1 KB   [observed]
+  Carry cost                      259   [derived]
+  Output that could not be attributed to a file. On sessions run in auto
+  mode this is most of it, because file reads go through the shell and a
+  build log has no path.
+
+This is a join of two observations, not a causal claim.
+

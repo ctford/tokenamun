@@ -15,6 +15,7 @@ import (
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/claudecode"
+	"github.com/ctford/tokenamun/internal/codescan"
 	"github.com/ctford/tokenamun/internal/entire"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
@@ -32,6 +33,8 @@ Usage:
   tokenamun retrieval [session]   what content entered the context, and from where
   tokenamun carry [session]       what it cost to keep content, not to fetch it
   tokenamun cache [session]       why the prompt cache was rebuilt, and what it cost
+  tokenamun scan [path]           code properties: size, complexity, duplication
+  tokenamun hotspots [session]    code properties joined against session cost
   tokenamun version
 
 Session selector:
@@ -86,6 +89,10 @@ func run(args []string) error {
 		return cmdCarry(*dir, *source, selector, *asJSON)
 	case "cache":
 		return cmdCache(*dir, *source, selector, *asJSON)
+	case "scan":
+		return cmdScan(*dir, selector, *asJSON)
+	case "hotspots":
+		return cmdHotspots(*dir, *source, selector, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
 		fmt.Println("validated against Entire CLI 0.10.2 and Claude Code 2.1.x transcripts")
@@ -220,6 +227,42 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 		return writeJSON(r)
 	}
 	return report.RenderCache(os.Stdout, r)
+}
+
+// cmdScan measures code properties without reference to any session.
+func cmdScan(dir, selector string, asJSON bool) error {
+	root := dir
+	// scan takes a path rather than a session, so a positional argument here
+	// is a directory.
+	if selector != "" && selector != "latest" {
+		root = selector
+	}
+	r, err := codescan.Scan(root, codescan.DefaultOptions())
+	if err != nil {
+		return err
+	}
+	out := report.BuildScan(r)
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderScan(os.Stdout, out)
+}
+
+func cmdHotspots(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return err
+	}
+	scan, err := codescan.Scan(dir, codescan.DefaultOptions())
+	if err != nil {
+		return err
+	}
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	out := report.BuildHotspots(s, analysis.Hotspots(s, scan, carry))
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderHotspots(os.Stdout, out)
 }
 
 // loadSelected resolves a selector and parses the transcript it names.

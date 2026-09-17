@@ -138,8 +138,10 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun retrieval` | what content entered the context, and from where |
 | `tokenamun carry` | what it cost to *keep* content, not to fetch it |
 | `tokenamun cache` | why the prompt cache was rebuilt, and what that cost |
+| `tokenamun scan` | code properties: size, complexity, duplication |
+| `tokenamun hotspots` | those properties joined against what the session cost |
 
-Code scans, counterfactuals and the treemap are planned — see the milestones in
+Counterfactuals and the treemap are planned — see the milestones in
 [`docs/plan.md`](docs/plan.md). Activity classification is deliberately last:
 it is inferred, and the observed answers are the ones worth trusting.
 

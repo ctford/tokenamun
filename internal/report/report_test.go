@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ctford/tokenamun/internal/analysis"
+	"github.com/ctford/tokenamun/internal/codescan"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
 )
@@ -229,4 +230,148 @@ func TestCacheGoldenOutput(t *testing.T) {
 	}
 	compareGolden(t, "cache.json", append(pretty, '\n'))
 	walkQuantities(t, "cache", mustTree(t, r))
+}
+
+func TestScanGoldenOutput(t *testing.T) {
+	// A small tree with a known shape: one complex Go function, one oversized
+	// file, and a duplicated block across two files.
+	root := t.TempDir()
+	files := map[string]string{
+		"internal/pay/charge.go": `package pay
+
+func Charge(n int, ok bool) int {
+	if n > 0 && ok {
+		for i := 0; i < n; i++ {
+			n--
+		}
+	}
+	switch n {
+	case 1:
+		return 1
+	case 2:
+		return 2
+	}
+	return 0
+}
+`,
+		"internal/pay/refund.go": `package pay
+
+func Refund(a int) int {
+	total := 0
+	for i := 0; i < a; i++ {
+		total += i * 2
+	}
+	if total > 100 {
+		total = 100
+	}
+	return total
+}
+`,
+		"internal/billing/credit.go": `package billing
+
+func Credit(a int) int {
+	total := 0
+	for i := 0; i < a; i++ {
+		total += i * 2
+	}
+	if total > 100 {
+		total = 100
+	}
+	return total
+}
+`,
+	}
+	for name, body := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r, err := codescan.Scan(root, codescan.DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The root is a temporary path, so normalise it before comparing.
+	out := BuildScan(r)
+	out.Root = "(test tree)"
+
+	var text bytes.Buffer
+	if err := RenderScan(&text, out); err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "scan.txt", text.Bytes())
+	walkQuantities(t, "scan", mustTree(t, out))
+}
+
+func TestHotspotsGoldenOutput(t *testing.T) {
+	s := carrySession(t)
+	scan := codescan.Report{
+		Root: "(test tree)",
+		Files: []codescan.FileMetrics{{
+			Path: "internal/payment/charge.go", Language: "go",
+			Lines: 480, CodeLines: 400, Complexity: 62, MaxFunction: 21,
+			MaxFunctionName: "Charge", ComplexityProv: model.Derived, Large: true,
+		}},
+		Duplicates: []codescan.Duplicate{{
+			Lines: 14,
+			Occurrences: []codescan.Location{
+				{Path: "internal/payment/charge.go", StartLine: 120},
+				{Path: "internal/payment/refund.go", StartLine: 40},
+			},
+		}},
+	}
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	out := BuildHotspots(s, analysis.Hotspots(s, scan, carry))
+
+	var text bytes.Buffer
+	if err := RenderHotspots(&text, out); err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "hotspots.txt", text.Bytes())
+	walkQuantities(t, "hotspots", mustTree(t, out))
+}
+
+// The join must not acquire a developer dimension. Checked against the schema
+// keys rather than the document text, since the notes legitimately mention
+// that the dimension is absent.
+func TestHotspotsHaveNoDeveloperDimension(t *testing.T) {
+	s := carrySession(t)
+	out := BuildHotspots(s, analysis.Hotspots(s, codescan.Report{},
+		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))))
+
+	banned := []string{"developer", "author", "committer", "email", "username", "user_id"}
+	for _, key := range jsonKeys(t, out) {
+		lower := strings.ToLower(key)
+		for _, b := range banned {
+			if strings.Contains(lower, b) {
+				t.Errorf("hotspot schema must not carry a %q field, found %q", b, key)
+			}
+		}
+	}
+}
+
+// jsonKeys collects every object key in a marshalled value.
+func jsonKeys(t *testing.T, v any) []string {
+	t.Helper()
+	var keys []string
+	var walk func(any)
+	walk = func(n any) {
+		switch node := n.(type) {
+		case map[string]any:
+			for k, child := range node {
+				keys = append(keys, k)
+				walk(child)
+			}
+		case []any:
+			for _, child := range node {
+				walk(child)
+			}
+		}
+	}
+	walk(mustTree(t, v))
+	return keys
 }
