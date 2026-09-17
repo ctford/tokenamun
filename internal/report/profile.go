@@ -30,12 +30,18 @@ type Profile struct {
 
 // SessionInfo identifies what was profiled.
 type SessionInfo struct {
-	ID      string       `json:"id"`
-	Origin  model.Origin `json:"origin"`
-	Current bool         `json:"current"`
-	Models  []string     `json:"models"`
-	Branch  string       `json:"branch,omitempty"`
-	Calls   int          `json:"api_calls"`
+	ID string `json:"id"`
+	// Selector is what to pass back to the tool to get this same scope
+	// again. It is not always the ID: a merged set of sessions is labelled
+	// "129 sessions, 2026-08-24 to 2026-09-01", which reads well and is not
+	// a thing any command accepts, so every command printed with that in it
+	// was a command that could not be run.
+	Selector string       `json:"selector,omitempty"`
+	Origin   model.Origin `json:"origin"`
+	Current  bool         `json:"current"`
+	Models   []string     `json:"models"`
+	Branch   string       `json:"branch,omitempty"`
+	Calls    int          `json:"api_calls"`
 	// MixedPricing is true when more than one pricing applies across the
 	// calls. A cost-weighted token is relative to a model's own input price,
 	// so a total that spans two of them adds quantities of different sizes.
@@ -149,7 +155,9 @@ func BuildProfile(s *model.Session) Profile {
 // sessionInfo identifies what was profiled.
 func sessionInfo(s *model.Session) SessionInfo {
 	return SessionInfo{
-		ID: s.Ref.ID, Origin: s.Ref.Origin, Current: s.Ref.Current,
+		// For one session the id is a valid selector, so they agree here.
+		ID: s.Ref.ID, Selector: s.Ref.ID,
+		Origin: s.Ref.Origin, Current: s.Ref.Current,
 		Models: s.Models(), Branch: s.Branch,
 		Calls: s.RealCalls(), Prompts: s.Prompts,
 		MixedPricing: cost.Mixed(s.Invocations),

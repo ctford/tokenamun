@@ -2,6 +2,7 @@
   "schema_version": 1,
   "session": {
     "id": "retrieval-fixture",
+    "selector": "retrieval-fixture",
     "origin": "local",
     "current": false,
     "models": [

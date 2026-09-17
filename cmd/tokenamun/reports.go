@@ -230,7 +230,10 @@ func loadSessions(dir, source string) ([]*model.Session, report.SessionInfo, err
 	// session: the unit is relative to a model's own input price.
 	mixed = mixed || len(models) > 1
 	return sessions, report.SessionInfo{
-		ID:           fmt.Sprintf("%d sessions, %s", len(sessions), window),
+		ID: fmt.Sprintf("%d sessions, %s", len(sessions), window),
+		// The label above reads well and is not a selector. Commands printed
+		// for an agent to run need this one.
+		Selector:     SelectAll + window.Flags(),
 		Calls:        calls,
 		Models:       models,
 		MixedPricing: mixed,

@@ -139,7 +139,8 @@ func BuildTreeViewFrom(root *Node, info SessionInfo, at []string, mode string) (
 		child := flatten(c, costOf(here, mode), v.Total, mode, append(path, c.Name))
 		v.Children = append(v.Children, child)
 		if len(c.Children) > 0 {
-			v.Drill = append(v.Drill, fmt.Sprintf("tokenamun tree %s --at %q", info.ID, child.At))
+			v.Drill = append(v.Drill,
+				fmt.Sprintf("tokenamun tree %s --at %q", selectorOf(info), child.At))
 		}
 	}
 
@@ -204,6 +205,17 @@ func resolve(root *Node, at []string) (*Node, []string, error) {
 		path = append(path, n.Name)
 	}
 	return n, path, nil
+}
+
+// selectorOf is what to pass back to the tool to get this scope again.
+//
+// Falls back to the ID, which is a valid selector for a single session and is
+// all a caller set before merged trees existed.
+func selectorOf(info SessionInfo) string {
+	if info.Selector != "" {
+		return info.Selector
+	}
+	return info.ID
 }
 
 func pathOrRoot(path []string) string {

@@ -431,3 +431,52 @@ func TestOptimisationReadsAsWhatRemains(t *testing.T) {
 		}
 	}
 }
+
+func TestDrillCommandsAreRunnable(t *testing.T) {
+	// The drill-in line is the whole of the agent-navigation promise: an
+	// affordance an agent has to guess at is not an affordance. It printed
+	// the session's *label* where the selector belongs, so for a merged set
+	// it read
+	//
+	//	tokenamun tree 129 sessions, 2026-08-24 to 2026-09-01 --at "..."
+	//
+	// which no command accepts. A single session was fine, because there the
+	// id and the selector happen to be the same string, which is why this
+	// went unnoticed.
+	tree := &Node{Name: "session", Kind: "root", Carry: 100, Children: []*Node{
+		{Name: "cli output", Kind: "bucket", Carry: 100, Children: []*Node{
+			{Name: "git", Kind: "mechanism", Carry: 100},
+		}},
+	}}
+	rollUp(tree)
+
+	info := SessionInfo{
+		ID:       "129 sessions, 2026-08-24 to 2026-09-01",
+		Selector: "all --since 2026-08-24 --until 2026-09-01",
+	}
+	v, err := BuildTreeViewFrom(tree, info, nil, ModeCarry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Drill) == 0 {
+		t.Fatal("a level with a branch in it must offer a drill-in")
+	}
+	for _, cmd := range v.Drill {
+		if strings.Contains(cmd, info.ID) {
+			t.Errorf("the label is not a selector: %q", cmd)
+		}
+		if !strings.Contains(cmd, info.Selector) {
+			t.Errorf("the drill-in must carry the selector: %q", cmd)
+		}
+	}
+
+	// Where no selector is set, the id is one: that is true of a single
+	// session and is what every caller relied on before merging existed.
+	v, err = BuildTreeViewFrom(tree, SessionInfo{ID: "abc123"}, nil, ModeCarry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(v.Drill[0], "abc123") {
+		t.Errorf("a bare id must still be used as the selector: %q", v.Drill[0])
+	}
+}

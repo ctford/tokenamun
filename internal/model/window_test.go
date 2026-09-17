@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,5 +79,46 @@ func TestInWindowFiltersWholeSessions(t *testing.T) {
 	}
 	if len(InWindow(refs, Window{})) != 3 {
 		t.Error("the zero window must not filter")
+	}
+}
+
+func TestFlagsReproduceTheWindowInAbsoluteTerms(t *testing.T) {
+	// Flags exists so a report can print a command that re-runs its own
+	// scope. Absolute dates, never the age the caller typed: "--since 7d"
+	// names a different week every week, and a command in a report is read
+	// later by definition.
+	w, err := ParseWindow("7d", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(w.Flags(), "7d") {
+		t.Errorf("an age must be resolved to a date, got %q", w.Flags())
+	}
+	again, err := ParseWindow(strings.Fields(w.Flags())[1], "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// To the second, not to the day. Truncating an age to its date would
+	// print a command covering a *wider* period than the figures above it
+	// were computed from, which is the one direction that misleads.
+	if !again.Since.Truncate(time.Second).Equal(w.Since.Truncate(time.Second)) {
+		t.Errorf("the flags must parse back to the same window: %v then %v",
+			w.Since, again.Since)
+	}
+
+	// A date the caller typed comes back as a date, because that is what a
+	// reader expects to see in a printed command.
+	day, err := ParseWindow("2026-09-16", "2026-09-17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := day.Flags(); got != " --since 2026-09-16 --until 2026-09-17" {
+		t.Errorf("whole days should print as dates, got %q", got)
+	}
+
+	// An unconstrained window contributes nothing, so a selector built by
+	// concatenation stays a valid selector.
+	if got := (Window{}).Flags(); got != "" {
+		t.Errorf("an empty window must render no flags, got %q", got)
 	}
 }

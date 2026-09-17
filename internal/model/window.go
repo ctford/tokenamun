@@ -45,6 +45,38 @@ func (w Window) String() string {
 	}
 }
 
+// Flags renders the window back as the flags that would reproduce it, so a
+// report can print a command that re-runs it.
+//
+// Always absolute, never the age form the caller may have typed: "--since
+// 7d" means a different week next week, and a command printed in a report is
+// read later by definition.
+//
+// A whole day prints as a date, which is what somebody reading it expects to
+// see. Anything else prints as RFC3339, because an age resolves to an instant
+// mid-day and rounding it down to the date would hand back a *wider* window
+// than the one the numbers above it were computed from.
+//
+// Empty where the window constrains nothing, so it composes into a selector
+// by concatenation.
+func (w Window) Flags() string {
+	var out string
+	if !w.Since.IsZero() {
+		out += " --since " + instantFlag(w.Since)
+	}
+	if !w.Until.IsZero() {
+		out += " --until " + instantFlag(w.Until)
+	}
+	return out
+}
+
+func instantFlag(t time.Time) string {
+	if t.Equal(t.Truncate(24*time.Hour)) || t.Format("15:04:05.999999999") == "00:00:00" {
+		return t.Format(time.DateOnly)
+	}
+	return t.Format(time.RFC3339)
+}
+
 // ParseWindow reads --since and --until.
 //
 // Three forms, because an experiment is described in whichever is to hand: a

@@ -2,6 +2,7 @@
   "schema_version": 1,
   "session": {
     "id": "carry-fixture",
+    "selector": "carry-fixture",
     "origin": "entire",
     "current": false,
     "models": [
