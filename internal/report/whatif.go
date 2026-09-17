@@ -315,7 +315,7 @@ func RenderWhatIfAll(w io.Writer, r WhatIfAll) error {
 		}
 		overall := "--"
 		if row.Share != nil {
-			overall = pctStr(row.Share.Value)
+			overall = remainingStr(row.Share.Value)
 		}
 		fmt.Fprintf(b, "%-20s %-30s %11s %12s %7s\n",
 			trunc(row.Name, 20), trunc(row.Addressable, 30),
@@ -323,7 +323,8 @@ func RenderWhatIfAll(w io.Writer, r WhatIfAll) error {
 	}
 	b.WriteString("\n")
 	b.WriteString("ADDRESSABLE is what it applies to, as a share of the session.\n")
-	b.WriteString("OPTIMISATION is what that part becomes: 50% is halved, 110% is worse.\n\n")
+	b.WriteString("OPTIMISATION is what that part becomes and IMPACT is what the session\n")
+	b.WriteString("becomes: 50% is halved, 100% is untouched, over 100% is worse.\n\n")
 
 	for _, row := range r.Rows {
 		reason := strings.TrimSpace(row.Caveat + " " + row.CaveatDetail)

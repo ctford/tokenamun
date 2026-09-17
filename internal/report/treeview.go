@@ -332,12 +332,34 @@ func pctStr(r float64) string {
 	}
 }
 
-// remainingStr states an intervention's effect as what the addressable part
-// becomes, rather than as a signed change to it.
+// remainingStr states an intervention's effect as what the thing becomes,
+// rather than as a signed change to it.
 //
 // 50% is halved, 100% is untouched, 110% is worse. A sign in front of a
 // percentage in a table reads as an annotation rather than as arithmetic, and
-// nobody has to work out which direction "-50%" points.
+// nobody has to work out which direction "-50%" points. Used for both
+// columns, so the table is sign-free and the two read the same way: what the
+// addressable part becomes, and what the session becomes.
+//
+// The JSON keeps the signed fractions. They are the arithmetic, a caller
+// composing them wants them signed, and nobody is reading JSON in a hurry.
 func remainingStr(reduction float64) string {
-	return pctStr(1 + reduction)
+	// Precision from the size of the change, not the size of the result. A
+	// scale factor clusters near 100%, so pctStr's rule -- whole numbers
+	// above 10% -- printed a real 0.2% saving as "100%".
+	change := reduction
+	if change < 0 {
+		change = -change
+	}
+	remaining := 100 * (1 + reduction)
+	switch {
+	case change == 0:
+		return "100%"
+	case change >= 0.1:
+		return fmt.Sprintf("%.0f%%", remaining)
+	case change >= 0.001:
+		return fmt.Sprintf("%.1f%%", remaining)
+	default:
+		return fmt.Sprintf("%.2f%%", remaining)
+	}
 }

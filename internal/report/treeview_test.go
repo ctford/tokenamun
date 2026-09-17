@@ -505,7 +505,11 @@ func TestOptimisationReadsAsWhatRemains(t *testing.T) {
 	// which way "-50%" points. So the column is what the addressable part
 	// becomes: halved is 50%, untouched is 100%, worse is over 100%.
 	cases := map[float64]string{
-		-0.5: "50%", -1: "0%", 0: "100%", 0.23: "123%", -0.078: "92%",
+		-0.5: "50%", -1: "0%", 0: "100%", 0.23: "123%",
+		// Precision follows the size of the change, not the result: a scale
+		// factor clusters near 100%, and a real 0.2% saving printed as
+		// "100%" before this.
+		-0.078: "92.2%", -0.002: "99.8%", -0.0004: "99.96%",
 	}
 	for reduction, want := range cases {
 		if got := remainingStr(reduction); got != want {
