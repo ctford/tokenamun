@@ -41,7 +41,7 @@ func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
 	return report.RenderTreeView(os.Stdout, v)
 }
 
-func cmdTreemap(dir, source, selector, title, outPath string, asJSON bool) error {
+func cmdReport(dir, source, selector, title, outPath string, asJSON bool) error {
 	tree, info, err := loadTree(dir, source, selector)
 	if err != nil {
 		return err

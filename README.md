@@ -113,7 +113,7 @@ somebody. Ranking people is not, so no command has a developer dimension.
 | `sessions` | what transcripts it can see |
 | `profile` | where the tokens went, and what they cost |
 | `tree` | the same, one level at a time; `--at` drills in |
-| `treemap` | a standalone HTML viewer of the same tree |
+| `report` | a standalone HTML viewer of the same tree |
 | `carry` | what it cost to *keep* content, not to fetch it |
 | `cache` | why the prompt cache was rebuilt, and what that cost |
 | `retrieval` | what content entered the context, and from where |

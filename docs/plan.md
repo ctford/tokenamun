@@ -335,7 +335,7 @@ tokenamun compare   <a> <b>                # sessions or checkpoints
 tokenamun series    <file>...              # probe runs: median, range, payback
 tokenamun what-if   <intervention> [session]
 tokenamun sessions                         # list what's available
-tokenamun treemap   [session] -o out.html
+tokenamun report   [session] -o out.html
 ```
 
 Global: `--json`, `--repo`, `--tokenizer=calibrated|api`, `--config`,

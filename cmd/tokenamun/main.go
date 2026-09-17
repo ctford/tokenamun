@@ -39,9 +39,10 @@ Usage:
   tokenamun compare <a> <b>       two sessions side by side
   tokenamun tree [session]        where the tokens went, one level at a time;
                                   drill in with --at. The HTML viewer as text.
-  tokenamun treemap [session]     standalone HTML viewer: drill down from how
-                                  content was obtained to the individual files.
-                                  --json prints the viewer's own payload.
+  tokenamun report [session]      a standalone HTML report: the same tree as
+                                  "tree", as boxes or as a table, drilling
+                                  down to individual files. --json prints the
+                                  report's own payload.
   tokenamun optimise [session]    what a hypothetical optimisation of part of
                                   the tree would have been worth
   tokenamun series <file>...      probe runs from an experiment: median, range, payback
@@ -58,7 +59,7 @@ Profiling a period, which is what an experiment needs:
   tokenamun tree all --since 7d           the team's last week
   tokenamun tree all --since 2026-09-16   since we changed the thing
   tokenamun tree all --until 2026-09-16   before we changed it
-  tokenamun treemap all --since 7d -o week.html --title "Last week"
+  tokenamun report all --since 7d -o week.html --title "Last week"
 
 Hypothetical optimisations:
   tokenamun optimise --at "cli output" --optimise 0.5 --why "..."
@@ -69,8 +70,8 @@ Flags:
   --json          machine-readable output
   --dir PATH      directory to look in (default: working directory)
   --source SRC    entire | local | any (default: any)
-  -o FILE         output file (treemap; default tokenamun-treemap.html)
-  --title TEXT    heading for the treemap, e.g. "Hyper Agentic App"
+  -o FILE         output file (report; default tokenamun-report.html)
+  --title TEXT    heading for the report, e.g. "Hyper Agentic App"
   --since WHEN    only sessions active on or after WHEN: a date (2026-09-16),
                   a date and time, or an age (7d, 36h). For the before-and-
                   after question, which is what an experiment is.
@@ -115,10 +116,10 @@ func run(args []string) error {
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	dir := fs.String("dir", ".", "directory to look in")
 	source := fs.String("source", "any", "entire | local | any")
-	out := fs.String("o", "tokenamun-treemap.html", "output file for the treemap")
+	out := fs.String("o", "tokenamun-report.html", "output file for the report")
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
-	title := fs.String("title", "", "heading for the treemap report")
+	title := fs.String("title", "", "heading for the report")
 	since := fs.String("since", "", "only sessions active on or after this date, time or age (7d)")
 	until := fs.String("until", "", "only sessions active before this date, time or age")
 	at := fs.String("at", "", "drill to a node in the tree, e.g. \"cli output/git\"")
@@ -183,8 +184,11 @@ func run(args []string) error {
 		return cmdSeries(positional, *interventionCost, *asJSON)
 	case "tree":
 		return cmdTree(*dir, *source, selector, *at, *mode, *asJSON)
-	case "treemap":
-		return cmdTreemap(*dir, *source, selector, *title, *out, *asJSON)
+	// "report" names the artifact; "treemap" named one of its two views, and
+	// the other one is a table. Kept as an alias because it is in muscle
+	// memory and in older notes.
+	case "report", "treemap":
+		return cmdReport(*dir, *source, selector, *title, *out, *asJSON)
 	case "what-if", "whatif", "optimise":
 		return cmdOptimise(*dir, *source, selector, optimiseArgs{
 			at: *at, becomes: *optimise, why: *why, label: *label,
