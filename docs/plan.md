@@ -327,7 +327,7 @@ tokenamun cache     [session]              # cache misses, causes, what they cos
 tokenamun hotspots  [session]              # code metrics x token spend
 tokenamun scan      [path]                 # code metrics alone
 tokenamun compare   <a> <b>                # sessions or checkpoints
-tokenamun series    <label>                # probe runs: median, range, payback
+tokenamun series    <file>...              # probe runs: median, range, payback
 tokenamun what-if   <intervention> [session]
 tokenamun sessions                         # list what's available
 tokenamun treemap   [session] -o out.html

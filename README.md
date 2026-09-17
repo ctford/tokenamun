@@ -143,10 +143,13 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun compare` | two sessions side by side |
 | `tokenamun what-if` | would an optimisation have helped, and by how much |
 | `tokenamun treemap` | a standalone HTML report of retrieved content |
+| `tokenamun series` | experiment probe runs: median, range, payback |
 
-`series` is planned — see the milestones in
-[`docs/plan.md`](docs/plan.md). Activity classification is deliberately last:
-it is inferred, and the observed answers are the ones worth trusting.
+Every milestone in [`docs/plan.md`](docs/plan.md) is implemented. Activity
+classification is deliberately excluded: it is inferred, and the observed
+answers are the ones worth trusting. See
+[`docs/experiments.md`](docs/experiments.md) for using `series` in a
+before/after experiment.
 
 ```
 go build ./cmd/tokenamun && ./tokenamun profile current

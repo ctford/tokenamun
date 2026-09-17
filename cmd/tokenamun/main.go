@@ -41,6 +41,7 @@ Usage:
   tokenamun what-if <name> [session]
                                   would an optimisation have helped, and by how much
   tokenamun treemap [session]     standalone HTML report of retrieved content
+  tokenamun series <file>...      probe runs from an experiment: median, range, payback
   tokenamun version
 
 Session selector:
@@ -62,6 +63,7 @@ Flags:
   --replay-with C pipe this session's own content through a real compressor
                   instead of assuming a ratio; C reads stdin, writes stdout
   -o FILE         output file (treemap; default tokenamun-treemap.html)
+  --cost N        measured intervention cost in EIT, for series payback
 `
 
 func main() {
@@ -85,6 +87,7 @@ func run(args []string) error {
 	ratio := fs.Float64("ratio", 0.5, "assumed surviving fraction for compression")
 	replayWith := fs.String("replay-with", "", "command to replay content through")
 	out := fs.String("o", "tokenamun-treemap.html", "output file for the treemap")
+	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
 	// For a CLI agents invoke, silently dropping a flag is the worst failure
@@ -119,6 +122,8 @@ func run(args []string) error {
 		return cmdHotspots(*dir, *source, selector, *asJSON)
 	case "compare":
 		return cmdCompare(*dir, *source, selector, second, *asJSON)
+	case "series":
+		return cmdSeries(positional, *interventionCost, *asJSON)
 	case "treemap":
 		return cmdTreemap(*dir, *source, selector, *out)
 	case "what-if", "whatif":
@@ -293,6 +298,26 @@ func cmdHotspots(dir, source, selector string, asJSON bool) error {
 		return writeJSON(out)
 	}
 	return report.RenderHotspots(os.Stdout, out)
+}
+
+// cmdSeries aggregates previously-emitted profile JSON files.
+//
+// Runs of the same step share a filename prefix up to the last hyphen, so a
+// driver script needs no manifest: step-07-probe-1.json and
+// step-07-probe-2.json are two runs of one step.
+func cmdSeries(files []string, interventionCost float64, asJSON bool) error {
+	if len(files) == 0 {
+		return fmt.Errorf("series needs profile JSON files: tokenamun series step-*.json")
+	}
+	s, err := analysis.LoadSeries(files, interventionCost)
+	if err != nil {
+		return err
+	}
+	out := report.BuildSeries(s)
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderSeries(os.Stdout, out)
 }
 
 func cmdTreemap(dir, source, selector, outPath string) error {
