@@ -40,6 +40,7 @@ Usage:
   tokenamun compare <a> <b>       two sessions side by side
   tokenamun what-if <name> [session]
                                   would an optimisation have helped, and by how much
+  tokenamun treemap [session]     standalone HTML report of retrieved content
   tokenamun version
 
 Session selector:
@@ -60,6 +61,7 @@ Flags:
   --ratio N       assumed surviving fraction for compression (default 0.5)
   --replay-with C pipe this session's own content through a real compressor
                   instead of assuming a ratio; C reads stdin, writes stdout
+  -o FILE         output file (treemap; default tokenamun-treemap.html)
 `
 
 func main() {
@@ -82,6 +84,7 @@ func run(args []string) error {
 	source := fs.String("source", "any", "entire | local | any")
 	ratio := fs.Float64("ratio", 0.5, "assumed surviving fraction for compression")
 	replayWith := fs.String("replay-with", "", "command to replay content through")
+	out := fs.String("o", "tokenamun-treemap.html", "output file for the treemap")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
 	// For a CLI agents invoke, silently dropping a flag is the worst failure
@@ -116,6 +119,8 @@ func run(args []string) error {
 		return cmdHotspots(*dir, *source, selector, *asJSON)
 	case "compare":
 		return cmdCompare(*dir, *source, selector, second, *asJSON)
+	case "treemap":
+		return cmdTreemap(*dir, *source, selector, *out)
 	case "what-if", "whatif":
 		return cmdWhatIf(*dir, *source, selector, second, *ratio, *replayWith, *asJSON)
 	case "version":
@@ -288,6 +293,26 @@ func cmdHotspots(dir, source, selector string, asJSON bool) error {
 		return writeJSON(out)
 	}
 	return report.RenderHotspots(os.Stdout, out)
+}
+
+func cmdTreemap(dir, source, selector, outPath string) error {
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return err
+	}
+	payload := report.BuildTreemap(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+
+	f, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := report.RenderTreemap(f, payload); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %s (%d retrievals)\n", outPath, len(payload.Items))
+	fmt.Println("Area is observed retrieved-content size, not a picture of the context window.")
+	return nil
 }
 
 func cmdCompare(dir, source, a, b string, asJSON bool) error {

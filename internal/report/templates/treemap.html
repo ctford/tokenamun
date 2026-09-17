@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tokenamun — retrieved content</title>
+<style>
+  /* Roles, not raw hex, so light and dark swap in one place. */
+:root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --plane: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #6f6e69;
+    --rule: #e3e2dd;
+    /* Sequential blue, light -> dark. One hue: the measure is magnitude. */
+    --seq-100: #cde2fb; --seq-200: #9ec5f4; --seq-300: #6da7ec;
+    --seq-400: #3987e5; --seq-500: #256abf; --seq-600: #184f95;
+    --seq-700: #0d366b;
+    --bar: #2a78d6;
+    --de-emphasis: #b9b8b1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --plane: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #9c9b91;
+      --rule: #37362f;
+      --seq-100: #104281; --seq-200: #184f95; --seq-300: #1c5cab;
+      --seq-400: #256abf; --seq-500: #3987e5; --seq-600: #6da7ec;
+      --seq-700: #9ec5f4;
+      --bar: #3987e5;
+      --de-emphasis: #57564f;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --plane: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9c9b91;
+    --rule: #37362f;
+    --seq-100: #104281; --seq-200: #184f95; --seq-300: #1c5cab;
+    --seq-400: #256abf; --seq-500: #3987e5; --seq-600: #6da7ec;
+    --seq-700: #9ec5f4;
+    --bar: #3987e5;
+    --de-emphasis: #57564f;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--plane); color: var(--text-primary);
+    font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  .viz-root {
+    max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px;
+    color: var(--text-primary);
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 14px; font-weight: 600; margin: 32px 0 4px; }
+  .sub { color: var(--text-secondary); margin: 0 0 24px; }
+  .muted { color: var(--text-muted); font-size: 12px; }
+
+  /* Controls sit in one row above the charts. */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 20px; }
+  button {
+    font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 6px;
+    border: 1px solid var(--rule); background: var(--surface-1);
+    color: var(--text-primary); cursor: pointer;
+  }
+  button[aria-pressed="true"] { border-color: var(--bar); color: var(--bar); font-weight: 600; }
+  button:focus-visible { outline: 2px solid var(--bar); outline-offset: 2px; }
+
+  .tiles { display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 8px; }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 12px 16px; min-width: 150px;
+  }
+  .tile .label { font-size: 12px; color: var(--text-secondary); }
+  .tile .value { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  .tile .prov { font-size: 11px; color: var(--text-muted); }
+
+  .panel {
+    background: var(--surface-1); border: 1px solid var(--rule);
+    border-radius: 8px; padding: 16px;
+  }
+
+  /* Category bars: one hue, because the measure is magnitude. */
+  .bars { display: grid; grid-template-columns: 150px 1fr 110px; gap: 2px 10px; align-items: center; }
+  .bars .name { font-size: 13px; color: var(--text-secondary); text-align: right; }
+  .bars .track { height: 18px; background: transparent; }
+  .bars .fill { height: 18px; background: var(--bar); border-radius: 0 4px 4px 0; }
+  .bars .val { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+  svg { display: block; width: 100%; height: auto; }
+  .cell rect { stroke: var(--surface-1); stroke-width: 2; }
+  .cell:hover rect { stroke: var(--text-primary); stroke-width: 2; }
+  .cell text, .group-label {
+    pointer-events: none; font-size: 11px;
+    paint-order: stroke; stroke: var(--surface-1); stroke-width: 2.5px;
+    stroke-linejoin: round;
+  }
+  .group-label { font-size: 12px; font-weight: 600; fill: var(--text-secondary); }
+
+  .legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+  .ramp { display: flex; height: 10px; width: 180px; border-radius: 2px; overflow: hidden; }
+  .ramp span { flex: 1; }
+
+  #tip {
+    position: fixed; pointer-events: none; opacity: 0; transition: opacity .08s;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px;
+    font-size: 12px; box-shadow: 0 2px 10px rgb(0 0 0 / 0.14); max-width: 320px; z-index: 10;
+  }
+  #tip .t { font-weight: 600; margin-bottom: 2px; word-break: break-all; }
+  #tip dl { display: grid; grid-template-columns: auto auto; gap: 1px 10px; margin: 4px 0 0; }
+  #tip dt { color: var(--text-secondary); }
+  #tip dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
+  th:first-child, td:first-child { text-align: left; word-break: break-all; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  td { font-variant-numeric: tabular-nums; }
+  [hidden] { display: none !important; }
+
+  footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--rule); }
+  footer p { color: var(--text-muted); font-size: 12px; margin: 0 0 6px; max-width: 70ch; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1>Tokenamun — retrieved content</h1>
+  <p class="sub">Session <strong id="sid"></strong> · <span id="calls"></span> API calls · <span id="origin"></span></p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="controls">
+    <span class="muted">Rectangle area:</span>
+    <button id="mode-tokens" aria-pressed="true">Retrieved tokens (observed size)</button>
+    <button id="mode-carry" aria-pressed="false">Cost of carry (derived)</button>
+    <span style="flex:1"></span>
+    <button id="toggle-table" aria-pressed="false">Table view</button>
+    <button id="toggle-theme">Dark / light</button>
+  </div>
+
+  <h2 id="tm-title"></h2>
+  <p class="muted" id="tm-sub"></p>
+  <div class="panel">
+    <svg id="treemap" viewBox="0 0 1000 560" role="img" aria-labelledby="tm-title"></svg>
+    <div class="legend">
+      <span>carry cost per token: low</span>
+      <span class="ramp" id="ramp"></span>
+      <span>high</span>
+      <span class="muted" id="ramp-caption"></span>
+    </div>
+  </div>
+
+  <h2>Retrieved content by category</h2>
+  <p class="muted">Observed bytes. Ten categories all carry meaning, so the numbers are in the table too.</p>
+  <div class="panel"><div class="bars" id="bars"></div></div>
+
+  <div id="table-view" hidden>
+    <h2>All retrievals</h2>
+    <div class="panel" style="overflow:auto; max-height: 520px">
+      <table>
+        <thead><tr>
+          <th>Content</th><th>Category</th><th>Tokens</th><th>Bytes</th>
+          <th>Entered at</th><th>Resident for</th><th>Carry (EIT)</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <p id="foot-est"></p>
+    <p><strong>This is not a picture of the context window.</strong> Area is the
+    observed size of content that entered the context, or the derived cost of
+    carrying it. Neither is the same as the tokens billed for a request, and this
+    view does not reconstruct what was resident at any moment.</p>
+    <p>Retrieved-content tokens and billed tokens are different quantities and are
+    never added together. Token counts are estimates unless a real tokenizer was
+    used; the estimator is stated above.</p>
+  </footer>
+</div>
+
+<div id="tip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+const DATA = __TOKENAMUN_DATA__;
+
+const fmt = n => n.toLocaleString("en-US", {maximumFractionDigits: 0});
+const bytes = n => n >= 1048576 ? (n/1048576).toFixed(1)+" MB"
+  : n >= 1024 ? (n/1024).toFixed(1)+" KB" : fmt(n)+" B";
+
+document.getElementById("sid").textContent = DATA.session.id;
+document.getElementById("calls").textContent = fmt(DATA.session.calls);
+document.getElementById("origin").textContent = DATA.session.origin;
+
+/* Stat tiles: headline numbers, each carrying its provenance. */
+document.getElementById("tiles").innerHTML = DATA.tiles.map(t => `
+  <div class="tile">
+    <div class="label">${t.label}</div>
+    <div class="value">${t.value}</div>
+    <div class="prov">${t.provenance}</div>
+  </div>`).join("");
+
+/* Category bars: single hue, magnitude only, with the values shown. */
+const maxCat = Math.max(...DATA.categories.map(c => c.bytes), 1);
+document.getElementById("bars").innerHTML = DATA.categories.map(c => `
+  <div class="name">${c.name}</div>
+  <div class="track"><div class="fill" style="width:${Math.max(1, 100*c.bytes/maxCat)}%"></div></div>
+  <div class="val">${bytes(c.bytes)} · ${(100*c.share).toFixed(1)}%</div>`).join("");
+
+document.getElementById("rows").innerHTML = DATA.items.map(i => `
+  <tr><td>${i.label}</td><td>${i.category}</td><td>${fmt(i.tokens)}</td>
+  <td>${bytes(i.bytes)}</td><td>call ${i.enteredAt}</td>
+  <td>${fmt(i.residentFor)} calls</td><td>${fmt(i.carry)}</td></tr>`).join("");
+
+const RAMP = ["--seq-100","--seq-200","--seq-300","--seq-400","--seq-500","--seq-600","--seq-700"];
+document.getElementById("ramp").innerHTML =
+  RAMP.map(v => `<span style="background:var(${v})"></span>`).join("");
+
+/* Squarified treemap (Bruls, Huizing & van Wijk). Rows are laid out along the
+   shorter side so aspect ratios stay near 1, which is what makes areas
+   comparable by eye. */
+function squarify(items, x, y, w, h) {
+  const total = items.reduce((s, i) => s + i.value, 0);
+  if (total <= 0 || w <= 0 || h <= 0) return [];
+  const scale = (w * h) / total;
+  const queue = items.map(i => ({...i, area: i.value * scale}));
+  const out = [];
+
+  let cx = x, cy = y, cw = w, ch = h;
+  while (queue.length) {
+    const vertical = cw >= ch;
+    const side = vertical ? ch : cw;
+    const row = [queue.shift()];
+    let rowArea = row[0].area;
+
+    const worst = (area, side, items) => {
+      const thickness = area / side;
+      let max = 0;
+      for (const it of items) {
+        const len = it.area / thickness;
+        max = Math.max(max, Math.max(thickness / len, len / thickness));
+      }
+      return max;
+    };
+
+    while (queue.length) {
+      const candidate = [...row, queue[0]];
+      if (worst(rowArea + queue[0].area, side, candidate) <= worst(rowArea, side, row)) {
+        rowArea += queue[0].area;
+        row.push(queue.shift());
+      } else break;
+    }
+
+    const thickness = Math.min(rowArea / side, vertical ? cw : ch);
+    let offset = 0;
+    for (const it of row) {
+      const len = rowArea > 0 ? (it.area / rowArea) * side : 0;
+      out.push(vertical
+        ? {...it, x: cx, y: cy + offset, w: thickness, h: len}
+        : {...it, x: cx + offset, y: cy, w: len, h: thickness});
+      offset += len;
+    }
+    if (vertical) { cx += thickness; cw -= thickness; } else { cy += thickness; ch -= thickness; }
+    if (cw <= 0.5 || ch <= 0.5) break;
+  }
+  return out;
+}
+
+const svg = document.getElementById("treemap");
+const tip = document.getElementById("tip");
+const W = 1000, H = 560, GROUP_LABEL = 16;
+let mode = "tokens";
+
+/* At 11px the glyphs average ~6px, so a label only earns its place if the
+   truncated form still says something. Measuring per-string would be more
+   precise and is not worth a reflow per cell. */
+function fitLabel(text, widthPx) {
+  const room = Math.floor((widthPx - 10) / 6);
+  if (room < 5) return "";
+  return text.length <= room ? text : text.slice(0, room - 1) + "\u2026";
+}
+
+/* The ramp inverts between themes - dark mode's high steps are pale blue - so
+   ink is chosen against the step for the theme actually in force. */
+function darkMode() {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue("--surface-1").trim() === "#1a1a19";
+}
+function inkFor(step) {
+  const fillIsDark = darkMode() ? step <= 3 : step >= 2;
+  return fillIsDark ? "#ffffff" : "var(--text-primary)";
+}
+
+function stepFor(item) {
+  const t = DATA.maxCarryPerToken > 0
+    ? Math.min(1, (item.carryPerToken || 0) / DATA.maxCarryPerToken) : 0;
+  return Math.min(RAMP.length - 1, Math.floor(Math.sqrt(t) * RAMP.length));
+}
+
+function colourFor(item) {
+  /* Sequential on carry per token: how expensive this content was to keep,
+     relative to its size. Area already carries magnitude. */
+  return `var(${RAMP[stepFor(item)]})`;
+}
+
+function render() {
+  const key = mode === "tokens" ? "tokens" : "carry";
+  const groups = DATA.categories
+    .map(c => ({
+      name: c.name,
+      value: DATA.items.filter(i => i.category === c.name)
+        .reduce((s, i) => s + (i[key] || 0), 0),
+      items: DATA.items.filter(i => i.category === c.name),
+    }))
+    .filter(g => g.value > 0);
+
+  const placedGroups = squarify(groups, 0, 0, W, H);
+  let svgParts = [];
+
+  for (const g of placedGroups) {
+    const innerY = g.y + GROUP_LABEL;
+    const innerH = Math.max(0, g.h - GROUP_LABEL);
+    if (g.w > 46 && g.h > GROUP_LABEL + 4) {
+      const heading = fitLabel(`${g.name} · ${fmt(g.value)}`, g.w);
+      if (heading) {
+        svgParts.push(`<text class="group-label" x="${g.x + 3}" y="${
+          g.y + 11}">${esc(heading)}</text>`);
+      }
+    }
+    const cells = squarify(
+      g.items.map(i => ({...i, value: i[key] || 0})).filter(i => i.value > 0),
+      g.x, innerY, g.w, innerH);
+
+    for (const c of cells) {
+      const text = c.h > 20 ? fitLabel(c.shortLabel, c.w) : "";
+      const label = text
+        ? `<text x="${c.x + 5}" y="${c.y + 14}" fill="${inkFor(stepFor(c))}">${
+            esc(text)}</text>`
+        : "";
+      svgParts.push(`<g class="cell" data-id="${c.id}">
+        <rect x="${c.x}" y="${c.y}" width="${Math.max(0, c.w)}" height="${Math.max(0, c.h)}"
+          fill="${colourFor(c)}" rx="2"></rect>${label}</g>`);
+    }
+  }
+  svg.innerHTML = svgParts.join("");
+
+  document.getElementById("tm-title").textContent = mode === "tokens"
+    ? "Area = retrieved tokens (observed size of what entered the context)"
+    : "Area = cost of carry in EIT (derived: what keeping it cost)";
+  /* A sequential ramp encodes "more" as darker on a light surface and as more
+     luminous on a dark one. Both are correct for their surface, so the caption
+     cannot be written once - it would be exactly wrong in one theme. */
+  const heavyEnd = darkMode() ? "brighter" : "darker";
+  const lightEnd = darkMode() ? "deeper" : "paler";
+  document.getElementById("ramp-caption").textContent =
+    `— ${lightEnd} is bulky but cheap to keep; ${heavyEnd} was carried for many calls`;
+  document.getElementById("tm-sub").textContent = mode === "tokens"
+    ? `Grouped by category. Fill shows carry cost per token, so a large ${lightEnd} block is bulky but cheap to keep.`
+    : "Grouped by category. This is the decision-relevant view: content is priced once and carried on every later call.";
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, ch =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch]));
+}
+
+/* Hover layer: a tooltip per mark, with hit targets the size of the rect. */
+svg.addEventListener("mousemove", e => {
+  const cell = e.target.closest(".cell");
+  if (!cell) { tip.style.opacity = 0; tip.setAttribute("aria-hidden", "true"); return; }
+  const item = DATA.items.find(i => String(i.id) === cell.dataset.id);
+  if (!item) return;
+  tip.innerHTML = `<div class="t">${esc(item.label)}</div>
+    <dl>
+      <dt>category</dt><dd>${esc(item.category)}</dd>
+      <dt>tool</dt><dd>${esc(item.tool)}</dd>
+      <dt>tokens</dt><dd>${fmt(item.tokens)}</dd>
+      <dt>bytes</dt><dd>${bytes(item.bytes)}</dd>
+      <dt>entered at</dt><dd>call ${item.enteredAt}</dd>
+      <dt>resident for</dt><dd>${fmt(item.residentFor)} calls</dd>
+      <dt>carry</dt><dd>${fmt(item.carry)} EIT</dd>
+      ${item.range ? `<dt>range</dt><dd>${esc(item.range)}</dd>` : ""}
+    </dl>`;
+  tip.style.opacity = 1;
+  tip.setAttribute("aria-hidden", "false");
+  const pad = 14;
+  let left = e.clientX + pad, top = e.clientY + pad;
+  const r = tip.getBoundingClientRect();
+  if (left + r.width > innerWidth - 8) left = e.clientX - r.width - pad;
+  if (top + r.height > innerHeight - 8) top = e.clientY - r.height - pad;
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+});
+svg.addEventListener("mouseleave", () => {
+  tip.style.opacity = 0;
+  tip.setAttribute("aria-hidden", "true");
+});
+
+const byTokens = document.getElementById("mode-tokens");
+const byCarry = document.getElementById("mode-carry");
+byTokens.onclick = () => {
+  mode = "tokens";
+  byTokens.setAttribute("aria-pressed", "true");
+  byCarry.setAttribute("aria-pressed", "false");
+  render();
+};
+byCarry.onclick = () => {
+  mode = "carry";
+  byCarry.setAttribute("aria-pressed", "true");
+  byTokens.setAttribute("aria-pressed", "false");
+  render();
+};
+
+const tableBtn = document.getElementById("toggle-table");
+tableBtn.onclick = () => {
+  const view = document.getElementById("table-view");
+  const showing = view.hidden;
+  view.hidden = !showing;
+  tableBtn.setAttribute("aria-pressed", String(showing));
+};
+
+document.getElementById("toggle-theme").onclick = () => {
+  document.documentElement.setAttribute("data-theme", darkMode() ? "light" : "dark");
+  render(); // the ramp inverts, so the label ink has to be re-chosen
+};
+
+document.getElementById("foot-est").textContent = DATA.estimatorNote;
+render();
+</script>
+</body>
+</html>

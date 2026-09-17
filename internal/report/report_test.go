@@ -455,3 +455,84 @@ func TestCompareSaysItIsNotAControlledExperiment(t *testing.T) {
 		t.Error("the caveat must be in the output, not only in the docs")
 	}
 }
+
+func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
+	s := carrySession(t)
+	p := BuildTreemap(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+
+	var out bytes.Buffer
+	if err := RenderTreemap(&out, p); err != nil {
+		t.Fatal(err)
+	}
+	html := out.String()
+
+	// Self-contained: a report someone opens months later must not depend on
+	// a CDN still being up, and must not phone home from their machine.
+	for _, external := range []string{"src=\"http", "href=\"http", "cdn.", "unpkg", "googleapis"} {
+		if strings.Contains(html, external) {
+			t.Errorf("the report must be self-contained, found %q", external)
+		}
+	}
+	if strings.Contains(html, "__TOKENAMUN_DATA__") {
+		t.Error("the data placeholder was not substituted")
+	}
+
+	// The disclaimer is the point: area is observed retrieved size, not a
+	// reconstruction of the context window.
+	if !strings.Contains(html, "not a picture of the context window") {
+		t.Error("the report must say what it is not")
+	}
+	// Ten categories all carry meaning, so the numbers must also exist as text.
+	if !strings.Contains(html, "<table>") {
+		t.Error("a table view must exist for accessibility and for >7 categories")
+	}
+	// Dark mode is selected, under both the OS setting and the explicit toggle.
+	if !strings.Contains(html, "prefers-color-scheme: dark") ||
+		!strings.Contains(html, `:root[data-theme="dark"]`) {
+		t.Error("dark mode must be declared for both the OS setting and the toggle")
+	}
+}
+
+func TestTreemapPayloadJoinsCarryOntoRetrievals(t *testing.T) {
+	s := carrySession(t)
+	p := BuildTreemap(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+
+	if len(p.Items) == 0 {
+		t.Fatal("the fixture has retrievals")
+	}
+	var withCarry int
+	for _, i := range p.Items {
+		if i.Carry > 0 {
+			withCarry++
+			if i.ResidentFor == 0 {
+				t.Errorf("%s has carry cost but no residency", i.Label)
+			}
+			if i.CarryPerToken <= 0 {
+				t.Errorf("%s has carry cost but no per-token rate for the colour ramp", i.Label)
+			}
+		}
+	}
+	if withCarry == 0 {
+		t.Error("carry should have joined onto at least one retrieval")
+	}
+	if p.MaxCarryPerToken <= 0 {
+		t.Error("the colour ramp needs a maximum to scale against")
+	}
+	// Items are ordered largest-first so the table reads in scan order.
+	for i := 1; i < len(p.Items); i++ {
+		if p.Items[i-1].Tokens < p.Items[i].Tokens {
+			t.Fatal("items should be ordered largest first")
+		}
+	}
+}
+
+func TestTreemapFailsLoudlyIfTheTemplateLosesItsPlaceholder(t *testing.T) {
+	// Guards against a template edit silently producing a report with no data.
+	tmpl, err := templates.ReadFile("templates/treemap.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(tmpl, []byte("__TOKENAMUN_DATA__")) {
+		t.Fatal("the embedded template must carry the data placeholder")
+	}
+}
