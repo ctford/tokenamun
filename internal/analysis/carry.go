@@ -32,6 +32,16 @@ type CarryReport struct {
 	// context that was rebuilt. They truncate every open residency span.
 	Resets []int `json:"reset_calls"`
 
+	// AssistantCarryEIT is what re-sending the model's own words cost. Output
+	// is billed once at the output rate when generated, then carried as input
+	// on every later call; this is the second part, which is invisible if you
+	// only look at output tokens.
+	AssistantCarryEIT float64 `json:"assistant_carry_eit"`
+	// ToolInputCarryEIT is what re-sending the tool calls the model wrote
+	// cost. On real sessions the model writes nearly as many bytes into tool
+	// calls as it reads back out of them.
+	ToolInputCarryEIT float64 `json:"tool_input_carry_eit"`
+
 	// Items ranks retrievals by what carrying them cost.
 	Items []CarriedItem `json:"items"`
 	// Unattributed is the share of observed growth the content could not
@@ -110,6 +120,32 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 	r.PreambleCarryEIT = residencyCost(float64(r.Preamble), 1, len(s.Invocations), cold, r.Resets, w)
 	if r.PromptCostEIT > 0 {
 		r.PreambleShare = r.PreambleCarryEIT / r.PromptCostEIT
+	}
+
+	// The model's own output is carried too: generated once at the output
+	// rate, then re-sent as input on every later call.
+	for _, inv := range s.Invocations {
+		if !inv.IsRealCall() || inv.Usage.Output == 0 {
+			continue
+		}
+		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, r.Resets)
+		r.AssistantCarryEIT += float64(inv.Usage.Output) *
+			(float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+	}
+
+	// So are the tool calls it wrote, which are not free: the arguments sit in
+	// the conversation exactly like the results do.
+	ratio := s.Estimator.BytesPerToken
+	if ratio <= 0 {
+		ratio = 3.6
+	}
+	for _, tc := range s.ToolCalls {
+		if tc.InvocationSeq < 0 || tc.InputBytes == 0 {
+			continue
+		}
+		warm, coldN := residency(tc.InvocationSeq+1, len(s.Invocations), cold, r.Resets)
+		r.ToolInputCarryEIT += (float64(tc.InputBytes) / ratio) *
+			(float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
 	}
 
 	for _, c := range s.Retrievals {

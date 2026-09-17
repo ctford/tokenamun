@@ -38,6 +38,9 @@ type Node struct {
 	// Detail is shown in the tooltip for leaves.
 	Detail   string  `json:"detail,omitempty"`
 	Children []*Node `json:"children,omitempty"`
+	// Reconciliation is set on the root when the parts overshoot the measured
+	// prompt cost, which happens through byte-per-token estimation error.
+	Reconciliation float64 `json:"reconciliation,omitempty"`
 }
 
 // BuildTree assembles the drill-down hierarchy.
@@ -167,13 +170,39 @@ func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryRepor
 		})
 	}
 
-	rest := carry.PromptCostEIT - retrievalCarry - carry.PreambleCarryEIT
+	if carry.AssistantCarryEIT > 0 {
+		root.Children = append(root.Children, &Node{
+			Name: "the model's own replies, re-sent", Kind: "bucket", Unscaled: true,
+			Carry: carry.AssistantCarryEIT, CarryUncached: carry.AssistantCarryEIT, Items: 1,
+			Detail: "text and thinking the model generated, carried as input on every later " +
+				"call. Billed once at the output rate when written, then again as input for " +
+				"the rest of the session.",
+		})
+	}
+	if carry.ToolInputCarryEIT > 0 {
+		root.Children = append(root.Children, &Node{
+			Name: "the tool calls it wrote, re-sent", Kind: "bucket", Unscaled: true,
+			Carry: carry.ToolInputCarryEIT, CarryUncached: carry.ToolInputCarryEIT, Items: 1,
+			Detail: "the arguments of every tool call - shell commands, file paths, patches - " +
+				"which sit in the conversation exactly as the results do.",
+		})
+	}
+
+	rest := carry.PromptCostEIT - retrievalCarry - carry.PreambleCarryEIT -
+		carry.AssistantCarryEIT - carry.ToolInputCarryEIT
+	if rest < 0 {
+		// The parts came to more than the measured cost. That is estimator
+		// error, and reporting it is the point: a decomposition that silently
+		// clamps itself to fit looks more certain than it is.
+		root.Reconciliation = rest
+	}
 	if rest > 0 {
 		root.Children = append(root.Children, &Node{
-			Name: "conversation and overhead", Kind: "bucket", Unscaled: true,
+			Name: "unattributed", Kind: "bucket", Unscaled: true,
 			Carry: rest, CarryUncached: rest, Items: 1,
-			Detail: "user prompts, assistant text, thinking tokens, system reminders and " +
-				"per-call envelope, carried on every later call. Not decomposable.",
+			Detail: "what the parts above do not account for: the prompts you typed, system " +
+				"reminders, per-call message envelope, and the error in the byte-per-token " +
+				"estimate. Reported rather than distributed.",
 		})
 	}
 

@@ -126,16 +126,16 @@ func TestTreeAccountsForTheWholePromptCost(t *testing.T) {
 	tree := BuildTree(treeFixture(), carry)
 
 	child(t, tree, "session preamble")
-	rest := child(t, tree, "conversation and overhead")
+	rest := child(t, tree, "unattributed")
 	// 1000 total - 150 retrieval - 200 preamble = 650 left over.
 	if rest.Carry != 650 {
 		t.Errorf("remainder = %v, want 650", rest.Carry)
 	}
-	// The undecomposable blocks must say why they cannot be broken down,
-	// rather than looking like an omission.
-	for _, name := range []string{"session preamble", "conversation and overhead"} {
-		if d := child(t, tree, name).Detail; d == "" || !contains(d, "decomposable") {
-			t.Errorf("%s: detail = %q, want an explanation", name, d)
+	// Every block that is not a retrieval breakdown must explain itself,
+	// rather than looking like an omission or a shrug.
+	for _, name := range []string{"session preamble", "unattributed"} {
+		if d := child(t, tree, name).Detail; d == "" {
+			t.Errorf("%s: no explanation", name)
 		}
 	}
 	if got := child(t, tree, "retrieved content").Carry; got != 150 {
@@ -160,6 +160,34 @@ func TestEveryLevelIsSortedLargestFirst(t *testing.T) {
 		}
 	}
 	check(tree)
+}
+
+// The model re-reading its own output is a first-class cost, and on real
+// sessions the largest single one. Leaving it inside a vague remainder hid it.
+func TestTheModelsOwnOutputAndToolCallsAreCarriedSeparately(t *testing.T) {
+	s := treeFixture()
+	s.Invocations = []model.ModelInvocation{
+		{Seq: 0, Model: "claude-opus-5", Usage: model.TokenUsage{CacheRead: 10_000, Output: 500}},
+		{Seq: 1, Model: "claude-opus-5", Usage: model.TokenUsage{CacheRead: 11_000, Output: 400}},
+		{Seq: 2, Model: "claude-opus-5", Usage: model.TokenUsage{CacheRead: 12_000, Output: 300}},
+	}
+	s.ToolCalls = []model.ToolCall{{Seq: 0, InvocationSeq: 0, InputBytes: 3600}}
+	s.Estimator = model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true}
+
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	if carry.AssistantCarryEIT <= 0 {
+		t.Fatal("output written early is re-sent later and must be priced")
+	}
+	if carry.ToolInputCarryEIT <= 0 {
+		t.Fatal("the arguments of a tool call sit in the conversation like its results do")
+	}
+
+	tree := BuildTree(s, carry)
+	replies := child(t, tree, "the model's own replies, re-sent")
+	if replies.Carry != carry.AssistantCarryEIT {
+		t.Errorf("replies block = %v, want %v", replies.Carry, carry.AssistantCarryEIT)
+	}
+	child(t, tree, "the tool calls it wrote, re-sent")
 }
 
 func TestCarryJoinsOntoLeaves(t *testing.T) {

@@ -100,6 +100,7 @@
   svg { display: block; width: 100%; height: auto; }
   .cell rect { stroke: var(--surface-1); stroke-width: 2; }
   .cell:hover rect { stroke: var(--text-primary); stroke-width: 2; }
+  .cell.leaf:hover rect { stroke: var(--rule); }
   /* Cell labels need no halo: the ink is already chosen against the fill
      under it, and a surface-coloured stroke behind white ink on a dark fill
      just smears small labels. */
@@ -425,52 +426,36 @@ function render() {
   const kids = (here.children || []).filter(n => value(n) > 0);
   const placed = squarify(kids.map((n, i) => ({node: n, index: i, value: value(n)})), 0, 0, W, H);
 
+  // One level at a time. Drawing a preview of the level below inside each
+  // rectangle made it ambiguous which thing a click would act on, and put two
+  // hierarchy levels on screen competing for the same area.
   const parts = [];
   for (const p of placed) {
     const n = p.node;
     const leaf = !n.children || n.children.length === 0;
+    const fill = n.unscaled ? "var(--de-emphasis)" : `var(${RAMP[stepFor(n)]})`;
+    const ink = n.unscaled ? "var(--text-primary)" : inkFor(stepFor(n));
 
-    // A branch gets a neutral fill and a header strip: colouring it the same
-    // way as its contents made the nesting invisible. The ramp carries meaning
-    // only on the smallest rectangles, which is what it is measuring.
-    const fill = n.unscaled ? "var(--de-emphasis)"
-      : leaf ? `var(${RAMP[stepFor(n)]})` : "var(--plane)";
     parts.push(`<g class="cell${leaf ? " leaf" : ""}" data-path="${p.index}">`);
     parts.push(`<rect x="${p.x}" y="${p.y}" width="${Math.max(0, p.w)}" height="${
-      Math.max(0, p.h)}" fill="${fill}" rx="2" stroke="var(--rule)"></rect>`);
+      Math.max(0, p.h)}" fill="${fill}" rx="2"></rect>`);
 
-    if (!leaf && p.h > HEADER + 6 && p.w > 60) {
-      const inner = squarify(
-        n.children.map((k, j) => ({node: k, index: j, value: value(k)}))
-          .filter(k => k.value > 0),
-        p.x + 1, p.y + HEADER, p.w - 2, p.h - HEADER - 1);
-      for (const q of inner) {
-        // Each mini rectangle is its own target, so clicking one zooms into
-        // that rectangle rather than into its parent.
-        const isLeaf = !q.node.children || q.node.children.length === 0;
-        parts.push(`<g class="cell mini${isLeaf ? " leaf" : ""}" data-path="${
-          p.index}.${q.index}">`);
-        parts.push(`<rect x="${q.x}" y="${q.y}" width="${Math.max(0, q.w)}" height="${
-          Math.max(0, q.h)}" fill="${q.node.unscaled ? "var(--de-emphasis)"
-            : `var(${RAMP[stepFor(q.node)]})`}" rx="1"
-          stroke="var(--surface-1)" stroke-width="1.5"></rect>`);
-        const share = pct(pctOfView(q.node, n));
-        const lbl = q.h > 18 ? fitLabel(`${shortName(q.node.name)} · ${share}`, q.w) : "";
-        if (lbl) {
-          parts.push(`<text class="inner" x="${q.x + 4}" y="${q.y + 13}" fill="${
-            inkFor(stepFor(q.node))}">${esc(lbl)}</text>`);
-        }
-        parts.push(`</g>`);
-      }
+    const share = pct(pctOfView(n, here));
+    const name = fitLabel(shortName(n.name), p.w);
+    if (name && p.h > 16) {
+      parts.push(`<text x="${p.x + 6}" y="${p.y + 16}" fill="${ink}" class="name">${
+        esc(name)}</text>`);
     }
-
-    const heading = fitLabel(
-      `${n.name} · ${pct(pctOfView(n, here))} · ${fmt(value(n))}`, p.w);
-    if (heading) {
-      const ink = n.unscaled ? "var(--text-primary)"
-        : leaf ? inkFor(stepFor(n)) : "var(--text-primary)";
-      parts.push(`<text class="group-label" x="${p.x + 4}" y="${p.y + 13}" fill="${
-        ink}">${esc(heading)}</text>`);
+    // The share goes on its own line when there is room, so the name is not
+    // truncated to make space for it.
+    const stat = fitLabel(`${share} · ${fmt(value(n))}`, p.w);
+    if (stat && p.h > 34) {
+      parts.push(`<text x="${p.x + 6}" y="${p.y + 31}" fill="${ink}" class="stat">${
+        esc(stat)}</text>`);
+    }
+    if (!leaf && p.w > 46 && p.h > 50) {
+      parts.push(`<text x="${p.x + 6}" y="${p.y + 46}" fill="${ink}" class="stat" opacity="0.75">${
+        fmt(n.children.length)} inside</text>`);
     }
     parts.push(`</g>`);
   }
@@ -496,12 +481,11 @@ function render() {
       + "view covers only retrieved content and its percentages are shares of that, not of the bill.";
   } else if (mode === "uncached") {
     scope = `Prompt caching saved ${pct(100 * cacheSaving(nodeAt([])))} of this session overall. `
-      + "Compare with 'as billed' to see what caching is worth on any rectangle. "
-      + "The undecomposable blocks are shown unchanged, since their cache split is not attributable.";
+      + "Compare with 'as billed' to see what caching is worth on any rectangle.";
   } else {
     scope = path.length === 0
-      ? "Percentages are shares of the session's whole token cost. Click to zoom in."
-      : `${pct(pctOfSession(here))} of the session's token cost. Percentages below are shares of this view.`;
+      ? "Percentages are shares of the session's whole token cost. Click a box to go into it."
+      : `${pct(pctOfSession(here))} of the session's token cost. Percentages are shares of this level.`;
   }
   document.getElementById("tm-sub").textContent =
     `${here.name}: ${fmt(value(here))} ${unit} across ${fmt(here.items)} retrievals. ${scope}`;
@@ -514,7 +498,7 @@ function renderCrumbs() {
   parts.push(`<button id="up" ${path.length ? "" : "disabled"} title="Up one level (Esc)"
     style="${path.length ? "" : "opacity:.4;cursor:default"}">&#8593; up</button>`);
   parts.push(`<span class="sep">|</span>`);
-  parts.push(`<button data-depth="0">all retrieved content</button>`);
+  parts.push(`<button data-depth="0">whole session</button>`);
   let n = DATA.tree;
   path.forEach((idx, depth) => {
     n = n.children[idx];
@@ -640,7 +624,11 @@ document.getElementById("toggle-theme").onclick = () => {
   render(); // the ramp inverts, so the label ink has to be re-chosen
 };
 
-document.getElementById("foot-est").textContent = DATA.estimatorNote;
+document.getElementById("foot-est").textContent = DATA.estimatorNote +
+  (DATA.tree.reconciliation
+    ? ` The parts above come to ${pct(100 * -DATA.tree.reconciliation / DATA.tree.carry)} more `
+      + "than the measured prompt cost; that gap is the estimation error, not a finding."
+    : "");
 goTo([], true);
 </script>
 </body>
