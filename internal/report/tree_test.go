@@ -169,8 +169,10 @@ func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 	tree := built(t)
 	cli := child(t, tree, "CLI output")
 	// Tools are grouped by what they are -- git is version control in every
-	// codebase -- and the binary is a level inside that.
-	child(t, child(t, cli, "version control"), "git")
+	// codebase -- and the binary is a level inside that. This fixture runs
+	// only git, so its group holds one tool and is collapsed away; the
+	// grouping itself is covered by TestALevelThatTeachesNothingIsRemoved.
+	child(t, cli, "git")
 	child(t, tree, "MCP output")
 
 	// File content must not be filed under CLI output.
@@ -184,7 +186,7 @@ func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 // "If it's possible to drill down from git to git status, that'd be great."
 func TestCLIOutputOpensUpBySubcommand(t *testing.T) {
 	tree := built(t)
-	git := child(t, child(t, child(t, tree, "CLI output"), "version control"), "git")
+	git := child(t, child(t, tree, "CLI output"), "git")
 
 	// The compound command was `cd /repo && git status -sb`, so the level is
 	// the git subcommand, not cd and not the flag.
@@ -294,5 +296,73 @@ func TestRepeatedLeavesMergeEvenBesideBranches(t *testing.T) {
 	adr := child(t, child(t, files, "docs/decisions"), "a.md")
 	if adr.Items != 2 {
 		t.Errorf("repeated file rows = %d, want one row covering 2 retrievals", adr.Items)
+	}
+}
+
+func TestALevelThatTeachesNothingIsRemoved(t *testing.T) {
+	// The tool-identity taxonomy is fixed and industry-wide, but whether a
+	// given session exercised enough of a group for the group to be worth
+	// showing is a property of that session. "version control" containing
+	// nothing but git is a level you click through to learn a word you
+	// already knew, and it pushes the drill-down that matters -- git, then
+	// git status -- one click further away.
+	root := &Node{Name: "session", Kind: "root", Children: []*Node{{
+		Name: "CLI output", Kind: "mechanism", Children: []*Node{
+			{Name: "version control", Kind: "group", Children: []*Node{
+				{Name: "git", Kind: "command", Carry: 10, Children: []*Node{
+					{Name: "status", Kind: "command", Carry: 4, Items: 1},
+					{Name: "log", Kind: "command", Carry: 6, Items: 1},
+				}},
+			}},
+			{Name: "standard tools", Kind: "group", Children: []*Node{
+				{Name: "grep", Kind: "command", Carry: 3, Items: 1},
+				{Name: "sed", Kind: "command", Carry: 2, Items: 1},
+			}},
+			// An unrecognised binary sits at the same level and is a tool,
+			// not a group. Removing it because it only ran one thing would
+			// lose the fact that the one thing was run through it.
+			{Name: "npx", Kind: "command", Children: []*Node{
+				{Name: "vitest", Kind: "command", Carry: 1, Items: 1},
+			}},
+		},
+	}}}
+	collapseEmptyLevels(root)
+
+	cli := root.Children[0]
+	var names []string
+	for _, c := range cli.Children {
+		names = append(names, c.Name)
+	}
+	want := []string{"git", "standard tools", "npx"}
+	if len(names) != len(want) {
+		t.Fatalf("got %v, want %v", names, want)
+	}
+	for i, w := range want {
+		if names[i] != w {
+			t.Errorf("child %d: got %q, want %q", i, names[i], w)
+		}
+	}
+	// The collapse must keep what was inside, not just the heading.
+	if got := len(cli.Children[0].Children); got != 2 {
+		t.Errorf("git should still hold its subcommands, got %d", got)
+	}
+	if cli.Children[1].Name != "standard tools" {
+		t.Error("a group that actually groups must survive")
+	}
+
+	// The other kind: a node whose only child repeats its name is the same
+	// row twice, not a hierarchy.
+	dup := &Node{Name: "CLI output", Kind: "mechanism", Children: []*Node{
+		{Name: "git add", Kind: "command", Children: []*Node{
+			{Name: "git add", Kind: "item", Carry: 9, Items: 73},
+		}},
+	}}
+	collapseEmptyLevels(dup)
+	only := dup.Children[0]
+	if len(only.Children) != 0 {
+		t.Errorf("git add should be a leaf, it has %d children", len(only.Children))
+	}
+	if only.Items != 73 {
+		t.Errorf("the collapse lost the retrievals: %d", only.Items)
 	}
 }
