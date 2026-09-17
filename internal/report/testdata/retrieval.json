@@ -41,6 +41,16 @@
       "unit": "bytes",
       "provenance": "observed"
     },
+    "images": {
+      "value": 0,
+      "unit": "calls",
+      "provenance": "observed"
+    },
+    "image_bytes": {
+      "value": 0,
+      "unit": "bytes",
+      "provenance": "observed"
+    },
     "redundant_bytes": {
       "value": 204,
       "unit": "bytes",
@@ -331,6 +341,11 @@
         "value": 204,
         "unit": "bytes",
         "provenance": "derived"
+      },
+      "image_bytes": {
+        "value": 0,
+        "unit": "bytes",
+        "provenance": "observed"
       }
     }
   ],
@@ -338,6 +353,7 @@
     "Bytes are the observed size of what entered the context, measured from the tool_result block the model received.",
     "Token counts are estimates unless a real tokenizer was used; check token_estimator.",
     "Retrieved-content tokens are not billed tokens. Content is priced once and carried many times; see METHODOLOGY.md.",
-    "withheld_bytes is content the harness kept out of context, so it was never paid for."
+    "withheld_bytes is content the harness kept out of context, so it was never paid for.",
+    "Image results are counted but their tokens are not estimated: an image is priced by its dimensions, so a byte ratio would overstate a screenshot by more than an order of magnitude."
   ]
 }

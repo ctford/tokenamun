@@ -109,6 +109,16 @@
       "unit": "bytes",
       "provenance": "observed"
     },
+    "images": {
+      "value": 0,
+      "unit": "calls",
+      "provenance": "observed"
+    },
+    "image_bytes": {
+      "value": 0,
+      "unit": "bytes",
+      "provenance": "observed"
+    },
     "redundant_bytes": {
       "value": 0,
       "unit": "bytes",

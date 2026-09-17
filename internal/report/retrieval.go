@@ -24,11 +24,13 @@ type Retrieval struct {
 
 // RetrievalTotals summarises the session's retrieved content.
 type RetrievalTotals struct {
-	Items     model.Quantity `json:"items"`
-	Bytes     model.Quantity `json:"bytes"`
-	Tokens    model.Quantity `json:"tokens"`
-	Withheld  model.Quantity `json:"withheld_bytes"`
-	Redundant model.Quantity `json:"redundant_bytes"`
+	Items      model.Quantity `json:"items"`
+	Bytes      model.Quantity `json:"bytes"`
+	Tokens     model.Quantity `json:"tokens"`
+	Withheld   model.Quantity `json:"withheld_bytes"`
+	Images     model.Quantity `json:"images"`
+	ImageBytes model.Quantity `json:"image_bytes"`
+	Redundant  model.Quantity `json:"redundant_bytes"`
 	// RedundantShare is the fraction of retrieved bytes that had already been
 	// retrieved earlier in the session.
 	RedundantShare model.Quantity `json:"redundant_share"`
@@ -65,6 +67,7 @@ type RepeatItem struct {
 	Count     model.Quantity `json:"retrievals"`
 	Bytes     model.Quantity `json:"bytes_each"`
 	Redundant model.Quantity `json:"redundant_bytes"`
+	Images    model.Quantity `json:"image_bytes,omitempty"`
 }
 
 // BuildRetrieval computes the retrieval report.
@@ -79,10 +82,11 @@ func BuildRetrieval(s *model.Session) Retrieval {
 			"Token counts are estimates unless a real tokenizer was used; check token_estimator.",
 			"Retrieved-content tokens are not billed tokens. Content is priced once and carried many times; see METHODOLOGY.md.",
 			"withheld_bytes is content the harness kept out of context, so it was never paid for.",
+			"Image results are counted but their tokens are not estimated: an image is priced by its dimensions, so a byte ratio would overstate a screenshot by more than an order of magnitude.",
 		},
 	}
 
-	var totalBytes, totalTokens, withheld, redundant int
+	var totalBytes, totalTokens, withheld, redundant, images, imageBytes int
 	type agg struct {
 		items  int
 		bytes  int
@@ -90,10 +94,14 @@ func BuildRetrieval(s *model.Session) Retrieval {
 		prov   model.Provenance
 	}
 	byCat := map[model.Category]*agg{}
+	var observedBytes int
 	for _, c := range s.Retrievals {
+		observedBytes += c.ObservedBytes()
 		totalBytes += c.Bytes
 		totalTokens += int(c.Tokens)
 		withheld += c.WithheldBytes
+		images += c.Images
+		imageBytes += c.ImageBytes
 		a, ok := byCat[c.Category]
 		if !ok {
 			a = &agg{prov: c.CategoryProv}
@@ -108,15 +116,19 @@ func BuildRetrieval(s *model.Session) Retrieval {
 		redundant += rep.WasteByte
 	}
 
+	// The denominator is everything observed, including image payload, so the
+	// share is not inflated by excluding the images from the bottom only.
 	share := 0.0
-	if totalBytes > 0 {
-		share = float64(redundant) / float64(totalBytes)
+	if observedBytes > 0 {
+		share = float64(redundant) / float64(observedBytes)
 	}
 	r.Total = RetrievalTotals{
 		Items:          model.Obs(float64(len(s.Retrievals)), model.Calls),
 		Bytes:          model.Obs(float64(totalBytes), model.Bytes),
 		Tokens:         model.Quantity{Value: float64(totalTokens), Unit: model.Tokens, Prov: estimatorProv(s)},
 		Withheld:       model.Obs(float64(withheld), model.Bytes),
+		Images:         model.Obs(float64(images), model.Calls),
+		ImageBytes:     model.Obs(float64(imageBytes), model.Bytes),
 		Redundant:      model.Der(float64(redundant), model.Bytes),
 		RedundantShare: model.Der(share, model.Ratio),
 	}
@@ -168,6 +180,7 @@ func BuildRetrieval(s *model.Session) Retrieval {
 			Count:     model.Obs(float64(rep.Count), model.Calls),
 			Bytes:     model.Obs(float64(rep.Bytes), model.Bytes),
 			Redundant: model.Der(float64(rep.WasteByte), model.Bytes),
+			Images:    model.Obs(float64(rep.ImageBytes), model.Bytes),
 		})
 	}
 	return r
@@ -220,6 +233,11 @@ func RenderRetrieval(w io.Writer, r Retrieval) error {
 		fmt.Fprintf(b, "%-22s %14s   [%s]  (kept out of context by the harness)\n",
 			"  Withheld", bytesStr(r.Total.Withheld.Value), r.Total.Withheld.Prov)
 	}
+	if r.Total.Images.Value > 0 {
+		fmt.Fprintf(b, "%-22s %14s   [%s]  (%s of base64; priced by dimensions, not estimated)\n",
+			"  Images", num(int(r.Total.Images.Value)), r.Total.Images.Prov,
+			bytesStr(r.Total.ImageBytes.Value))
+	}
 	b.WriteString("\n")
 
 	if len(r.ByCategory) > 0 {
@@ -260,8 +278,12 @@ func RenderRetrieval(w io.Writer, r Retrieval) error {
 			if label == "" {
 				label = "(" + rep.Tool + " output)"
 			}
-			fmt.Fprintf(b, "  %-40s %4dx %10s redundant\n",
-				trunc(label, 40), int(rep.Count.Value), bytesStr(rep.Redundant.Value))
+			note := ""
+			if rep.Images.Value > 0 {
+				note = "  (image data: re-sent, but not token-estimated)"
+			}
+			fmt.Fprintf(b, "  %-40s %4dx %10s redundant%s\n",
+				trunc(label, 40), int(rep.Count.Value), bytesStr(rep.Redundant.Value), note)
 		}
 		b.WriteString("\n")
 	}

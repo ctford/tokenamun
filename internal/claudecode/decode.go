@@ -69,6 +69,16 @@ type Usage struct {
 	} `json:"cache_creation"`
 }
 
+// ImageSource is the payload of an image block. Screenshots arrive here as
+// base64, and their size in characters bears no useful relation to their token
+// cost: an image is priced by its dimensions, so a 296 KB base64 PNG costs a
+// couple of thousand tokens rather than the ~85,000 a byte ratio would imply.
+type ImageSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+}
+
 // Block is one content block. Tool results carry their payload inline, and
 // that payload is itself either a string or a list of blocks.
 type Block struct {
@@ -80,6 +90,7 @@ type Block struct {
 	ToolUseID string          `json:"tool_use_id"`
 	IsError   bool            `json:"is_error"`
 	Content   Content         `json:"content"`
+	Source    *ImageSource    `json:"source"`
 }
 
 // Content is a message body, which the transcript writes either as a bare
@@ -107,14 +118,31 @@ func (c *Content) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Len returns the byte length of the content as it appeared, which is what a
-// retrieved-content measurement needs.
+// Len returns the length of the content's *text*, which is what a byte-ratio
+// token estimate can legitimately be applied to. Image payloads are excluded
+// and counted separately by Images; see ImageSource for why.
 func (c Content) Len() int {
 	n := len(c.Text)
 	for _, b := range c.Blocks {
 		n += len(b.Text) + b.Content.Len()
 	}
 	return n
+}
+
+// Images counts image blocks and the base64 bytes they carried. The byte count
+// is observed and worth reporting, but it must not be fed to a byte-per-token
+// estimator.
+func (c Content) Images() (count, dataBytes int) {
+	for _, b := range c.Blocks {
+		if b.Type == "image" && b.Source != nil {
+			count++
+			dataBytes += len(b.Source.Data)
+		}
+		n, d := b.Content.Images()
+		count += n
+		dataBytes += d
+	}
+	return count, dataBytes
 }
 
 // String flattens the content to the text that entered the context. Used for
@@ -127,6 +155,11 @@ func (c Content) String() string {
 	b.WriteString(c.Text)
 	for _, blk := range c.Blocks {
 		b.WriteString(blk.Text)
+		// Image data participates in the hash so that the same screenshot
+		// retrieved twice is recognised as a repeat.
+		if blk.Source != nil {
+			b.WriteString(blk.Source.Data)
+		}
 		b.WriteString(blk.Content.String())
 	}
 	return b.String()

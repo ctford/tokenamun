@@ -188,6 +188,7 @@ func absorbAssistant(s *model.Session, e claudecode.Entry, byRequest, toolIndex 
 // only an excerpt. It is used here for path, line range and truncation only.
 func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMeta, toolIndex map[string]int) {
 	bytesIn := b.Content.Len()
+	images, imageBytes := b.Content.Images()
 
 	idx, ok := toolIndex[b.ToolUseID]
 	if !ok {
@@ -209,7 +210,7 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 	tc.IsError = b.IsError
 	tc.Resolved = true
 
-	if bytesIn == 0 {
+	if bytesIn == 0 && images == 0 {
 		return
 	}
 	cat, prov, path := categorise(tc.Name, tc.Command, meta)
@@ -221,6 +222,8 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 		CategoryProv:  prov,
 		Path:          path,
 		Bytes:         bytesIn,
+		Images:        images,
+		ImageBytes:    imageBytes,
 		Hash:          tokens.Hash(b.Content.String()),
 		InvocationSeq: tc.InvocationSeq,
 		StartLine:     meta.StartLine,
@@ -343,6 +346,17 @@ func diagnose(s *model.Session) {
 			agentCalls++
 		}
 	}
+	var images, imageBytes int
+	for _, r := range s.Retrievals {
+		images += r.Images
+		imageBytes += r.ImageBytes
+	}
+	if images > 0 {
+		s.Warn("image_tokens_not_estimated", fmt.Sprintf(
+			"%d image results carried %d bytes of base64; images are priced by dimensions, "+
+				"so their token cost is excluded from the byte-ratio estimate rather than guessed",
+			images, imageBytes))
+	}
 	if agentCalls > 0 && !hasSidechain(s) {
 		s.Warn("subagent_usage_missing", fmt.Sprintf(
 			"%d Agent calls were made but no sidechain invocations are present; subagent token usage is not in this transcript",
@@ -428,15 +442,17 @@ func findRepeats(s *model.Session) {
 		if g.count < 2 {
 			continue
 		}
+		size := g.r.ObservedBytes()
 		s.Repeats = append(s.Repeats, model.Repeat{
-			Hash:      h,
-			Category:  g.r.Category,
-			Path:      g.r.Path,
-			Tool:      g.r.Tool,
-			Count:     g.count,
-			Bytes:     g.r.Bytes,
-			WasteByte: g.r.Bytes * (g.count - 1),
-			Seqs:      g.seqs,
+			Hash:       h,
+			Category:   g.r.Category,
+			Path:       g.r.Path,
+			Tool:       g.r.Tool,
+			Count:      g.count,
+			Bytes:      size,
+			ImageBytes: g.r.ImageBytes,
+			WasteByte:  size * (g.count - 1),
+			Seqs:       g.seqs,
 		})
 	}
 	sort.SliceStable(s.Repeats, func(i, j int) bool {

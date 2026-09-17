@@ -62,6 +62,13 @@ type RetrievedContent struct {
 	TotalLines int  `json:"total_lines,omitempty"`
 	Partial    bool `json:"partial"`
 
+	// Images counts image blocks in the result, and ImageBytes the base64 they
+	// carried. Both are observed. Image token cost is NOT estimated from those
+	// bytes, because an image is priced by its dimensions -- a byte ratio
+	// would overstate a screenshot by more than an order of magnitude.
+	Images     int `json:"images,omitempty"`
+	ImageBytes int `json:"image_bytes,omitempty"`
+
 	// Truncated records that the harness withheld content from the model.
 	Truncated bool `json:"truncated"`
 	// WithheldBytes is how much the harness kept out of context, observed from
@@ -70,14 +77,26 @@ type RetrievedContent struct {
 	IsError       bool `json:"is_error"`
 }
 
+// ObservedBytes is everything that entered the context for this retrieval,
+// text and image payload together. Use it for size and redundancy; use Bytes
+// for anything that feeds a byte-per-token estimate, because image bytes must
+// not.
+func (r RetrievedContent) ObservedBytes() int {
+	return r.Bytes + r.ImageBytes
+}
+
 // Repeat describes content retrieved more than once in a session.
 type Repeat struct {
-	Hash      string   `json:"hash"`
-	Category  Category `json:"category"`
-	Path      string   `json:"path,omitempty"`
-	Tool      string   `json:"tool"`
-	Count     int      `json:"count"`
-	Bytes     int      `json:"bytes"`
-	WasteByte int      `json:"redundant_bytes"`
-	Seqs      []int    `json:"invocation_seqs"`
+	Hash     string   `json:"hash"`
+	Category Category `json:"category"`
+	Path     string   `json:"path,omitempty"`
+	Tool     string   `json:"tool"`
+	Count    int      `json:"count"`
+	Bytes    int      `json:"bytes"`
+	// ImageBytes is how much of Bytes was image payload. Re-sending an image
+	// costs image tokens again, so the repeat is real; it just cannot be
+	// priced by a byte ratio.
+	ImageBytes int   `json:"image_bytes,omitempty"`
+	WasteByte  int   `json:"redundant_bytes"`
+	Seqs       []int `json:"invocation_seqs"`
 }
