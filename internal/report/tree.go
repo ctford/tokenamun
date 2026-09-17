@@ -220,8 +220,7 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 				"file paths and patch text. The other side of the same calls is CLI "+
 				"output, which is what the tools printed back: %s to write, %s to keep "+
 				"re-reading", num(int(gen)), num(int(held)))}
-		argNode.Children = byToolArguments(s, gen+held, gen+heldUncached, args,
-			carry.AssistantRoundTrips)
+		argNode.Children = byToolArguments(s, carry, gen+held, gen+heldUncached, args)
 		n.Children = append(n.Children, argNode)
 	}
 	if thinking > 0 {
@@ -245,10 +244,15 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 
 // byToolArguments splits a cost across the tools whose arguments produced it,
 // which is what "which tools" means on this side of the ledger.
-func byToolArguments(s *model.Session, totalCost, totalCostUncached, totalTokens,
-	roundTrips float64) []*Node {
+func byToolArguments(s *model.Session, carry analysis.CarryReport,
+	totalCost, totalCostUncached, totalTokens float64) []*Node {
 	bytesByTool := map[string]int{}
 	callsByTool := map[string]int{}
+	// Residency is weighted by argument bytes and taken from the call that
+	// wrote them, so a tool used early reads differently from one used at the
+	// end. Inheriting one session-wide average instead put the same number on
+	// every row, which is a shade that tells you nothing.
+	tripBytesByTool := map[string]float64{}
 	var total int
 	for _, tc := range s.ToolCalls {
 		if tc.InputBytes == 0 {
@@ -256,6 +260,8 @@ func byToolArguments(s *model.Session, totalCost, totalCostUncached, totalTokens
 		}
 		bytesByTool[tc.Name] += tc.InputBytes
 		callsByTool[tc.Name]++
+		tripBytesByTool[tc.Name] += float64(tc.InputBytes) *
+			float64(carry.RoundTripsByCall[tc.InvocationSeq])
 		total += tc.InputBytes
 	}
 	if total == 0 {
@@ -264,17 +270,22 @@ func byToolArguments(s *model.Session, totalCost, totalCostUncached, totalTokens
 	var out []*Node
 	for name, b := range bytesByTool {
 		share := float64(b) / float64(total)
+		tokens := totalTokens * share
+		trips := 0.0
+		if b > 0 {
+			trips = tripBytesByTool[name] / float64(b)
+		}
 		out = append(out, &Node{
 			Name: name, Kind: "tool",
-			Tokens: totalTokens * share,
+			Tokens: tokens,
 			Carry:  totalCost * share, CarryUncached: totalCostUncached * share,
-			Items: callsByTool[name],
-			// Arguments are apportioned out of the model's output by byte
-			// share, so they inherit its residency: the call that wrote them
-			// is the call that carried them in.
-			RoundTrips: roundTrips,
-			tokenCalls: totalTokens * share * roundTrips,
-			Detail:     fmt.Sprintf("%d calls, %s of arguments", callsByTool[name], byteStr(b)),
+			Items:      callsByTool[name],
+			RoundTrips: trips,
+			tokenCalls: tokens * trips,
+			Detail: fmt.Sprintf("%d calls, %s of arguments. This is what the model "+
+				"wrote to invoke the tool, not what the tool printed back -- that is "+
+				"under CLI output, MCP output or file content, depending on the tool.",
+				callsByTool[name], byteStr(b)),
 		})
 	}
 	return out

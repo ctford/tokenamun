@@ -75,6 +75,11 @@ type CarryReport struct {
 	AssistantRoundTrips float64 `json:"assistant_round_trips"`
 	// Items ranks retrievals by what carrying them cost.
 	Items []CarriedItem `json:"items"`
+	// RoundTripsByCall is how many calls re-sent whatever arrived on a given
+	// call, indexed by invocation sequence. Anything attributed to a call
+	// rather than to a retrieval -- the arguments the model wrote into a tool
+	// call, say -- takes its residency from here.
+	RoundTripsByCall map[int]int `json:"-"`
 	// Unattributed is the share of observed growth the content could not
 	// explain: system reminders, attachments, envelopes. Reported rather than
 	// distributed across items.
@@ -191,58 +196,15 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	}
 
 	// What you typed is carried like anything else.
-	var promptTokens, promptTokenCalls float64
-	for _, pe := range s.PromptEntries {
-		if pe.Bytes == 0 || pe.InvocationSeq < 0 {
-			continue
-		}
-		warm, coldN := residency(pe.InvocationSeq+1, len(s.Invocations), cold, resets)
-		sends := 1 + warm + coldN
-		switch {
-		case warm > 0:
-			warm--
-		case coldN > 0:
-			coldN--
-		}
-		tokens := float64(pe.Bytes) / ratioOf(s)
-		r.PromptCarryEIT += tokens *
-			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
-		r.PromptCarryUncachedEIT += tokens * float64(sends) * w.Input
-		promptTokens += tokens
-		promptTokenCalls += tokens * float64(sends)
-	}
-	if promptTokens > 0 {
-		r.PromptRoundTrips = promptTokenCalls / promptTokens
-	}
+	carryTyped(&r, s, w, cold, resets)
 
-	// The model's own output is carried too: generated once at the output
-	// rate, then re-sent as input on every later call. Thinking is excluded,
-	// because its text is not in the transcript and whether it is re-sent
-	// cannot be established from one.
-	var outputTokens, outputTokenCalls float64
-	for _, inv := range s.Invocations {
-		r.ThinkingTokens += inv.Usage.Thinking
-		carried := inv.Usage.Output - inv.Usage.Thinking
-		if !inv.IsRealCall() || carried <= 0 {
-			continue
-		}
-		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, resets)
-		sends := 1 + warm + coldN
-		switch {
-		case warm > 0:
-			warm--
-		case coldN > 0:
-			coldN--
-		}
-		r.AssistantCarryEIT += float64(carried) *
-			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
-		r.AssistantCarryUncachedEIT += float64(carried) * float64(sends) * w.Input
-		outputTokens += float64(carried)
-		outputTokenCalls += float64(carried) * float64(sends)
-	}
-	if outputTokens > 0 {
-		r.AssistantRoundTrips = outputTokenCalls / outputTokens
-	}
+	// Residency per call, for anything attributed to a call rather than to a
+	// retrieval: the arguments the model wrote into a tool call take their
+	// residency from the call that wrote them.
+	r.RoundTripsByCall = roundTripsByCall(s, cold, resets)
+
+	// The model's own output is carried too.
+	carryOutput(&r, s, w, cold, resets)
 
 	// The arguments the model wrote into tool calls are carried too, but they
 	// are part of its output rather than a separate quantity: they are
@@ -259,12 +221,7 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 		// The call that first carries the content in writes it to cache; the
 		// rest read it. Content that arrives on the final call is still sent
 		// once, so it keeps the write and has no reads.
-		switch {
-		case warm > 0:
-			warm--
-		case coldN > 0:
-			coldN--
-		}
+		warm, coldN = chargeFirstSendAsWrite(warm, coldN)
 
 		r.Items = append(r.Items, CarriedItem{
 			RetrievalSeq: c.Seq,
@@ -342,4 +299,92 @@ func residencyCost(tokens float64, from, end int, cold map[int]bool, resets []in
 			CacheCreation:   int64(tokens) * int64(coldN),
 			CacheCreation5m: int64(tokens) * int64(coldN),
 		})
+}
+
+// carryTyped prices re-sending what you typed.
+//
+// The mean is weighted by tokens: an early prompt goes round far more often
+// than a late one, so an unweighted mean over prompts would describe nobody's
+// experience.
+func carryTyped(r *CarryReport, s *model.Session, w cost.Weights,
+	cold map[int]bool, resets []int) {
+	var tokensTotal, tokenCalls float64
+	for _, pe := range s.PromptEntries {
+		if pe.Bytes == 0 || pe.InvocationSeq < 0 {
+			continue
+		}
+		warm, coldN := residency(pe.InvocationSeq+1, len(s.Invocations), cold, resets)
+		sends := 1 + warm + coldN
+		warm, coldN = chargeFirstSendAsWrite(warm, coldN)
+
+		tokens := float64(pe.Bytes) / ratioOf(s)
+		r.PromptCarryEIT += tokens *
+			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+		r.PromptCarryUncachedEIT += tokens * float64(sends) * w.Input
+		tokensTotal += tokens
+		tokenCalls += tokens * float64(sends)
+	}
+	if tokensTotal > 0 {
+		r.PromptRoundTrips = tokenCalls / tokensTotal
+	}
+}
+
+// carryOutput prices re-sending the model's own words.
+//
+// Generated once at the output rate, then re-sent as input on every later
+// call; this is the second part, which is invisible if you only look at
+// output tokens. Thinking is excluded, because its text is not in the
+// transcript and whether it is re-sent cannot be established from one.
+func carryOutput(r *CarryReport, s *model.Session, w cost.Weights,
+	cold map[int]bool, resets []int) {
+	var tokensTotal, tokenCalls float64
+	for _, inv := range s.Invocations {
+		r.ThinkingTokens += inv.Usage.Thinking
+		carried := inv.Usage.Output - inv.Usage.Thinking
+		if !inv.IsRealCall() || carried <= 0 {
+			continue
+		}
+		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, resets)
+		sends := 1 + warm + coldN
+		warm, coldN = chargeFirstSendAsWrite(warm, coldN)
+
+		r.AssistantCarryEIT += float64(carried) *
+			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+		r.AssistantCarryUncachedEIT += float64(carried) * float64(sends) * w.Input
+		tokensTotal += float64(carried)
+		tokenCalls += float64(carried) * float64(sends)
+	}
+	if tokensTotal > 0 {
+		r.AssistantRoundTrips = tokenCalls / tokensTotal
+	}
+}
+
+// roundTripsByCall is how many calls re-sent whatever arrived on each call.
+func roundTripsByCall(s *model.Session, cold map[int]bool, resets []int) map[int]int {
+	out := map[int]int{}
+	for _, inv := range s.Invocations {
+		if !inv.IsRealCall() {
+			continue
+		}
+		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, resets)
+		out[inv.Seq] = 1 + warm + coldN
+	}
+	return out
+}
+
+// chargeFirstSendAsWrite converts one of the later sends into the first one.
+//
+// New content is what a request writes to the cache, so the call that carries
+// something in is charged at the write rate and the rest are reads. Pricing
+// the first send as a read understated late-arriving content by more than an
+// order of magnitude: content that arrives near the end is written once and
+// barely re-read, so the write is nearly all of its cost.
+func chargeFirstSendAsWrite(warm, coldN int) (int, int) {
+	switch {
+	case warm > 0:
+		return warm - 1, coldN
+	case coldN > 0:
+		return warm, coldN - 1
+	}
+	return warm, coldN
 }

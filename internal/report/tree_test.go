@@ -366,3 +366,54 @@ func TestALevelThatTeachesNothingIsRemoved(t *testing.T) {
 		t.Errorf("the collapse lost the retrievals: %d", only.Items)
 	}
 }
+
+func TestToolArgumentsAreSeparateFromWhatToolsPrintedBack(t *testing.T) {
+	// Two sides of the same tool call, and they are different token pools.
+	// What the model wrote to invoke a tool is generated at the output rate
+	// and then re-read; what the tool printed back is input only. Filing the
+	// arguments beside CLI output would group by "anything to do with tools"
+	// and cross the authorship axis the top level is built on.
+	tree := built(t)
+	args := child(t, child(t, tree, "model output"), "tool arguments")
+	cli := child(t, tree, "CLI output")
+
+	for _, c := range cli.Children {
+		if c.Name == "tool arguments" {
+			t.Error("tool arguments belong to the model, not to the environment")
+		}
+	}
+	if args.Tokens <= 0 || cli.Tokens <= 0 {
+		t.Fatal("both sides should have content in this fixture")
+	}
+	// And they must not be the same tokens counted twice. The root
+	// reconciles against the measured bill, so an overlap would show up
+	// there; this asserts the pools directly.
+	if args.Tokens == cli.Tokens {
+		t.Error("the two sides have identical token counts, which suggests one pool")
+	}
+}
+
+func TestEachToolsArgumentsCarryTheirOwnResidency(t *testing.T) {
+	// Arguments are apportioned out of the model's output by byte share, but
+	// their residency is not: it comes from the call that wrote them,
+	// weighted by argument bytes. Inheriting one session-wide average put the
+	// same number on every row, which is a shade that says nothing.
+	s := treeFixture()
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	tree := BuildTree(s, carry)
+
+	args := child(t, child(t, tree, "model output"), "tool arguments")
+	if len(args.Children) < 2 {
+		t.Skip("the fixture uses fewer than two tools")
+	}
+	seen := map[float64]bool{}
+	for _, c := range args.Children {
+		if c.RoundTrips <= 0 {
+			t.Errorf("%s has no round-trip figure", c.Name)
+		}
+		seen[c.RoundTrips] = true
+	}
+	if len(seen) == 1 {
+		t.Error("every tool reported the same residency, so it is not per tool")
+	}
+}
