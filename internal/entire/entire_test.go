@@ -205,10 +205,11 @@ func TestCheckpointDiscoveryIsQuietOutsideAGitRepository(t *testing.T) {
 }
 
 func TestFetchCommandIsTheOneThatWorks(t *testing.T) {
-	// The failure this exists to prevent cost more time than any other:
-	// The reference repository had 41 checkpoints locally and 585 on origin, so
-	// every figure measured from it was one person's share of a ten-person
-	// week -- and nothing said so, because 41 checkpoints is not an error.
+	// The failure this exists to prevent cost more time than any other: a
+	// repository had a small fraction of its checkpoints locally and the rest
+	// on origin, so every figure measured from it was one person's share of a
+	// whole team's week -- and nothing said so, because a low checkpoint
+	// count is not an error.
 	//
 	// Entire's refs sit outside the default fetch refspec, so the command has
 	// to name the refspec explicitly. A plain `git fetch` does not bring

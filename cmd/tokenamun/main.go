@@ -71,7 +71,7 @@ Flags:
   --dir PATH      directory to look in (default: working directory)
   --source SRC    entire | local | any (default: any)
   -o FILE         output file (report; default tokenamun-report.html)
-  --title TEXT    heading for the report, e.g. "Hyper Agentic App"
+  --title TEXT    heading for the report, e.g. "Payments service, last week"
   --since WHEN    only sessions active on or after WHEN: a date (2026-09-16),
                   a date and time, or an age (7d, 36h). For the before-and-
                   after question, which is what an experiment is.

@@ -225,7 +225,7 @@ func TestCommandGroupsAreByToolIdentity(t *testing.T) {
 func TestUnrecognisedToolsAreNotSweptIntoAGroup(t *testing.T) {
 	// An unknown tool should stay visible as itself rather than being filed
 	// under a guess.
-	for _, binary := range []string{"the reference repository", "my-custom-thing", ""} {
+	for _, binary := range []string{"whatsit", "my-custom-thing", ""} {
 		if got := CommandGroup(binary); got != "" {
 			t.Errorf("CommandGroup(%q) = %q, want no group", binary, got)
 		}

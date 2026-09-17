@@ -275,11 +275,12 @@ func gitOutput(dir string, args ...string) (string, error) {
 // RemoteCheckpoints counts the checkpoint refs the remote has, so a report
 // can say when a repository is holding somebody else's history back.
 //
-// This is the failure that cost the most time: the reference repository had 41
-// checkpoints locally and 585 on the remote, so every figure measured from it
-// was one person's share of a ten-person week -- and nothing said so, because
-// 41 checkpoints is not an error. Entire's refs are outside the default
-// fetch refspec, so a clone and a pull both leave them behind.
+// This is the failure that cost the most time: a repository had a small
+// fraction of its checkpoints locally and the rest on the remote, so every
+// figure measured from it was one person's share of a whole team's week --
+// and nothing said so, because a low checkpoint count is not an error.
+// Entire's refs are outside the default fetch refspec, so a clone and a pull
+// both leave them behind.
 //
 // Network, so it is best-effort and silent on failure: a profiler that hangs
 // or errors because a remote is unreachable is worse than one that omits a

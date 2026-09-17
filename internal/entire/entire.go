@@ -126,10 +126,10 @@ func Configured(dir string) bool {
 
 // Checkpoints counts the checkpoint refs in a repository.
 //
-// A third state, and the one the reference repository was in:
-// 988 checkpoints and no transcripts. Checkpoints are git refs, so a clone
-// brings them; the transcripts are files under .entire/metadata that are not
-// committed and stay on the machine that recorded them. Every token in this
+// A third state, and one a freshly cloned repository is routinely in:
+// checkpoints present, and no transcripts. Checkpoints are git refs, so a
+// clone brings them; the transcripts are files under .entire/metadata that
+// are not committed and stay on the machine that recorded them. Every token in this
 // tool comes from a transcript, so checkpoints alone are worth saying out
 // loud rather than reporting as "nothing found".
 func Checkpoints(dir string) int {
