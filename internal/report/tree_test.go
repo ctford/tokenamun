@@ -120,14 +120,50 @@ func TestToolArgumentsBreakDownByTool(t *testing.T) {
 	}
 }
 
-// "In file reading, I expected to see which files."
-func TestFileContentBreaksDownByFile(t *testing.T) {
+// "In file reading, I expected to see which files." Nested by directory, the
+// way a disk-usage viewer does, so an area of the tree can be read before
+// drilling to individual files.
+func TestFileContentNestsByDirectory(t *testing.T) {
 	tree := built(t)
 	files := child(t, tree, "file content")
 
-	// However it was read: the Read tool and cat both land here.
-	child(t, files, "docs/decisions/a.md")
-	child(t, files, "internal/pay/charge.go")
+	// However it was read: the Read tool and cat both land here. Chains of
+	// single-child directories collapse, so this is docs/decisions rather
+	// than docs, then decisions.
+	child(t, child(t, files, "docs/decisions"), "a.md")
+	child(t, child(t, files, "internal/pay"), "charge.go")
+}
+
+// A path attributed to a directory rather than a file means the command used
+// a glob, and the view has to say so: otherwise a directory sits beside files
+// looking like one of them.
+func TestDirectoryReadsAreLabelledAsDirectories(t *testing.T) {
+	s := treeFixture()
+	s.Retrievals = append(s.Retrievals, model.RetrievedContent{
+		Seq: 9, ToolID: "t9", Tool: "Bash", Channel: model.ChanShell,
+		CommandBinary: "cat", CommandDetail: "cat", Category: model.CatADR,
+		Path: "docs/decisions", Bytes: 3000, Tokens: 830, InvocationSeq: 0,
+	})
+	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	decisions := child(t, child(t, tree, "file content"), "docs/decisions")
+
+	var found bool
+	for _, c := range decisions.Children {
+		if contains(c.Name, "read as a directory") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a glob read of a directory must be labelled, got %v", names(decisions))
+	}
+}
+
+func names(n *Node) []string {
+	var out []string
+	for _, c := range n.Children {
+		out = append(out, c.Name)
+	}
+	return out
 }
 
 // git is tool invocation, not file reading, and CLI is separated from MCP
@@ -241,8 +277,8 @@ func TestRepeatedLeavesMergeEvenBesideBranches(t *testing.T) {
 	if sed.Items != 3 {
 		t.Errorf("sed rows = %d, want one row covering 3 retrievals", sed.Items)
 	}
-	// And the files beside that branch merged too.
-	adr := child(t, files, "docs/decisions/a.md")
+	// And the files beside that branch merged too, before being nested.
+	adr := child(t, child(t, files, "docs/decisions"), "a.md")
 	if adr.Items != 2 {
 		t.Errorf("repeated file rows = %d, want one row covering 2 retrievals", adr.Items)
 	}

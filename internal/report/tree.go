@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/content"
@@ -299,6 +300,9 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 
 	for _, g := range order {
 		collapseLeaves(g)
+		if g.Name == "file content" {
+			nestByDirectory(g)
+		}
 	}
 	return order
 }
@@ -330,6 +334,103 @@ func collapseLeaves(n *Node) {
 	}
 	merged := collapseByName(&Node{Name: n.Name, Kind: n.Kind, Children: leaves})
 	n.Children = append(branches, merged.Children...)
+}
+
+// nestByDirectory turns a flat list of file paths into a directory tree, the
+// way a disk-usage viewer does.
+//
+// Without it, a file read by name and a directory read by glob sat at the same
+// level with nothing to distinguish them: docs/plans/journey-04-plan.md next
+// to docs/decisions, where the second is a directory only because the command
+// used a glob. Nesting makes that difference structural rather than
+// invisible, and lets a reader see which *area* of the tree cost the most
+// before drilling to individual files.
+//
+// Chains of single-child directories are collapsed, so a lone file deep in a
+// tree reads as docs/plans rather than as docs, then plans, then the file.
+func nestByDirectory(n *Node) {
+	var leaves, branches []*Node
+	for _, c := range n.Children {
+		if c.Kind == "item" && strings.Contains(c.Name, "/") {
+			leaves = append(leaves, c)
+			continue
+		}
+		branches = append(branches, c)
+	}
+	if len(leaves) == 0 {
+		return
+	}
+
+	root := &Node{Name: n.Name, Kind: n.Kind}
+	for _, leaf := range leaves {
+		// Keep an absolute path absolute: trimming the leading separator
+		// turned /Users/... into Users/..., which names a different thing.
+		abs := strings.HasPrefix(leaf.Name, "/")
+		segments := strings.Split(strings.Trim(leaf.Name, "/"), "/")
+		if abs && len(segments) > 0 {
+			segments[0] = "/" + segments[0]
+		}
+		// A glob or bare-directory read has no filename, so every segment is
+		// a directory and the cost hangs inside it. Putting it beside the
+		// directory instead would make a directory look like one of its own
+		// files.
+		isDir := looksLikeDirectory(leaf.Name)
+		parent := root
+		for i, seg := range segments {
+			if !isDir && i == len(segments)-1 {
+				copied := *leaf
+				copied.Name = seg
+				parent.Children = append(parent.Children, &copied)
+				break
+			}
+			parent = ensureDir(parent, seg)
+		}
+		if isDir {
+			copied := *leaf
+			copied.Name = "(read as a directory)"
+			parent.Children = append(parent.Children, &copied)
+		}
+	}
+	collapseSingleChildDirs(root)
+	n.Children = append(branches, root.Children...)
+}
+
+// ensureDir finds or creates a directory level.
+func ensureDir(parent *Node, name string) *Node {
+	for _, c := range parent.Children {
+		if c.Kind == "dir" && c.Name == name {
+			return c
+		}
+	}
+	dir := &Node{Name: name, Kind: "dir"}
+	parent.Children = append(parent.Children, dir)
+	return dir
+}
+
+// looksLikeDirectory reports whether an attributed path names a directory. A
+// final segment with no extension, from a glob or a bare directory argument,
+// is the signature.
+func looksLikeDirectory(p string) bool {
+	last := p
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		last = p[i+1:]
+	}
+	return !strings.Contains(last, ".")
+}
+
+// collapseSingleChildDirs joins a directory that contains exactly one
+// directory into its child, so the path reads docs/plans rather than nesting
+// twice for no information.
+func collapseSingleChildDirs(n *Node) {
+	for i, c := range n.Children {
+		collapseSingleChildDirs(c)
+		for c.Kind == "dir" && len(c.Children) == 1 && c.Children[0].Kind == "dir" {
+			only := c.Children[0]
+			only.Name = c.Name + "/" + only.Name
+			c = only
+		}
+		n.Children[i] = c
+	}
 }
 
 // resultKind decides which mechanism returned a payload, and what to open it
