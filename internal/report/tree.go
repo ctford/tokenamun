@@ -77,7 +77,7 @@ type Node struct {
 //	├─ file content                 the environment answered → by file
 //	├─ CLI output                   → by command family → by subcommand
 //	├─ MCP output                   → by tool
-//	├─ web                          → by tool
+//	├─ web content                  → by tool
 //	└─ subagent reports
 //
 // Splitting CLI from MCP is deliberate: it is the axis the whole

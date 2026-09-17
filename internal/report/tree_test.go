@@ -417,3 +417,33 @@ func TestEachToolsArgumentsCarryTheirOwnResidency(t *testing.T) {
 		t.Error("every tool reported the same residency, so it is not per tool")
 	}
 }
+
+func TestBranchesAreNamedForWhatCameBackNotForTheSource(t *testing.T) {
+	// "CLI output" rather than "CLI", because the branch holds one half of a
+	// tool call: what the tool printed. The command that caused it is the
+	// model's, and it is under model output. A branch named for the source
+	// would claim both halves.
+	//
+	// The rule is not a suffix -- "subagent reports" and "edit confirmations"
+	// name what came back without one. It is that the name must not be the
+	// name of the thing that produced it.
+	sources := map[string]string{
+		"CLI":           "CLI output",
+		"web":           "web content",
+		"harness tools": "harness output",
+		"MCP":           "MCP output",
+		"subagents":     "subagent reports",
+	}
+	tree := built(t)
+	var walk func(*Node)
+	walk = func(n *Node) {
+		if replacement, bad := sources[n.Name]; bad {
+			t.Errorf("%q names the source, not what came back; expected %q",
+				n.Name, replacement)
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(tree)
+}

@@ -50,7 +50,7 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 	case model.ChanMCP:
 		return "MCP output", c.Tool
 	case model.ChanWeb:
-		return "web", c.Tool
+		return "web content", c.Tool
 	case model.ChanSubagent:
 		return "subagent reports", ""
 	case model.ChanEdit:
@@ -89,10 +89,9 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 		return "CLI output", c.CommandBinary
 	}
 
-	// What is left is the harness's own tools: plan mode, skills, questions,
-	// tool search. Named for what they are, since "other" told a reader
-	// nothing and invited the question of how it differed from CLI output.
-	return "harness tools", c.Tool
+	// What is left is what the harness's own tools returned: plan mode,
+	// skills, questions, tool search.
+	return "harness output", c.Tool
 }
 
 // levelDetail explains a level whose name cannot carry its own meaning.
@@ -112,11 +111,14 @@ func kindDetail(kind string) string {
 	case "file content":
 		return "the contents of files, however they arrived: the Read tool, cat and sed, or a " +
 			"tool that returned a document."
+	case "web content":
+		return "what came back from fetching a page or running a search. Not the URL you " +
+			"asked for, which is under model output."
 	case "CLI output":
 		return "what command-line tools reported: git, test runners, builds, searches, listings."
-	case "harness tools":
-		return "Claude Code's own tools: plan mode, skills, questions, tool search. Not " +
-			"commands you ran."
+	case "harness output":
+		return "what Claude Code's own tools returned: plan mode, skills, questions, " +
+			"tool search. Not commands you ran."
 	case "MCP output":
 		return "what MCP servers returned. Compare its size with CLI output when weighing " +
 			"whether to put a server behind a CLI."
