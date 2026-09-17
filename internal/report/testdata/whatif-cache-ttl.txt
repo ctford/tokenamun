@@ -26,6 +26,12 @@ Counterfactual
       computing it
   net change, share of prompt cost                    -8.7%   [counterfactual]
 
+Caveat
+  A real setting, and it can cost more than it saves.
+  promptCacheTtl, Claude Code v2.1.242+. Comes out positive on sessions of
+  short bursts, where the doubled write price buys a lifetime you never
+  use.
+
 Unknown
   - behavioural_change: the agent's trajectory is assumed identical. It
     would not have been.

@@ -145,6 +145,10 @@ Exactly what a built-in sees, which is the point of the interface:
 | `compression_ratio` | the assumed surviving fraction, from `--ratio`. If you assume a ratio, assume this one. |
 | `replay` | present when `--replay-with` measured real compression. Prefer it over the assumption. |
 
+Your result takes the shape `tokenamun what-if cache-ttl --json` prints:
+`observed`, `derived`, `counterfactual`, `headline`, `caveat`,
+`caveat_detail`, `unknown`, and `applicable` with `not_measurable`.
+
 `tokenamun what-if cache-ttl --json` prints a result in the shape yours must
 take. `examples/interventions/thinking-carry` is a complete, commented one in
 about sixty lines of Python.
@@ -158,9 +162,15 @@ printed:
 - **`unknown` may not be empty.** Every counterfactual must say what it cannot
   know, starting with whether the task still succeeded. An agent that fails
   consumes the fewest tokens of all, so a reduction is not an improvement.
-- **A headline needs a caveat.** If you nominate a number as your bottom line,
-  `caveat` is the sentence printed beside it. An unqualified percentage is
-  precisely how the published claims went wrong.
+- **A headline needs a caveat, and it must be short.** If you nominate a
+  number as your bottom line, `caveat` is the sentence printed beside it, and
+  it is capped at 64 characters. It shares a table row with a number, in a
+  table of eight rows: a paragraph there is not read, and eight paragraphs are
+  read even less. Put the argument in `caveat_detail`, which is shown on the
+  intervention's own report where there is room for it. An unqualified
+  percentage is precisely how the published claims went wrong, so the short
+  form still has to be a claim — "A ceiling, not an estimate." — rather than a
+  label.
 - **`applicable: false` needs `not_measurable`.** Saying nothing can be said is
   a legitimate result; saying it without saying why is not.
 - **Provenance must be honest.** Every quantity carries `observed`, `derived`,

@@ -1,6 +1,7 @@
 package whatif
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -415,4 +416,26 @@ func contains(s, sub string) bool {
 		}
 		return false
 	})()
+}
+
+func TestEveryBuiltInCaveatFitsInTheTable(t *testing.T) {
+	// The caveat is a column beside a number, in a table of eight rows. The
+	// built-ins are held to the limit that external interventions are held
+	// to, or the rule is advice rather than a contract.
+	c := testContext(t)
+	for _, i := range Builtin() {
+		r := i.Estimate(c)
+		if n := len([]rune(r.Caveat)); n > CaveatLimit {
+			t.Errorf("%s: caveat is %d characters, over the %d limit:\n  %q",
+				i.Name(), n, CaveatLimit, r.Caveat)
+		}
+		// A one-line caveat has to be a claim, not a fragment.
+		if r.Caveat != "" && !strings.HasSuffix(r.Caveat, ".") {
+			t.Errorf("%s: caveat should read as a sentence: %q", i.Name(), r.Caveat)
+		}
+		// And the argument behind it must not be lost, only moved.
+		if r.Applicable && r.Headline != nil && r.CaveatDetail == "" && r.Caveat == "" {
+			t.Errorf("%s: a headline with neither caveat nor detail", i.Name())
+		}
+	}
 }

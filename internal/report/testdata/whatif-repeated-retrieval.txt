@@ -18,6 +18,9 @@ Counterfactual
       the saving is the carry of the later copies; the first fetch still
       happens
 
+Caveat
+  It re-read this for a reason, even if that reason was forgetting.
+
 Unknown
   - recovery_requests: the agent re-read this content for a reason.
     Removing the second copy assumes it still had the first in mind.

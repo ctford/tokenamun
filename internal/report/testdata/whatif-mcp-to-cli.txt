@@ -22,6 +22,11 @@ Not measurable from this data
   prompt size: that difference is observed. `tokenamun compare` is the
   command for it.
 
+Caveat
+  Measure it with an A/B instead.
+  Same opening prompt, server connected and disconnected, and compare the
+  first call's prompt size. That difference is observed.
+
 Unknown
   - schema_tokens: not observable from a transcript at all.
   - tools_available: only tools that were used appear; the ones that

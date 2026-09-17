@@ -28,6 +28,11 @@ Counterfactual
       the cache-invalidation cost of rewriting context is in unknown, not
       netted out here
 
+Caveat
+  Published figures cover tests, build and lint only.
+  git and file commands are most of the covered cost here and use the
+  conservative end of its 60-90% band.
+
 Unknown
   - published_basis: RTK's figures measure bash-output reduction, not bill
     reduction, and are estimated with a bytes/4 approximation rather than

@@ -182,9 +182,9 @@ func (RTK) Estimate(c Context) Result {
 			"the cache-invalidation cost of rewriting context is in unknown, not netted out here"),
 	}
 	r.Headline = &r.Counterfact[0]
-	r.Caveat = "RTK publishes per-command figures for tests, build and lint only. git and " +
-		"file commands are most of the covered cost here and use the conservative end of " +
-		"its 60-90% band."
+	r.Caveat = "Published figures cover tests, build and lint only."
+	r.CaveatDetail = "git and file commands are most of the covered cost here and use " +
+		"the conservative end of its 60-90% band."
 	return r
 }
 

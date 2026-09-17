@@ -53,6 +53,18 @@ func RenderWhatIf(w io.Writer, r WhatIf) error {
 		section(b, "Counterfactual", r.Result.Counterfact)
 	}
 
+	// The caveat was missing from this report entirely, which is the one
+	// place there is room for it. It is what to read before quoting the
+	// headline, so it sits directly under the number it qualifies.
+	if r.Result.Caveat != "" {
+		b.WriteString("Caveat\n")
+		fmt.Fprintf(b, "  %s\n", wrap(r.Result.Caveat, 72, "  "))
+		if r.Result.CaveatDetail != "" {
+			fmt.Fprintf(b, "  %s\n", wrap(r.Result.CaveatDetail, 72, "  "))
+		}
+		b.WriteString("\n")
+	}
+
 	b.WriteString("Unknown\n")
 	for _, u := range r.Result.Unknown {
 		fmt.Fprintf(b, "  - %s\n", wrap(u, 70, "    "))
@@ -203,7 +215,9 @@ type WhatIfSummaryRow struct {
 	Share *model.Quantity `json:"share_of_session,omitempty"`
 	// Caveat is the thing to know before quoting Effect. Never empty on an
 	// applicable row with an effect; the interventions are validated on that.
-	Caveat        string `json:"caveat,omitempty"`
+	Caveat string `json:"caveat,omitempty"`
+	// CaveatDetail is the argument behind it, for the places with room.
+	CaveatDetail  string `json:"caveat_detail,omitempty"`
 	NotMeasurable string `json:"not_measurable,omitempty"`
 	// Detail is the command that shows the full four-section result.
 	Detail string `json:"detail_command"`
@@ -228,8 +242,9 @@ func BuildWhatIfAll(s *model.Session, ctx whatif.Context) WhatIfAll {
 		r := i.Estimate(ctx)
 		row := WhatIfSummaryRow{
 			Name: r.Intervention, Targets: r.Description,
-			Applicable: r.Applicable, Caveat: r.Caveat, NotMeasurable: r.NotMeasurable,
-			Detail: fmt.Sprintf("tokenamun what-if %s %s", r.Intervention, s.Ref.ID),
+			Applicable: r.Applicable, Caveat: r.Caveat, CaveatDetail: r.CaveatDetail,
+			NotMeasurable: r.NotMeasurable,
+			Detail:        fmt.Sprintf("tokenamun what-if %s %s", r.Intervention, s.Ref.ID),
 		}
 		if r.Headline != nil && r.Headline.Quantity != nil {
 			q := *r.Headline.Quantity
@@ -290,7 +305,7 @@ func RenderWhatIfAll(w io.Writer, r WhatIfAll) error {
 	b.WriteString("\n")
 
 	for _, row := range r.Rows {
-		reason := row.Caveat
+		reason := strings.TrimSpace(row.Caveat + " " + row.CaveatDetail)
 		if !row.Applicable {
 			reason = row.NotMeasurable
 		}

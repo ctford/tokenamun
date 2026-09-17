@@ -129,8 +129,11 @@ func TestFileCompressionScalesWithTheRatioAndSaysWhereItCameFrom(t *testing.T) {
 		InputBytes: 84000, OutputBytes: 8400,
 	}
 	r := FileCompression{}.Estimate(c)
-	if !strings.Contains(r.Caveat, "measured") || !strings.Contains(r.Caveat, "gzip -c") {
-		t.Errorf("the caveat must say the ratio was measured and by what: %q", r.Caveat)
+	// The one-line caveat says the number is linear in a ratio; which ratio,
+	// and where it came from, is the argument behind it.
+	if !strings.Contains(r.CaveatDetail, "measured") ||
+		!strings.Contains(r.CaveatDetail, "gzip -c") {
+		t.Errorf("the detail must say the ratio was measured and by what: %q", r.CaveatDetail)
 	}
 	if measured := r.Headline.Quantity.Value; !(measured < quarter) {
 		t.Errorf("a 10%% measured ratio must beat a 25%% assumption: %.0f then %.0f",

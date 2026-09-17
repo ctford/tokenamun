@@ -27,6 +27,13 @@ Counterfactual
       the carry figure above
   net change, share of prompt cost                    -1.9%   [counterfactual]
 
+Caveat
+  Linear in a ratio you must justify.
+  The ratio used here is assumed surviving fraction of 50%, from --ratio.
+  Run it again with --replay-with to measure the ratio on these files
+  instead of assuming one, and `tokenamun hotspots` to see which of them
+  are big for reasons you could remove.
+
 Unknown
   - sufficiency: a shorter file still has to answer the question the agent
     was asking. A file trimmed past that point is read and then something

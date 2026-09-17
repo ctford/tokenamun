@@ -29,6 +29,13 @@ Counterfactual
       a local reduction is not a session saving and is not presented as
       one
 
+Caveat
+  Assumes 50% survives; that is stated, not measured.
+  Use --replay-with to pipe this session's own content through a real
+  compressor and measure the ratio instead of assuming one. The published
+  figures vary by a factor of seven, and all of them were measured on
+  somebody else's content.
+
 Unknown
   - additional_tool_calls: content the agent could no longer read may have
     been fetched again.

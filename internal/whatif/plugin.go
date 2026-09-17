@@ -116,7 +116,7 @@ func (e *External) Estimate(c Context) Result {
 			Description:   e.manifest.Description,
 			Applicable:    false,
 			NotMeasurable: err.Error(),
-			Caveat:        "This intervention is an external script and it failed; the row is not a finding.",
+			Caveat:        "This script failed; the row is not a finding.",
 			Unknown: []string{
 				"everything: the script that was to estimate this did not produce a usable result.",
 			},
@@ -202,6 +202,13 @@ func Validate(r *Result, m Manifest) error {
 		return fmt.Errorf("%s nominated a headline with no caveat: the caveat is the "+
 			"column beside the number, and an unqualified number is how the published "+
 			"claims got this wrong", r.Intervention)
+	}
+	// The caveat shares a table row with a number, in a table of eight. A
+	// paragraph there is not read, and eight paragraphs are read even less,
+	// so the argument goes in caveat_detail where there is room for it.
+	if n := len([]rune(r.Caveat)); n > CaveatLimit {
+		return fmt.Errorf("%s: caveat is %d characters and the limit is %d. It is a "+
+			"column in a table; put the argument in caveat_detail", r.Intervention, n, CaveatLimit)
 	}
 	if !r.Applicable && strings.TrimSpace(r.NotMeasurable) == "" {
 		return fmt.Errorf("%s says it is not applicable but does not say why", r.Intervention)

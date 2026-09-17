@@ -121,11 +121,12 @@ func (ClearOnNewTask) Estimate(c Context) Result {
 			cf("net change, share of prompt cost", net/c.Carry.PromptCostEIT, model.Ratio))
 	}
 	r.Headline = &r.Counterfact[2]
-	r.Caveat = fmt.Sprintf(
-		"A ceiling, not an estimate. Clearing is free only for content the agent never "+
-			"needed again, and %s of content was being carried across a boundary here -- "+
-			"whatever share of that it would have re-fetched comes straight back off the "+
-			"saving. The boundaries are inferred from idle gaps of %s or more.",
+	r.Caveat = "A ceiling, not an estimate."
+	r.CaveatDetail = fmt.Sprintf(
+		"Clearing is free only for content the agent never needed again, and %s of "+
+			"content was being carried across a boundary here -- whatever share of that "+
+			"it would have re-fetched comes straight back off the saving. The boundaries "+
+			"are inferred from idle gaps of %s or more.",
 		tokensStr(droppedTokens), gapStr(TaskGap))
 	return r
 }

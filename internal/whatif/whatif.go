@@ -48,8 +48,17 @@ type Result struct {
 	// when there is nothing defensible to report.
 	Headline *Finding `json:"headline,omitempty"`
 	// Caveat is the single most important thing to know before quoting the
-	// headline.
+	// headline, in a few words.
+	//
+	// Short on purpose, and the length is enforced. It is a column beside a
+	// number in a table of eight rows; a paragraph there is not read, and
+	// eight paragraphs are read even less. Say the one thing, and put the
+	// argument in CaveatDetail.
 	Caveat string `json:"caveat,omitempty"`
+	// CaveatDetail is the argument behind the caveat: what makes it true, and
+	// what it costs you to ignore. Shown on the intervention's own report,
+	// where there is room for it.
+	CaveatDetail string `json:"caveat_detail,omitempty"`
 	// Unknown lists what cannot be known retrospectively. It is never empty;
 	// an intervention that returns none fails a test.
 	Unknown []string `json:"unknown"`
@@ -162,3 +171,7 @@ const outcomeUnknown = "task_success: not observable from this data. An agent th
 
 const behaviourUnknown = "behavioural_change: the agent's trajectory is assumed " +
 	"identical. It would not have been."
+
+// CaveatLimit is how long a caveat may be. A number rather than a taste, so
+// that it is enforced the same way on a built-in and on someone's script.
+const CaveatLimit = 64

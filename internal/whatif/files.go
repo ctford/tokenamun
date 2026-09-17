@@ -158,11 +158,11 @@ func (FileCompression) Estimate(c Context) Result {
 			cf("net change, share of prompt cost", -saved/total, model.Ratio))
 	}
 	r.Headline = &r.Counterfact[1]
-	r.Caveat = fmt.Sprintf(
-		"Scales linearly with a ratio you have to justify -- %s. Run it again with "+
-			"--replay-with to measure the ratio on these files instead of assuming one, "+
-			"and `tokenamun hotspots` to see which of them are big for reasons you could "+
-			"remove.", source)
+	r.Caveat = "Linear in a ratio you must justify."
+	r.CaveatDetail = fmt.Sprintf(
+		"The ratio used here is %s. Run it again with --replay-with to measure the "+
+			"ratio on these files instead of assuming one, and `tokenamun hotspots` to "+
+			"see which of them are big for reasons you could remove.", source)
 	return r
 }
 

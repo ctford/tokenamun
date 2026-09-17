@@ -160,11 +160,10 @@
   </div>
 
 
-  <h2 id="tm-title"></h2>
   <p class="muted" id="tm-sub"></p>
   <div class="panel">
     <nav id="crumbs" aria-label="Breadcrumb"></nav>
-    <svg id="treemap" viewBox="0 0 1000 560" role="img" aria-labelledby="tm-title"></svg>
+    <svg id="treemap" viewBox="0 0 1000 560" role="img"></svg>
     <table id="level-table" hidden>
       <thead><tr>
         <th>Name</th><th>Share of level</th><th>Share of session</th>
@@ -181,7 +180,6 @@
     </div>
   </div>
 
-  <h2>Would an optimisation have helped?</h2>
   <div class="panel" style="overflow:auto">
     <table id="interventions">
       <thead><tr>
@@ -454,10 +452,11 @@ function render() {
   renderLevelTable(here, kids);
   renderCrumbs();
 
-  // The breadcrumb already carries the name, the total and the share, so the
-  // heading says only which level you are looking at and under which pricing.
-  document.getElementById("tm-title").textContent =
-    mode === "uncached" ? `${here.name} — without caching` : here.name;
+  // No visible heading: the breadcrumb carries the name, the total and the
+  // share of session already, and a heading above it was the same word twice.
+  // The chart still needs an accessible name, so it gets one directly.
+  svg.setAttribute("aria-label",
+    mode === "uncached" ? `${here.name}, priced without caching` : here.name);
 
   // Both ends carry their value, so which end is "a lot" does not depend on
   // reading a caption or on which theme you are in -- the dark end inverts to
