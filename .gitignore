@@ -7,7 +7,14 @@
 # Never commit profiled repositories' data — see AGENTS.md
 .entire/
 *.jsonl
-!testdata/**/*.jsonl
+# Fixtures are the exception, and this pattern has to be anchored at any
+# depth: "!testdata/**/*.jsonl" matched nothing, because it requires a
+# directory between testdata/ and the file, and the fixtures sit directly
+# inside internal/ingest/testdata/. The result was three transcript fixtures
+# that existed on my machine, were never committed, and passed every local
+# run -- so the first CI run on a fresh clone could not build the tests.
+!**/testdata/*.jsonl
+!**/testdata/**/*.jsonl
 tool-results/
 *.html
 !internal/report/templates/*.html
