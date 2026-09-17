@@ -9,6 +9,11 @@ Observed
   session preamble, a ceiling on the category        30,001   [observed]
   cost of carrying the preamble                      49,501   [observed]
 
+Derived
+  ceiling as a share of the session              4950165.0%   [derived]
+      schemas live in the preamble, so the whole preamble bounds this. MCP
+      results are not part of it: they arrive either way
+
 Not measurable from this data
   Tool schemas are not in the transcript.
 

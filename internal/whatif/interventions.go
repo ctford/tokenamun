@@ -234,13 +234,80 @@ func (Caveman) Describe() string {
 	return "compress agent-facing content the way Caveman claims to"
 }
 
+// CavemanBand is the published spread for Caveman's compression: the vendor's
+// own figure against an independent test on real agentic tasks.
+//
+// An eight-fold spread, which is the finding. A single number picked from
+// inside it would be a choice this tool has no basis for making.
+const (
+	CavemanVendorReduction      = 0.65
+	CavemanIndependentReduction = 0.085
+)
+
 func (Caveman) Estimate(c Context) Result {
-	return compressionEstimate(c, "caveman", Caveman{}.Describe(), []string{
-		"published_ratio: Caveman's own figure is a 65% output reduction, while an " +
-			"independent test measured 8.5% on real agentic tasks. Neither was measured " +
-			"here. Use --replay-with to pipe this session's own content through the real " +
-			"compressor and settle it for this repository.",
-	})
+	// Deliberately not compressionEstimate. That prices an assumed ratio,
+	// which is honest when the reader supplied the ratio -- output-compression
+	// takes --ratio and says so. Here the name on the row is a vendor's, and
+	// applying --ratio's default of 50% to it reported a number that came
+	// from neither the vendor nor the independent test, while looking like it
+	// came from the vendor. It read as 13% of a session on evidence that
+	// spans 2% to 17%.
+	r := compressionEstimate(c, "caveman", Caveman{}.Describe(), nil)
+	if !r.Applicable {
+		return r
+	}
+
+	var eligibleCarry float64
+	for _, item := range c.Carry.Items {
+		if viaTool(item.Tool) {
+			eligibleCarry += item.CarryEIT
+		}
+	}
+	total := nonZero(c.Total)
+
+	// Measured beats published, so a replay settles it and the row becomes a
+	// finding rather than a range.
+	if c.Replay != nil && c.Replay.InputBytes > 0 {
+		return r
+	}
+
+	// The assumed ratio is not applied, so the row that states it goes: it
+	// described an input to arithmetic that no longer happens.
+	var derived []Finding
+	for _, f := range r.Derived {
+		if f.Label != "compression ratio applied" {
+			derived = append(derived, f)
+		}
+	}
+	r.Derived = derived
+
+	r.Counterfact = []Finding{
+		cf("saving at the vendor's 65%", -eligibleCarry*CavemanVendorReduction, model.EIT),
+		cf("saving at the independent 8.5%",
+			-eligibleCarry*CavemanIndependentReduction, model.EIT),
+		cf("share of session at the vendor's figure",
+			-eligibleCarry*CavemanVendorReduction/total, model.Ratio),
+		cf("share of session at the independent figure",
+			-eligibleCarry*CavemanIndependentReduction/total, model.Ratio),
+	}
+	// No headline, and no addressable-times-reduction: the spread is the
+	// answer, and collapsing it to one number is the thing being avoided.
+	r.Headline = nil
+	r.Addressable = nil
+	r.Reduction = 0
+	r.Applicable = false
+	r.NotMeasurable = "Published figures span 8.5% to 65%."
+	r.Caveat = "An eight-fold spread; pick a number and you have made it up."
+	r.CaveatDetail = fmt.Sprintf(
+		"Caveman's own figure is a 65%% output reduction; an independent test measured "+
+			"8.5%% on real agentic tasks. On this session that is the difference between "+
+			"%s and %s. Neither was measured here, and which end applies depends on "+
+			"whether your tool output is build logs or content the agent went looking "+
+			"for. Use --replay-with to pipe this session's own output through the real "+
+			"compressor and settle it.",
+		tokensStr(eligibleCarry*CavemanIndependentReduction),
+		tokensStr(eligibleCarry*CavemanVendorReduction))
+	return r
 }
 
 // compressionEstimate is shared by every compression-shaped intervention: they
@@ -416,6 +483,16 @@ func (MCPToCLI) Estimate(c Context) Result {
 			obs("mcp result content", float64(mcpBytes), model.Bytes),
 			obs("session preamble, a ceiling on the category", float64(c.Carry.Preamble), model.Tokens),
 			obs("cost of carrying the preamble", c.Carry.PreambleCarryEIT, model.EIT),
+			// The share is the useful form: it bounds the whole intervention,
+			// and it is usually far smaller than the MCP *results* a reader
+			// assumes this addresses. Results keep arriving down a CLI; only
+			// the schemas go away.
+		},
+		Derived: []Finding{
+			der("ceiling as a share of the session",
+				c.Carry.PreambleCarryEIT/nonZero(c.Total), model.Ratio,
+				"schemas live in the preamble, so the whole preamble bounds this. "+
+					"MCP results are not part of it: they arrive either way"),
 		},
 		Caveat: "Measure it with an A/B instead.",
 		Unknown: []string{

@@ -298,14 +298,40 @@ func TestCavemanCitesTheGapBetweenClaimAndIndependentMeasurement(t *testing.T) {
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6},
 	}
-	var mentions bool
-	for _, u := range (Caveman{}).Estimate(ctxFor(s)).Unknown {
-		if contains(u, "8.5%") && contains(u, "65%") {
-			mentions = true
+	r := (Caveman{}).Estimate(ctxFor(s))
+
+	// The spread is the finding, so it is stated where a reader will see it
+	// rather than buried in the unknowns.
+	if !contains(r.NotMeasurable, "8.5%") || !contains(r.NotMeasurable, "65%") {
+		t.Errorf("caveman should say the published figures span 8.5%% to 65%%: %q",
+			r.NotMeasurable)
+	}
+
+	// And it must not report a single number from inside that spread. The
+	// first version priced --ratio's default of 50%, which came from neither
+	// the vendor nor the independent test while carrying the vendor's name.
+	if r.Applicable {
+		t.Error("an eight-fold spread is not a measurement")
+	}
+	if r.Headline != nil {
+		t.Errorf("caveman must not nominate a headline: %+v", r.Headline)
+	}
+	if r.Addressable != nil {
+		t.Error("no addressable-times-reduction either; that implies a chosen ratio")
+	}
+
+	// Both ends are priced, because the range is what there is to say.
+	var ends int
+	for _, f := range r.Counterfact {
+		if contains(f.Label, "vendor") || contains(f.Label, "independent") {
+			ends++
 		}
 	}
-	if !mentions {
-		t.Error("caveman should surface that the published and independent figures differ by 7x")
+	if ends < 4 {
+		t.Errorf("both ends should be priced in EIT and as a share, got %d rows", ends)
+	}
+	if !contains(r.CaveatDetail, "replay-with") {
+		t.Errorf("it should point at the way to settle it: %q", r.CaveatDetail)
 	}
 }
 

@@ -14,27 +14,20 @@ Observed
   eligible items                                          4   [observed]
 
 Derived
-  compression ratio applied                           50.0%   [derived]
-      assumed surviving fraction 0.50, stated rather than measured
   eligible content, estimated tokens                    842   [derived]
   carry cost of eligible content                      1,295   [derived]
 
-Counterfactual
-  compressed size                                    2.5 KB   [counterfactual]
-  bytes removed                                      2.5 KB   [counterfactual]
-  carry cost avoided, before invalidation              -647   [counterfactual]
-      proportional to the content removed; the cache-invalidation cost of
-      rewriting context is in unknown, not netted out here
-  local reduction of eligible content                 50.0%   [counterfactual]
-      a local reduction is not a session saving and is not presented as
-      one
+Not measurable from this data
+  Published figures span 8.5% to 65%.
 
 Caveat
-  Assumes 50% survives; that is stated, not measured.
-  Use --replay-with to pipe this session's own content through a real
-  compressor and measure the ratio instead of assuming one. The published
-  figures vary by a factor of seven, and all of them were measured on
-  somebody else's content.
+  An eight-fold spread; pick a number and you have made it up.
+  Caveman's own figure is a 65% output reduction; an independent test
+  measured 8.5% on real agentic tasks. On this session that is the
+  difference between 110 tokens and 842 tokens. Neither was measured here,
+  and which end applies depends on whether your tool output is build logs
+  or content the agent went looking for. Use --replay-with to pipe this
+  session's own output through the real compressor and settle it.
 
 Unknown
   - additional_tool_calls: content the agent could no longer read may have
@@ -47,8 +40,4 @@ Unknown
   - task_success: not observable from this data. An agent that fails the
     task consumes the fewest tokens of all, so a reduction is not an
     improvement.
-  - published_ratio: Caveman's own figure is a 65% output reduction, while
-    an independent test measured 8.5% on real agentic tasks. Neither was
-    measured here. Use --replay-with to pipe this session's own content
-    through the real compressor and settle it for this repository.
 
