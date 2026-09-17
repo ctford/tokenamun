@@ -16,7 +16,9 @@ package entire
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ctford/tokenamun/internal/model"
 )
@@ -101,4 +103,26 @@ func Configured(dir string) bool {
 		}
 		abs = parent
 	}
+}
+
+// Checkpoints counts the checkpoint refs in a repository.
+//
+// A third state, and the one the reference repository was in:
+// 988 checkpoints and no transcripts. Checkpoints are git refs, so a clone
+// brings them; the transcripts are files under .entire/metadata that are not
+// committed and stay on the machine that recorded them. Every token in this
+// tool comes from a transcript, so checkpoints alone are worth saying out
+// loud rather than reporting as "nothing found".
+func Checkpoints(dir string) int {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	cmd := exec.Command("git", "-C", abs, "for-each-ref", "--format=%(refname)",
+		"refs/entire/checkpoints/**")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	return len(strings.Fields(string(out)))
 }

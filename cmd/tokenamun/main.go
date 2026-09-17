@@ -279,7 +279,14 @@ func cmdSessions(dir, source string, asJSON bool) error {
 		// different problem from "Entire is not set up", and it is the one a
 		// reader is most likely to be surprised by: the directory is there,
 		// the settings are there, and there is still nothing to read.
-		if entire.Configured(dir) {
+		if n := entire.Checkpoints(dir); n > 0 {
+			fmt.Println()
+			fmt.Printf("Entire has %d checkpoints here but no transcripts. Checkpoints are\n", n)
+			fmt.Println("git refs, so a clone brings them; the transcripts are files under")
+			fmt.Println(".entire/metadata that are not committed and stay on the machine")
+			fmt.Println("that recorded them. Every token in this tool comes from a")
+			fmt.Println("transcript, so there is nothing here to account for.")
+		} else if entire.Configured(dir) {
 			fmt.Println()
 			fmt.Println("Entire is configured in this repository but has recorded nothing")
 			fmt.Println("yet. Recordings appear once a session runs with it enabled; a")
