@@ -498,3 +498,18 @@ func TestTheRampMaximumIsAlwaysALeaf(t *testing.T) {
 		t.Error("the ramp maximum should be an individual retrieval's residency")
 	}
 }
+
+func TestOptimisationReadsAsWhatRemains(t *testing.T) {
+	// A sign in front of a percentage in a table reads as an annotation
+	// rather than as arithmetic, and a reader should not have to work out
+	// which way "-50%" points. So the column is what the addressable part
+	// becomes: halved is 50%, untouched is 100%, worse is over 100%.
+	cases := map[float64]string{
+		-0.5: "50%", -1: "0%", 0: "100%", 0.23: "123%", -0.078: "92%",
+	}
+	for reduction, want := range cases {
+		if got := remainingStr(reduction); got != want {
+			t.Errorf("remainingStr(%v) = %q, want %q", reduction, got, want)
+		}
+	}
+}

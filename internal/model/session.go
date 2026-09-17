@@ -24,6 +24,11 @@ type SessionRef struct {
 	// Current is true when this is the session the tool is running inside,
 	// which means the transcript is still being appended to.
 	Current bool `json:"current"`
+	// InGit means Transcript is a git object spec rather than a path, because
+	// the transcript lives inside an Entire checkpoint commit. That is where
+	// a cloned repository's history is: checkpoints are refs and travel,
+	// while .entire/metadata is not committed and does not.
+	InGit bool `json:"in_git,omitempty"`
 }
 
 // ModelInvocation is one API call. Building these correctly -- one per

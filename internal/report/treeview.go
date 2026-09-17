@@ -331,3 +331,13 @@ func pctStr(r float64) string {
 		return sign + "<0.1%"
 	}
 }
+
+// remainingStr states an intervention's effect as what the addressable part
+// becomes, rather than as a signed change to it.
+//
+// 50% is halved, 100% is untouched, 110% is worse. A sign in front of a
+// percentage in a table reads as an annotation rather than as arithmetic, and
+// nobody has to work out which direction "-50%" points.
+func remainingStr(reduction float64) string {
+	return pctStr(1 + reduction)
+}

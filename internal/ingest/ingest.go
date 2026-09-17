@@ -19,6 +19,7 @@ import (
 
 	"github.com/ctford/tokenamun/internal/claudecode"
 	"github.com/ctford/tokenamun/internal/content"
+	"github.com/ctford/tokenamun/internal/entire"
 	"github.com/ctford/tokenamun/internal/model"
 	"github.com/ctford/tokenamun/internal/tokens"
 )
@@ -38,7 +39,16 @@ func Load(ref model.SessionRef) (*model.Session, error) {
 
 // LoadWith parses the transcript a ref points at.
 func LoadWith(ref model.SessionRef, opts Options) (*model.Session, error) {
-	f, err := os.Open(ref.Transcript)
+	open := func() (io.ReadCloser, error) { return os.Open(ref.Transcript) }
+	if ref.InGit {
+		// A transcript inside a checkpoint commit. Streamed out of git
+		// rather than extracted to a file first: these reach 9 MB and
+		// nothing here loads a whole one.
+		open = func() (io.ReadCloser, error) {
+			return entire.OpenBlob(ref.Repo, ref.Transcript)
+		}
+	}
+	f, err := open()
 	if err != nil {
 		return nil, err
 	}

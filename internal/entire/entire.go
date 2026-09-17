@@ -49,7 +49,10 @@ func FindRepo(dir string) string {
 func Discover(dir string) ([]model.SessionRef, error) {
 	repo := FindRepo(dir)
 	if repo == "" {
-		return nil, nil
+		// No transcripts on disk, but a clone still carries them inside its
+		// checkpoint commits. Looking only at .entire/metadata reported four
+		// days of recorded work as nothing to analyse.
+		return DiscoverCheckpoints(dir)
 	}
 	root := filepath.Join(repo, MetadataDir, "metadata")
 	entries, err := os.ReadDir(root)
@@ -73,6 +76,22 @@ func Discover(dir string) ([]model.SessionRef, error) {
 			Repo:       repo,
 			Modified:   info.ModTime(),
 		})
+	}
+
+	// Checkpoints can hold sessions the metadata directory does not: another
+	// machine's, or this machine's before .entire was cleared.
+	onDisk := map[string]bool{}
+	for _, r := range out {
+		onDisk[r.ID] = true
+	}
+	inGit, err := DiscoverCheckpoints(dir)
+	if err != nil {
+		return out, nil
+	}
+	for _, r := range inGit {
+		if !onDisk[r.ID] {
+			out = append(out, r)
+		}
 	}
 	return out, nil
 }

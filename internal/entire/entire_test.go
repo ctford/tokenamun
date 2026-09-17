@@ -163,3 +163,43 @@ func write(t *testing.T, path, body string) {
 		t.Fatal(err)
 	}
 }
+
+func TestCheckpointTreeLinesAreParsed(t *testing.T) {
+	// The shape of `git ls-tree -r --long`, which is how a checkpoint's
+	// contents and their sizes are read in one call.
+	b, ok := parseTreeLine("refs/entire/checkpoints/AB/01X",
+		"100644 blob ffc83d4763f68ce89f788ab345c9f6f260d5cba3   548676\t0/full.jsonl")
+	if !ok {
+		t.Fatal("a blob line should parse")
+	}
+	if b.spec != "refs/entire/checkpoints/AB/01X:0/full.jsonl" {
+		t.Errorf("spec = %q", b.spec)
+	}
+	// The directory spec is how a full.jsonl finds the metadata.json beside
+	// it, which is the only place the session id lives.
+	if b.dirSpec != "refs/entire/checkpoints/AB/01X:0/" {
+		t.Errorf("dirSpec = %q", b.dirSpec)
+	}
+	if b.name != "full.jsonl" || b.size != 548676 {
+		t.Errorf("name = %q, size = %d", b.name, b.size)
+	}
+
+	if _, ok := parseTreeLine("ref", "040000 tree 0a1b2c3d       -\t0"); ok {
+		t.Error("a tree is not a blob")
+	}
+	if _, ok := parseTreeLine("ref", "nonsense"); ok {
+		t.Error("a line with no tab is not a blob")
+	}
+}
+
+func TestCheckpointDiscoveryIsQuietOutsideAGitRepository(t *testing.T) {
+	// A directory with no git repository above it must not be an error: the
+	// other source still works, and Entire is optional.
+	refs, err := DiscoverCheckpoints(t.TempDir())
+	if err != nil {
+		t.Errorf("expected silence, got %v", err)
+	}
+	if len(refs) != 0 {
+		t.Errorf("expected no sessions, got %d", len(refs))
+	}
+}
