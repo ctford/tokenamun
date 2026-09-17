@@ -29,8 +29,11 @@ type CarryReport struct {
 	// words are all re-sent as input, and all three would be at full price
 	// without the cache.
 	PreambleCarryUncachedEIT float64 `json:"preamble_carry_uncached_eit"`
-	PreambleShare            float64 `json:"preamble_share_of_prompt_cost"`
-	PromptCostEIT            float64 `json:"prompt_cost_eit"`
+	// PreambleRoundTrips is how many calls carried the preamble: how much of
+	// the back and forth it was part of.
+	PreambleRoundTrips float64 `json:"preamble_round_trips"`
+	PreambleShare      float64 `json:"preamble_share_of_prompt_cost"`
+	PromptCostEIT      float64 `json:"prompt_cost_eit"`
 	// PromptCostUncachedEIT is the whole prompt bill with no caching: the same
 	// tokens, sent the same number of times, at full input price. It is the
 	// denominator the no-caching view needs, and the gap against PromptCostEIT
@@ -48,6 +51,10 @@ type CarryReport struct {
 	PromptCarryEIT float64 `json:"prompt_carry_eit"`
 	// PromptCarryUncachedEIT is the same, priced as though nothing cached.
 	PromptCarryUncachedEIT float64 `json:"prompt_carry_uncached_eit"`
+	// PromptRoundTrips is the token-weighted mean over what you typed. Early
+	// prompts go round far more often than late ones, so an unweighted mean
+	// over prompts would describe nobody's experience.
+	PromptRoundTrips float64 `json:"prompt_round_trips"`
 	// ThinkingTokens is observed: the model's reasoning, billed as output.
 	// Its carry is deliberately absent -- Claude Code records thinking blocks
 	// with empty text, so whether they are re-sent is not knowable from a
@@ -63,6 +70,9 @@ type CarryReport struct {
 	// generation itself is not in either figure and is not affected by
 	// caching: output is billed at the output rate whatever the cache does.
 	AssistantCarryUncachedEIT float64 `json:"assistant_carry_uncached_eit"`
+	// AssistantRoundTrips is the token-weighted mean over the model's own
+	// words, excluding thinking for the same reason its carry is excluded.
+	AssistantRoundTrips float64 `json:"assistant_round_trips"`
 	// Items ranks retrievals by what carrying them cost.
 	Items []CarriedItem `json:"items"`
 	// Unattributed is the share of observed growth the content could not
@@ -171,6 +181,7 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	r.PreambleCarryEIT = residencyCost(float64(r.Preamble), 1, len(s.Invocations), cold, r.Resets, w)
 	preambleWarm, preambleCold := residency(1, len(s.Invocations), cold, r.Resets)
 	r.PreambleCarryUncachedEIT = float64(r.Preamble) * float64(preambleWarm+preambleCold) * w.Input
+	r.PreambleRoundTrips = float64(preambleWarm + preambleCold)
 
 	// Everything else is priced against the resets that a counterfactual adds
 	// as well as the ones that happened. r.Resets itself stays observed.
@@ -180,6 +191,7 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	}
 
 	// What you typed is carried like anything else.
+	var promptTokens, promptTokenCalls float64
 	for _, pe := range s.PromptEntries {
 		if pe.Bytes == 0 || pe.InvocationSeq < 0 {
 			continue
@@ -196,12 +208,18 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 		r.PromptCarryEIT += tokens *
 			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
 		r.PromptCarryUncachedEIT += tokens * float64(sends) * w.Input
+		promptTokens += tokens
+		promptTokenCalls += tokens * float64(sends)
+	}
+	if promptTokens > 0 {
+		r.PromptRoundTrips = promptTokenCalls / promptTokens
 	}
 
 	// The model's own output is carried too: generated once at the output
 	// rate, then re-sent as input on every later call. Thinking is excluded,
 	// because its text is not in the transcript and whether it is re-sent
 	// cannot be established from one.
+	var outputTokens, outputTokenCalls float64
 	for _, inv := range s.Invocations {
 		r.ThinkingTokens += inv.Usage.Thinking
 		carried := inv.Usage.Output - inv.Usage.Thinking
@@ -219,6 +237,11 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 		r.AssistantCarryEIT += float64(carried) *
 			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
 		r.AssistantCarryUncachedEIT += float64(carried) * float64(sends) * w.Input
+		outputTokens += float64(carried)
+		outputTokenCalls += float64(carried) * float64(sends)
+	}
+	if outputTokens > 0 {
+		r.AssistantRoundTrips = outputTokenCalls / outputTokens
 	}
 
 	// The arguments the model wrote into tool calls are carried too, but they

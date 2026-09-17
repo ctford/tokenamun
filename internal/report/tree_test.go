@@ -220,17 +220,39 @@ func TestEveryLevelIsSortedLargestFirst(t *testing.T) {
 	check(built(t))
 }
 
-func TestBlocksThatCannotBeScaledAreMarked(t *testing.T) {
-	// The colour ramp measures carry per token. A block with cost but no
-	// attributable token count has no such rate, and rendering it at the
-	// palest step would read as "cheap to keep" -- a claim we cannot make.
+func TestOnlyBlocksWithNoRoundTripFigureAreOffTheRamp(t *testing.T) {
+	// Grey means one thing: we cannot say how many round trips this content
+	// made. It does not mean "leaf", and it does not mean "no cost" --
+	// conflating those was what made a drillable "tool arguments" box grey.
+	//
+	// The preamble, what you typed and the model's own words all have
+	// observable residency, so all three are on the ramp. Thinking is not:
+	// Claude Code records thinking blocks with empty text, so whether they go
+	// round again is not in the transcript.
 	tree := built(t)
-	if !child(t, tree, "preamble").Unscaled {
-		t.Error("the preamble has no per-token rate and must be off the ramp")
+	for _, name := range []string{"preamble", "your prompts", "file content"} {
+		n := child(t, tree, name)
+		if n.Unscaled {
+			t.Errorf("%s has an observable residency and belongs on the ramp", name)
+		}
+		if n.RoundTrips <= 0 {
+			t.Errorf("%s is on the ramp but has no round-trip figure", name)
+		}
 	}
-	if child(t, tree, "file content").Unscaled {
-		t.Error("file content has a real per-token rate and belongs on the ramp")
+
+	// And nothing on the ramp may be missing the quantity the ramp encodes,
+	// anywhere in the tree, or it would draw at the palest step and read as
+	// "went round once".
+	var walk func(*Node)
+	walk = func(n *Node) {
+		if !n.Unscaled && n.Tokens > 0 && n.RoundTrips <= 0 {
+			t.Errorf("%q is on the ramp with no round trips", n.Name)
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
 	}
+	walk(tree)
 }
 
 func contains(s, sub string) bool {

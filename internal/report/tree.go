@@ -135,11 +135,16 @@ func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
 
 func preambleNode(carry analysis.CarryReport) *Node {
 	return &Node{
-		Name: "preamble", Kind: "bucket", Unscaled: true,
+		Name: "preamble", Kind: "bucket",
 		Tokens: float64(carry.Preamble),
 		Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryUncachedEIT, Items: 1,
+		RoundTrips: carry.PreambleRoundTrips,
+		tokenCalls: float64(carry.Preamble) * carry.PreambleRoundTrips,
 		Detail: "system prompt, tool schemas, instruction files and skills, carried on every " +
-			"call. Not decomposable: none of its parts are in the transcript.",
+			"call. Not decomposable: none of its parts are in the transcript. Its round " +
+			"trips and its cost both stop at the first context reset -- compaction can " +
+			"leave a prefix smaller than the first call's prompt, and what the harness " +
+			"put back is not observable -- so both are lower bounds.",
 	}
 }
 
@@ -148,12 +153,15 @@ func promptNode(s *model.Session, carry analysis.CarryReport) *Node {
 	for _, pe := range s.PromptEntries {
 		bytes += pe.Bytes
 	}
+	tokens := float64(bytes) / ratioOf(s)
 	return &Node{
-		Name: "your prompts", Kind: "bucket", Unscaled: true,
-		Tokens: float64(bytes) / ratioOf(s),
+		Name: "your prompts", Kind: "bucket",
+		Tokens: tokens,
 		Carry:  carry.PromptCarryEIT, CarryUncached: carry.PromptCarryUncachedEIT,
-		Items:  len(s.PromptEntries),
-		Detail: "what you typed, carried for the rest of the session.",
+		Items:      len(s.PromptEntries),
+		RoundTrips: carry.PromptRoundTrips,
+		tokenCalls: tokens * carry.PromptRoundTrips,
+		Detail:     "what you typed, carried for the rest of the session.",
 	}
 }
 
@@ -193,8 +201,10 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		held := carry.AssistantCarryEIT * proseShare
 		heldUncached := carry.AssistantCarryUncachedEIT * proseShare
 		n.Children = append(n.Children, &Node{
-			Name: "replies to you", Kind: "source", Unscaled: true,
+			Name: "replies to you", Kind: "source",
 			Tokens: prose, Carry: gen + held, CarryUncached: gen + heldUncached, Items: 1,
+			RoundTrips: carry.AssistantRoundTrips,
+			tokenCalls: prose * carry.AssistantRoundTrips,
 			Detail: fmt.Sprintf("the text it wrote for you to read, as opposed to its "+
 				"thinking or its tool calls: %s to write, %s to keep re-reading",
 				num(int(gen)), num(int(held))),
@@ -204,22 +214,24 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		gen := args * w.Output
 		held := carry.AssistantCarryEIT * (1 - proseShare)
 		heldUncached := carry.AssistantCarryUncachedEIT * (1 - proseShare)
-		argNode := &Node{Name: "tool arguments", Kind: "source", Unscaled: true,
+		argNode := &Node{Name: "tool arguments", Kind: "source",
 			Detail: fmt.Sprintf("what it wrote to invoke tools - the command strings, "+
 				"file paths and patch text. The other side of the same calls is CLI "+
 				"output, which is what the tools printed back: %s to write, %s to keep "+
 				"re-reading", num(int(gen)), num(int(held)))}
-		argNode.Children = byToolArguments(s, gen+held, gen+heldUncached, args)
+		argNode.Children = byToolArguments(s, gen+held, gen+heldUncached, args,
+			carry.AssistantRoundTrips)
 		n.Children = append(n.Children, argNode)
 	}
 	if thinking > 0 {
 		gen := float64(thinking) * w.Output
 		n.Children = append(n.Children, &Node{
 			Name: "thinking", Kind: "source", Unscaled: true,
-			// The same in both modes, and deliberately so: this is generation
-			// only. Whether thinking is re-read as input is not knowable from
-			// a transcript, so there is no residency here for caching to
-			// discount.
+			// Grey, and this is what grey is for: Claude Code records thinking
+			// blocks with empty text, so whether they go round again at all is
+			// not in the transcript. No round trips, and for the same reason
+			// the cost is identical in both modes -- this is generation only,
+			// with no residency for caching to discount.
 			Tokens: float64(thinking), Carry: gen, CarryUncached: gen, Items: 1,
 			Detail: "what it wrote for itself, not shown to you. Observed, and priced at " +
 				"the output rate for writing it. Whether it is re-read as input afterwards " +
@@ -232,7 +244,8 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 
 // byToolArguments splits a cost across the tools whose arguments produced it,
 // which is what "which tools" means on this side of the ledger.
-func byToolArguments(s *model.Session, totalCost, totalCostUncached, totalTokens float64) []*Node {
+func byToolArguments(s *model.Session, totalCost, totalCostUncached, totalTokens,
+	roundTrips float64) []*Node {
 	bytesByTool := map[string]int{}
 	callsByTool := map[string]int{}
 	var total int
@@ -251,11 +264,16 @@ func byToolArguments(s *model.Session, totalCost, totalCostUncached, totalTokens
 	for name, b := range bytesByTool {
 		share := float64(b) / float64(total)
 		out = append(out, &Node{
-			Name: name, Kind: "tool", Unscaled: true,
+			Name: name, Kind: "tool",
 			Tokens: totalTokens * share,
 			Carry:  totalCost * share, CarryUncached: totalCostUncached * share,
-			Items:  callsByTool[name],
-			Detail: fmt.Sprintf("%d calls, %s of arguments", callsByTool[name], byteStr(b)),
+			Items: callsByTool[name],
+			// Arguments are apportioned out of the model's output by byte
+			// share, so they inherit its residency: the call that wrote them
+			// is the call that carried them in.
+			RoundTrips: roundTrips,
+			tokenCalls: totalTokens * share * roundTrips,
+			Detail:     fmt.Sprintf("%d calls, %s of arguments", callsByTool[name], byteStr(b)),
 		})
 	}
 	return out
