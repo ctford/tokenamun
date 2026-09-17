@@ -100,12 +100,16 @@
   svg { display: block; width: 100%; height: auto; }
   .cell rect { stroke: var(--surface-1); stroke-width: 2; }
   .cell:hover rect { stroke: var(--text-primary); stroke-width: 2; }
-  .cell text, .group-label {
-    pointer-events: none; font-size: 11px;
-    paint-order: stroke; stroke: var(--surface-1); stroke-width: 2.5px;
+  /* Cell labels need no halo: the ink is already chosen against the fill
+     under it, and a surface-coloured stroke behind white ink on a dark fill
+     just smears small labels. */
+  .cell text { pointer-events: none; font-size: 11px; }
+  .group-label {
+    pointer-events: none; font-size: 12px; font-weight: 600;
+    fill: var(--text-secondary);
+    paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px;
     stroke-linejoin: round;
   }
-  .group-label { font-size: 12px; font-weight: 600; fill: var(--text-secondary); }
 
   .legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
   .ramp { display: flex; height: 10px; width: 180px; border-radius: 2px; overflow: hidden; }
