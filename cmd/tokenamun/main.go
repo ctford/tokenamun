@@ -41,6 +41,7 @@ Usage:
   tokenamun compare <a> <b>       two sessions side by side
   tokenamun tree [session]        where the tokens went, one level at a time;
                                   drill in with --at. The HTML viewer as text.
+  tokenamun period                every session in --since/--until, summed
   tokenamun interventions         what what-if can be asked, built-in and installed
   tokenamun what-if <name> [session]
                                   would an optimisation have helped, and by how much
@@ -70,6 +71,10 @@ Flags:
                   instead of assuming a ratio; C reads stdin, writes stdout
   -o FILE         output file (treemap; default tokenamun-treemap.html)
   --title TEXT    heading for the treemap, e.g. "Hyper Agentic App"
+  --since WHEN    only sessions active on or after WHEN: a date (2026-09-16),
+                  a date and time, or an age (7d, 36h). For the before-and-
+                  after question, which is what an experiment is.
+  --until WHEN    only sessions active before WHEN, exclusive
   --at PATH       which node of the tree to show, e.g. "cli output/version control".
                   Names come from the level above; matching is case-insensitive.
   --mode MODE     tree pricing: carry (as billed) | uncached (as if nothing
@@ -123,6 +128,8 @@ func run(args []string) error {
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
 	title := fs.String("title", "", "heading for the treemap report")
+	since := fs.String("since", "", "only sessions active on or after this date, time or age (7d)")
+	until := fs.String("until", "", "only sessions active before this date, time or age")
 	var extraInterventions repeatable
 	fs.Var(&extraInterventions, "intervention", "path to an intervention script (repeatable)")
 	at := fs.String("at", "", "drill to a node in the tree, e.g. \"cli output/git\"")
@@ -142,6 +149,13 @@ func run(args []string) error {
 	// mode available, so flags and positionals are allowed to intersperse.
 	positional, err := parseInterspersed(fs, rest)
 	if err != nil {
+		return err
+	}
+	// A period to scope to, for the before-and-after question. Held in a
+	// package variable rather than threaded through every command: it
+	// narrows discovery, which every command shares, and passing it to each
+	// of fifteen signatures would be the same global with more typing.
+	if window, err = model.ParseWindow(*since, *until); err != nil {
 		return err
 	}
 	selector := "latest"
@@ -171,6 +185,8 @@ func run(args []string) error {
 		return cmdInterventions(*asJSON)
 	case "doctor":
 		return cmdDoctor(*dir, *asJSON)
+	case "period":
+		return cmdPeriod(*dir, *source, *asJSON)
 	case "sessions":
 		return cmdSessions(*dir, *source, *asJSON)
 	case "profile":
@@ -236,6 +252,9 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 
 // discover lists candidate sessions from the requested sources, most recently
 // active first.
+// window scopes discovery to a period. Zero means everything.
+var window model.Window
+
 func discover(dir, source string) ([]model.SessionRef, error) {
 	var refs []model.SessionRef
 	if source == "any" || source == "entire" {
@@ -252,6 +271,7 @@ func discover(dir, source string) ([]model.SessionRef, error) {
 		}
 		refs = append(refs, found...)
 	}
+	refs = model.InWindow(refs, window)
 	sort.SliceStable(refs, func(i, j int) bool {
 		if refs[i].Current != refs[j].Current {
 			return refs[i].Current
@@ -523,6 +543,11 @@ func loadSelected(dir, source, selector string) (*model.Session, error) {
 // selectSession resolves a selector against the discovered sessions.
 func selectSession(refs []model.SessionRef, selector string) (model.SessionRef, error) {
 	if len(refs) == 0 {
+		if !window.Empty() {
+			return model.SessionRef{}, fmt.Errorf(
+				"no sessions in %s; widen --since/--until, or drop them to see everything",
+				window)
+		}
 		return model.SessionRef{}, fmt.Errorf(
 			"no sessions found; run `tokenamun sessions` to see where it looked")
 	}

@@ -606,3 +606,93 @@ func TestAdHocInterventionJoinsTheSummaryTable(t *testing.T) {
 		t.Error("the summary must show the decomposition, not just the product")
 	}
 }
+
+func TestWindowScopesToAPeriod(t *testing.T) {
+	// The before-and-after question: what did sessions cost after we added
+	// the thing, against before.
+	repo := localFixture(t, "carry.jsonl")
+
+	// The fixture's transcript was written now, so a window in the past
+	// excludes it and a window covering today includes it.
+	if out, err := capture(t, "sessions", "--dir", repo, "--since", "2020-01-01",
+		"--until", "2020-02-01"); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(out, "fixture-session") {
+		t.Error("a session outside the window must not be listed")
+	}
+	out, err := capture(t, "sessions", "--dir", repo, "--since", "7d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "fixture-session") {
+		t.Errorf("a session inside the window must be listed:\n%s", out)
+	}
+
+	// A window that matches nothing says so, rather than reporting an empty
+	// repository: those are different problems.
+	_, err = capture(t, "profile", "--dir", repo, "--since", "2020-01-01", "--until", "2020-02-01")
+	if err == nil {
+		t.Fatal("an empty window must be an error")
+	}
+	if !strings.Contains(err.Error(), "--since") {
+		t.Errorf("the error should point at the flags: %v", err)
+	}
+
+	// And a backwards window is refused up front rather than silently
+	// matching nothing.
+	if _, err := capture(t, "sessions", "--dir", repo,
+		"--since", "2026-09-17", "--until", "2026-09-01"); err == nil {
+		t.Error("a window that ends before it starts must be refused")
+	}
+	if _, err := capture(t, "sessions", "--dir", repo, "--since", "last tuesday"); err == nil {
+		t.Error("an unparseable date must be refused, not ignored")
+	}
+}
+
+func TestPeriodSumsEverySessionInTheWindow(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+	out, err := capture(t, "period", "--dir", repo, "--since", "7d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Sessions", "API calls", "OF TOTAL", "TRIPS"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the period report is missing %q:\n%s", want, out)
+		}
+	}
+
+	var doc struct {
+		Window   string `json:"window"`
+		Sessions int    `json:"sessions"`
+		Calls    int    `json:"api_calls"`
+		Tree     struct {
+			Carry    float64 `json:"carry"`
+			Children []struct {
+				Name string `json:"name"`
+			} `json:"children"`
+		} `json:"tree"`
+		Notes []string `json:"notes"`
+	}
+	jsonOut, err := capture(t, "period", "--dir", repo, "--since", "7d", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Sessions != 1 || doc.Calls == 0 || doc.Tree.Carry <= 0 {
+		t.Errorf("unexpected period totals: %+v", doc)
+	}
+	if doc.Window == "" {
+		t.Error("the report must state the window it covers")
+	}
+	// It must say that cost adds and residency does not, because that is the
+	// one thing a reader could get wrong about a summed report.
+	var explained bool
+	for _, n := range doc.Notes {
+		explained = explained || strings.Contains(n, "residency is not")
+	}
+	if !explained {
+		t.Error("a summed report must say what is additive and what is not")
+	}
+}

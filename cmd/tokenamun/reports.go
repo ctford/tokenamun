@@ -7,6 +7,8 @@ import (
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/codescan"
+	"github.com/ctford/tokenamun/internal/ingest"
+	"github.com/ctford/tokenamun/internal/model"
 	"github.com/ctford/tokenamun/internal/report"
 )
 
@@ -160,4 +162,30 @@ func cmdHotspots(dir, scanDir, source, selector string, asJSON bool) error {
 		return writeJSON(out)
 	}
 	return report.RenderHotspots(os.Stdout, out)
+}
+
+// cmdPeriod sums every session in the window.
+//
+// The unit a before-and-after question needs: 73 sessions in a day is not
+// something anybody reads one at a time.
+func cmdPeriod(dir, source string, asJSON bool) error {
+	refs, err := discover(dir, source)
+	if err != nil {
+		return err
+	}
+	if len(refs) == 0 {
+		return fmt.Errorf("no sessions in %s", window)
+	}
+	sessions, failed := report.Readable(refs, func(r model.SessionRef) (*model.Session, error) {
+		return ingest.Load(r)
+	})
+	if len(sessions) == 0 {
+		return fmt.Errorf("none of the %d sessions in %s could be read", len(refs), window)
+	}
+
+	out := report.BuildPeriod(sessions, window.String(), failed)
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderPeriod(os.Stdout, out)
 }

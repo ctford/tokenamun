@@ -651,6 +651,12 @@ func firstModel(s *model.Session) string {
 // rollUp totals each branch from its children.
 func rollUp(n *Node) {
 	if len(n.Children) == 0 {
+		// A leaf normally arrives with its round trips already set. A merged
+		// one does not: it has accumulated tokenCalls from several sessions
+		// and nothing has divided through yet.
+		if n.Tokens > 0 && n.tokenCalls > 0 {
+			n.RoundTrips = n.tokenCalls / n.Tokens
+		}
 		return
 	}
 	n.Tokens, n.Carry, n.CarryUncached, n.Bytes, n.Items = 0, 0, 0, 0, 0

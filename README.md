@@ -148,6 +148,8 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun hotspots` | those properties joined against what the session cost |
 | `tokenamun compare` | two sessions side by side |
 | `tokenamun tree` | where the tokens went, one level at a time; `--at` drills in |
+| `tokenamun period` | every session in `--since`/`--until`, summed |
+| `tokenamun doctor` | whether either source is set up to record here |
 | `tokenamun interventions` | what `what-if` can be asked, built-in and installed |
 | `tokenamun what-if` | would an optimisation have helped, and by how much |
 | `tokenamun what-if --all` | every intervention's bottom line, ranked |
@@ -166,6 +168,27 @@ own payload, byte for byte what the HTML is handed.
 That is deliberate, and a test enforces it. Anything the picture can show and
 the CLI cannot is a question this tool can only answer to a human, and an agent
 driving it would have to ask someone to read the screen.
+
+### Scoping to a period
+
+`--since` and `--until` take a date, a date and time, or an age (`7d`), and
+scope every command to the sessions active in that window. `tokenamun period`
+sums them, which is the unit a before-and-after question needs — seventy
+sessions in a day is not something anybody reads one at a time.
+
+```
+tokenamun period --since 2026-09-16          # after we added the thing
+tokenamun period --until 2026-09-16          # before
+```
+
+Whole sessions, never halves. Cost is attributed by residency *within* a
+session, so truncating one would leave content that entered before the window
+being carried through it with no honest way to split the bill. A session that
+straddles the boundary is in or out.
+
+And the sums are of results, not of sessions: each session is analysed on its
+own and the costs added. Cost is additive across sessions; residency is not,
+because each session has its own context.
 
 ```
 tokenamun tree --json                          # where did it go?
