@@ -602,7 +602,7 @@ func TestAdHocInterventionJoinsTheSummaryTable(t *testing.T) {
 	if !strings.Contains(out, "trim-the-docs") {
 		t.Errorf("an ad-hoc intervention must rank with the rest:\n%s", out)
 	}
-	if !strings.Contains(out, "ADDRESSABLE") || !strings.Contains(out, "CUT THERE") {
+	if !strings.Contains(out, "ADDRESSABLE") || !strings.Contains(out, "OPTIMISATION") {
 		t.Error("the summary must show the decomposition, not just the product")
 	}
 }

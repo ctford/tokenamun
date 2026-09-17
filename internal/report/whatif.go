@@ -305,25 +305,25 @@ func RenderWhatIfAll(w io.Writer, r WhatIfAll) error {
 	// Addressable share x reduction = overall. Printed as a product, because
 	// that is the shape of the judgement: whether a big cut to a small thing
 	// beats a small cut to a big one.
-	fmt.Fprintf(b, "%-20s %-34s %7s %10s %9s\n",
-		"INTERVENTION", "ADDRESSABLE", "OF THAT", "CUT THERE", "OVERALL")
+	fmt.Fprintf(b, "%-20s %-30s %11s %12s %7s\n",
+		"INTERVENTION", "APPLIES TO", "ADDRESSABLE", "OPTIMISATION", "IMPACT")
 	for _, row := range r.Rows {
 		if !row.Applicable {
-			fmt.Fprintf(b, "%-20s %-34s %7s %10s %9s\n",
-				trunc(row.Name, 20), trunc(row.Addressable, 34), "--", "--", "not measurable")
+			fmt.Fprintf(b, "%-20s %-30s %11s %12s %7s\n",
+				trunc(row.Name, 20), trunc(row.Addressable, 30), "--", "--", "n/a")
 			continue
 		}
 		overall := "--"
 		if row.Share != nil {
 			overall = pctStr(row.Share.Value)
 		}
-		fmt.Fprintf(b, "%-20s %-34s %7s %10s %9s\n",
-			trunc(row.Name, 20), trunc(row.Addressable, 34),
+		fmt.Fprintf(b, "%-20s %-30s %11s %12s %7s\n",
+			trunc(row.Name, 20), trunc(row.Addressable, 30),
 			pctStr(row.AddressableShare), pctStr(row.Reduction), overall)
 	}
 	b.WriteString("\n")
-	b.WriteString("OF THAT is the addressable part as a share of the session; CUT THERE is\n")
-	b.WriteString("what the intervention does to that part. They multiply to OVERALL.\n\n")
+	b.WriteString("ADDRESSABLE is what it applies to, as a share of the session.\n")
+	b.WriteString("OPTIMISATION is what it does to that part. The two multiply to IMPACT.\n\n")
 
 	for _, row := range r.Rows {
 		reason := strings.TrimSpace(row.Caveat + " " + row.CaveatDetail)
