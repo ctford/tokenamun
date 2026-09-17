@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tokenamun</title>
+<title>𓂀 Tokenamun</title>
 <style>
   /* Roles, not raw hex, so light and dark swap in one place. */
 :root {
@@ -31,13 +31,14 @@
     --other-rule: #37362f;
   }
   /* There is no @media (prefers-color-scheme: dark) block. There was, and it
-     was a second definition of dark that drifted: it still held the blue ramp
-     this report used before the oxide palette, and it never gained the
-     --other-* colours the toggle wears. So the scheme you got by starting the
-     page on a dark-mode machine was not the scheme you got by pressing the
-     button, and only one of the two was the colour anybody chose. The
-     preference is resolved into data-theme once, on load, which leaves
-     exactly one rule per scheme. */
+     was a second definition of dark: it held the blue ramp, which is what
+     dark is meant to be, while the [data-theme="dark"] rule below had been
+     given the oxide ramp when light changed to oxide. So dark was blue if
+     you arrived on a dark-mode machine and ochre if you pressed the button,
+     and nothing in the file said which was intended. The duplication was the
+     defect; the blue was not. The preference is now resolved into data-theme
+     once, on load, which leaves exactly one rule per scheme -- and a wrong
+     colour in it is then a wrong colour everywhere, which is findable. */
   :root[data-theme="dark"] {
     color-scheme: dark;
     --surface-1: #1a1a19;
@@ -46,12 +47,15 @@
     --text-secondary: #c3c2b7;
     --text-muted: #9c9b91;
     --rule: #37362f;
-    /* The same hue against a dark surface, so it runs the other way: 0.309
-       up to 0.778. Selected steps rather than an automatic inversion. */
-    --seq-100: #4a2418; --seq-200: #5a2b1d; --seq-300: #6d3624;
-    --seq-400: #803f2b; --seq-500: #a5553a; --seq-600: #c37356;
-    --seq-700: #e0a892;
-    --bar: #c37356;
+    /* Blue against a dark surface, and oxide against a light one. Not one
+       hue inverted: each scheme's ramp is chosen for its own surface, and
+       the two do not have to agree about hue to be comparable, because what
+       carries the magnitude is lightness. Runs the other way here -- 0.309
+       up to 0.778 in OKLab -- so the high steps are the pale ones. */
+    --seq-100: #104281; --seq-200: #184f95; --seq-300: #1c5cab;
+    --seq-400: #256abf; --seq-500: #3987e5; --seq-600: #6da7ec;
+    --seq-700: #9ec5f4;
+    --bar: #3987e5;
     --de-emphasis: #57564f;
     --other-surface: #fcfcfb;
     --other-ink: #0b0b0b;
@@ -64,16 +68,26 @@
     font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
   }
   .viz-root {
-    max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px;
+    /* Tight vertical rhythm: the whole point is to see the treemap and the
+       legend at once, and a page that needs scrolling to compare two boxes
+       has given up its one advantage over the table. */
+    max-width: 1100px; margin: 0 auto; padding: 20px 24px 24px;
     color: var(--text-primary);
   }
-  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em;
+    display: flex; align-items: baseline; gap: 10px; }
+  /* Eye of Horus. Decorative, so aria-hidden: a screen reader announcing
+     "Egyptian hieroglyph D10" before the title is worse than silence. The
+     glyph needs a font that carries the Egyptian Hieroglyphs block and is
+     simply absent where there is none, which is why it is not load-bearing
+     and nothing is laid out around it. */
+  .eye { font-size: 22px; line-height: 1; color: var(--bar); font-weight: 400; }
   h2 { font-size: 14px; font-weight: 600; margin: 32px 0 4px; }
-  .sub { color: var(--text-secondary); margin: 0 0 24px; }
+  .sub { color: var(--text-secondary); margin: 0 0 12px; }
   .muted { color: var(--text-muted); font-size: 12px; }
 
   /* Controls sit in one row above the charts. */
-  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 20px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
   button {
     font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 6px;
     border: 1px solid var(--rule); background: var(--surface-1);
@@ -136,7 +150,7 @@
   .cell:not(.leaf) text.name { text-decoration: underline; text-underline-offset: 2px; }
   .cell text.inner { font-size: 10px; }
 
-  .legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+  .legend { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
   .ramp { display: flex; height: 10px; width: 180px; border-radius: 2px; overflow: hidden; }
   .ramp span { flex: 1; }
 
@@ -165,12 +179,14 @@
   th { color: var(--text-secondary); font-weight: 600; }
   td { font-variant-numeric: tabular-nums; }
   [hidden] { display: none !important; }
+  #tm-sub { margin: 0 0 8px; }
+  #tm-sub:empty { display: none; }
 
 </style>
 </head>
 <body>
 <div class="viz-root">
-  <h1 id="title">Tokenamun</h1>
+  <h1><span class="eye" aria-hidden="true">𓂀</span><span id="title">Tokenamun</span></h1>
   <p class="sub">Session <strong id="sid"></strong> · <span id="calls"></span> API calls · <span id="origin"></span></p>
 
   <div class="controls">
@@ -185,7 +201,7 @@
   <p class="muted" id="tm-sub"></p>
   <div class="panel">
     <nav id="crumbs" aria-label="Breadcrumb"></nav>
-    <svg id="treemap" viewBox="0 0 1000 560" role="img"></svg>
+    <svg id="treemap" viewBox="0 0 1000 480" role="img"></svg>
     <table id="level-table" hidden>
       <thead><tr>
         <th>Name</th><th>Share of level</th><th>Share of session</th>
@@ -224,6 +240,7 @@ const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? "" : "s"}`;
 
 document.title = DATA.title + " — Tokenamun";
 document.getElementById("title").textContent = DATA.title;
+document.title = DATA.title ? DATA.title + " \u{13080} Tokenamun" : "\u{13080} Tokenamun";
 document.getElementById("sid").textContent = DATA.session.id;
 document.getElementById("calls").textContent = fmt(DATA.session.calls);
 document.getElementById("origin").textContent = DATA.session.origin;
@@ -286,7 +303,12 @@ function squarify(items, x, y, w, h) {
 const svg = document.getElementById("treemap");
 const tip = document.getElementById("tip");
 const crumbs = document.getElementById("crumbs");
-const W = 1000, H = 560, HEADER = 18;
+/* Must agree with the svg's viewBox: the layout is computed in these units
+   and the viewBox is what maps them to pixels. A mismatch does not error, it
+   just draws the boxes into the wrong part of the canvas. Asserted by a test
+   rather than trusted, because it is the same shape of defect as two theme
+   blocks disagreeing. */
+const W = 1000, H = 480, HEADER = 18;
 let mode = "carry";
 
 /* The drill-down path, as indices into successive children arrays. */
@@ -484,9 +506,12 @@ function render() {
 
   // What each level means is already on the node itself, in the tooltip. A
   // second copy up here was a guess keyed off node kind, and it went stale.
+  // Empty in the default mode. It used to say "Click a box to drill down",
+  // which cost a line of a viewport that was already too tall to fit, to say
+  // what the underline on a drillable box says for free.
   document.getElementById("tm-sub").textContent = mode === "uncached"
     ? `Caching saved ${pct(100 * cacheSaving(nodeAt([])))} of the session.`
-    : "Click a box to drill down.";
+    : "";
 }
 
 /* The table is the same level as the boxes, not a separate listing: it
@@ -598,9 +623,6 @@ svg.addEventListener("mousemove", e => {
         fmt(Math.round(n.roundTrips))}${leaf ? " exactly" : ", on average"}</dd>`}
       ${leaf ? "" : `<dt>contains</dt><dd>${fmt(n.children.length)}</dd>`}
     </dl>
-    ${n.unscaled || leaf || !n.roundTrips ? "" : `<div class="muted" style="margin-top:4px">
-      Round trips here are averaged over tokens, not over files: a large thing
-      carried a long way counts for more than a small one.</div>`}
     ${n.detail ? `<div class="muted" style="margin-top:4px">${esc(n.detail)}</div>` : ""}
     ${leaf ? "" : `<div class="muted" style="margin-top:4px">click to zoom in</div>`}`;
   tip.style.opacity = 1;

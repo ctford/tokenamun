@@ -636,3 +636,54 @@ func TestEachThemeIsDefinedExactlyOnce(t *testing.T) {
 			"colour to a literal hex breaks silently when a surface changes")
 	}
 }
+
+func TestTheLayoutHeightMatchesTheViewBox(t *testing.T) {
+	// The treemap is laid out in viewBox units by a JS constant, and the
+	// viewBox is what maps those units onto pixels. The two are written down
+	// separately, so shortening the plot to fit a viewport changed one and
+	// left the other: no error, just boxes drawn into the wrong part of the
+	// canvas. Same shape as the two theme blocks that disagreed.
+	raw, err := templates.ReadFile("templates/treemap.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+
+	view := regexp.MustCompile(`viewBox="0 0 (\d+) (\d+)"`).FindStringSubmatch(html)
+	if view == nil {
+		t.Fatal("no viewBox on the treemap svg")
+	}
+	layout := regexp.MustCompile(`const W = (\d+), H = (\d+),`).FindStringSubmatch(code(html))
+	if layout == nil {
+		t.Fatal("no W/H layout constants")
+	}
+	if view[1] != layout[1] || view[2] != layout[2] {
+		t.Errorf("viewBox is %sx%s and the layout uses %sx%s; they must agree",
+			view[1], view[2], layout[1], layout[2])
+	}
+}
+
+func TestTheReportCarriesTheEye(t *testing.T) {
+	// The eye is decorative, and it is the one piece of the report's chrome
+	// that is not a measurement, so it has to be exactly the glyph asked for.
+	// It was U+1320E first, which is a different hieroglyph entirely and
+	// looks plausible if you do not read Egyptian.
+	raw, err := templates.ReadFile("templates/treemap.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+	const eye = "\U00013080" // EGYPTIAN HIEROGLYPH D010, the Eye of Horus
+	if !strings.Contains(html, eye) {
+		t.Error("the report should carry the eye")
+	}
+	// Decorative means hidden from a screen reader: "Egyptian hieroglyph D010"
+	// announced ahead of the title is worse than silence.
+	if !strings.Contains(html, `class="eye" aria-hidden="true"`) {
+		t.Error("the eye is decoration and must be aria-hidden")
+	}
+	// The title belongs to whoever passed --title; the eye sits beside it.
+	if !strings.Contains(html, `<span id="title">`) {
+		t.Error("the caller's title must stay its own element")
+	}
+}
