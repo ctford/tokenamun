@@ -119,6 +119,10 @@
   nav#crumbs .here { font-weight: 600; padding: 3px 4px; }
   .cell { cursor: pointer; }
   .cell.leaf { cursor: default; }
+  /* A box you can open is underlined, so the affordance is there before you
+     hover it. The pointer cursor only tells you once you are already there,
+     and on a treemap you are choosing where to go from across the chart. */
+  .cell:not(.leaf) text.name { text-decoration: underline; text-underline-offset: 2px; }
   .cell text.inner { font-size: 10px; }
 
   .legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
@@ -138,6 +142,8 @@
 
   table { border-collapse: collapse; width: 100%; font-size: 12px; }
   #level-table tr.drillable { cursor: pointer; }
+  #level-table tr.drillable td:first-child { text-decoration: underline;
+    text-underline-offset: 2px; }
   #level-table tr.drillable:hover td { background: var(--plane); }
   #level-table td:first-child, #level-table th:first-child { text-align: left; }
   th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
@@ -181,7 +187,6 @@
       <span id="ramp-low">1</span>
       <span class="ramp" id="ramp"></span>
       <span id="ramp-high"></span>
-      <span class="muted">· grey = not known</span>
     </div>
   </div>
 
@@ -425,8 +430,11 @@ function render() {
 
     const name = fitLabel(shortName(n.name), p.w);
     if (name && p.h > 16) {
-      parts.push(`<text x="${p.x + 6}" y="${p.y + 16}" fill="${ink}" class="name">${
-        esc(name)}</text>`);
+      // `color` as well as `fill`: an SVG glyph takes its colour from fill,
+      // but the underline takes its colour from currentColor, which comes
+      // from `color`. Setting only fill draws a black line under pale text.
+      parts.push(`<text x="${p.x + 6}" y="${p.y + 16}" fill="${ink}" style="color:${
+        ink}" class="name">${esc(name)}</text>`);
     }
     // Two numbers, because they answer different questions: the share of this
     // level says how it compares with its siblings, the share of the session

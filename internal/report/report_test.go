@@ -502,6 +502,15 @@ func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 	if !strings.Contains(html, "[hidden] { display: none !important; }") {
 		t.Error("hidden must beat any display rule in this stylesheet")
 	}
+	// A box or row you can open says so before you hover it. On a treemap you
+	// choose where to go from across the chart, so a cursor change that only
+	// appears once you are already there is not the affordance.
+	if !strings.Contains(html, ".cell:not(.leaf) text.name { text-decoration: underline;") {
+		t.Error("a drillable box must be marked as drillable")
+	}
+	if !strings.Contains(html, "#level-table tr.drillable td:first-child { text-decoration: underline;") {
+		t.Error("a drillable table row must be marked the same way")
+	}
 	// Dark mode is selected, under both the OS setting and the explicit toggle.
 	if !strings.Contains(html, "prefers-color-scheme: dark") ||
 		!strings.Contains(html, `:root[data-theme="dark"]`) {
