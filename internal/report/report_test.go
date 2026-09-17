@@ -570,3 +570,25 @@ func TestTreemapFailsLoudlyIfTheTemplateLosesItsPlaceholder(t *testing.T) {
 var commentPattern = regexp.MustCompile(`(?s)/\*.*?\*/|<!--.*?-->|(?m)^\s*//.*$`)
 
 func code(html string) string { return commentPattern.ReplaceAllString(html, "") }
+
+func TestCallCountExcludesFailedRequests(t *testing.T) {
+	// Claude Code writes a placeholder entry for a request that failed --
+	// "API Error: Your computer went to sleep mid-response" -- with all-zero
+	// usage. Counting it as a call overstated a 1,767-call session by one:
+	// harmless to every cost figure, and wrong in the number a reader checks
+	// first.
+	s := carrySession(t)
+	real := s.RealCalls()
+	s.Invocations = append(s.Invocations, model.ModelInvocation{
+		Seq: len(s.Invocations), Model: model.SyntheticModel,
+	})
+	if got := s.RealCalls(); got != real {
+		t.Errorf("a synthetic entry changed the call count: %d then %d", real, got)
+	}
+	if len(s.Invocations) == real {
+		t.Fatal("the fixture needs the synthetic entry to be present but uncounted")
+	}
+	if got := sessionInfo(s).Calls; got != real {
+		t.Errorf("the report says %d calls, want %d", got, real)
+	}
+}

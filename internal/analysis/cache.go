@@ -66,6 +66,60 @@ type CacheReport struct {
 	ExpiryCostEIT   float64             `json:"expiry_cost_eit"`
 	ExpiryShare     float64             `json:"expiry_share_of_prompt_cost"`
 	UnexplainedCost float64             `json:"unexplained_cost_eit"`
+	// AvoidableTokens is the expiry rewriting that a 1-hour lifetime would
+	// have covered: expiry only, and only where the gap was under an hour.
+	// Gaps longer than that expire under either TTL.
+	AvoidableTokens int64 `json:"avoidable_by_1h_tokens"`
+	// LongerTTLNetEIT is what switching to the 1-hour TTL would have cost,
+	// net. Negative is a saving.
+	//
+	// This is a counterfactual, and it is in a measurement report because
+	// every input to it is observed: which TTL each call used, which misses
+	// were expiry, the gap lengths, and the published multipliers. There is
+	// no assumed parameter anywhere in it.
+	//
+	// It is here because it has to be computed rather than reasoned about.
+	// Done by hand it is easy to treat the avoided rewrite as free, when it
+	// becomes a cache read at a tenth of input price, and easy to forget that
+	// every *other* write is repriced from 1.25x to 2.0x. Both mistakes push
+	// the answer the same way: this session's real figure is -6.3% and a hand
+	// calculation that made both came out at 11.1%.
+	LongerTTLNetEIT float64 `json:"longer_ttl_net_eit"`
+	LongerTTLShare  float64 `json:"longer_ttl_net_share_of_prompt_cost"`
+}
+
+// longerTTL prices a switch from the 5-minute lifetime to the 1-hour one.
+//
+//	old = every 5m write at 1.25
+//	new = the writes you still make at 2.0, plus the ones you avoid as reads at 0.1
+//
+// A session that never idles past five minutes avoids nothing and pays double
+// for every write, so this comes out positive, which is the point of computing
+// it rather than assuming. Break-even is avoided writes above 37.5% of all
+// writes.
+func longerTTL(r *CacheReport, w cost.Weights) {
+	if r.Writes5m == 0 {
+		return
+	}
+	for _, m := range r.Misses {
+		if m.AvoidableByTTL {
+			r.AvoidableTokens += m.Rebuilt
+		}
+	}
+	avoidable := float64(r.AvoidableTokens)
+	if avoidable > float64(r.Writes5m) {
+		// Cannot avoid more than was written; a defensive clamp rather than a
+		// silent negative.
+		avoidable = float64(r.Writes5m)
+	}
+	old := float64(r.Writes5m) * w.CacheWrite5m
+	// The avoided rewrite does not vanish: the prefix is still sent, as a
+	// cache read.
+	now := (float64(r.Writes5m)-avoidable)*w.CacheWrite1h + avoidable*w.CacheRead
+	r.LongerTTLNetEIT = now - old
+	if r.TotalCostEIT > 0 {
+		r.LongerTTLShare = r.LongerTTLNetEIT / r.TotalCostEIT
+	}
 }
 
 // CauseAgg totals one cause.
@@ -159,6 +213,7 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 			r.ByCause[cause] = agg
 		}
 	}
+	longerTTL(&r, w)
 	return r
 }
 

@@ -3,7 +3,7 @@ TOKENAMUN
 Session fixture-session
   Source             local
   Model              claude-opus-5, <synthetic>
-  API calls          3
+  API calls          2
   User prompts       1
   Duration           25s
 

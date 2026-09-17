@@ -54,7 +54,7 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 	p := TreemapPayload{
 		Title: title,
 		Session: treemapSession{
-			ID: s.Ref.ID, Calls: len(s.Invocations), Origin: string(s.Ref.Origin),
+			ID: s.Ref.ID, Calls: s.RealCalls(), Origin: string(s.Ref.Origin),
 		},
 	}
 	p.Tree = BuildTree(s, carry)

@@ -38,7 +38,15 @@ type CauseRow struct {
 type ExpiryReport struct {
 	Cost  model.Quantity `json:"cost"`
 	Share model.Quantity `json:"share_of_prompt_cost"`
-	Note  string         `json:"note"`
+	// Avoidable is the part a 1-hour lifetime would have covered. Gaps over
+	// an hour expire under either TTL.
+	Avoidable model.Quantity `json:"avoidable_by_1h"`
+	// LongerTTLNet is what switching would have cost, net of repricing every
+	// other write from 1.25x to 2.0x. Negative is a saving.
+	LongerTTLNet   model.Quantity `json:"longer_ttl_net"`
+	LongerTTLShare model.Quantity `json:"longer_ttl_net_share"`
+	Note           string         `json:"note"`
+	NetNote        string         `json:"net_note"`
 }
 
 // BuildCache computes the cache report.
@@ -51,8 +59,20 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 		Writes1h:      model.Obs(float64(c.Writes1h), model.Tokens),
 		PromptCost:    model.Der(c.TotalCostEIT, model.EIT),
 		Expiry: ExpiryReport{
-			Cost:  model.Der(c.ExpiryCostEIT, model.EIT),
-			Share: model.Der(c.ExpiryShare, model.Ratio),
+			Cost:      model.Der(c.ExpiryCostEIT, model.EIT),
+			Share:     model.Der(c.ExpiryShare, model.Ratio),
+			Avoidable: model.Der(float64(c.AvoidableTokens), model.Tokens),
+			LongerTTLNet: model.Quantity{
+				Value: c.LongerTTLNetEIT, Unit: model.EIT, Prov: model.Counterfactual,
+			},
+			LongerTTLShare: model.Quantity{
+				Value: c.LongerTTLShare, Unit: model.Ratio, Prov: model.Counterfactual,
+			},
+			NetNote: "A counterfactual, but with no assumed parameter: every input " +
+				"is observed. The avoided rewrite is not free -- the prefix is still " +
+				"sent, as a cache read at a tenth of input price -- and every write " +
+				"you still make is repriced from 1.25x to 2.0x. Both are in the net " +
+				"figure. It comes out positive on a session of short bursts.",
 			Note: "Expiry is attributed by elimination, after the observable causes. " +
 				"MCP server changes, plugin toggles and tool-deny rules also " +
 				"invalidate the cache and are not visible in a transcript, so they " +
@@ -114,7 +134,14 @@ func RenderCache(w io.Writer, r Cache) error {
 	b.WriteString("TTL expiry\n")
 	line(b, "  Cost", r.Expiry.Cost)
 	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]\n", "  Share of prompt cost", r.Expiry.Share.Value*100, r.Expiry.Share.Prov)
+	line(b, "  Avoidable at 1h", r.Expiry.Avoidable)
 	fmt.Fprintf(b, "  %s\n\n", wrap(r.Expiry.Note, 72, "  "))
+
+	b.WriteString("Switching to the 1-hour TTL\n")
+	line(b, "  Net change", r.Expiry.LongerTTLNet)
+	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]\n", "  Share of prompt cost",
+		r.Expiry.LongerTTLShare.Value*100, r.Expiry.LongerTTLShare.Prov)
+	fmt.Fprintf(b, "  %s\n\n", wrap(r.Expiry.NetNote, 72, "  "))
 
 	_, err := io.WriteString(w, b.String())
 	return err

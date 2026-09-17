@@ -53,6 +53,24 @@ type ModelInvocation struct {
 // a failed request rather than recording a real one.
 const SyntheticModel = "<synthetic>"
 
+// RealCalls counts the API requests that actually happened.
+//
+// Not len(Invocations): that includes the placeholder entries Claude Code
+// writes for failed requests ("API Error: Your computer went to sleep
+// mid-response"), which carry no usage. Reporting them as calls overstated
+// the count by one on a 1,767-call session -- harmless to every cost figure,
+// since their usage is zero, and wrong in the one number a reader checks
+// first.
+func (s *Session) RealCalls() int {
+	var n int
+	for _, inv := range s.Invocations {
+		if inv.IsRealCall() {
+			n++
+		}
+	}
+	return n
+}
+
 // IsRealCall reports whether this invocation was an actual API request.
 //
 // It matters for any comparison between consecutive calls: an error entry

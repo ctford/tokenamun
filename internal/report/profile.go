@@ -145,7 +145,7 @@ func sessionInfo(s *model.Session) SessionInfo {
 	return SessionInfo{
 		ID: s.Ref.ID, Origin: s.Ref.Origin, Current: s.Ref.Current,
 		Models: s.Models(), Branch: s.Branch,
-		Calls: len(s.Invocations), Prompts: s.Prompts,
+		Calls: s.RealCalls(), Prompts: s.Prompts,
 		Duration: s.Duration().Round(time.Second).String(),
 	}
 }

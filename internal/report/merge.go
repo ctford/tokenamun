@@ -55,7 +55,7 @@ func BuildPeriod(sessions []*model.Session, window string, failed []string) Peri
 	for _, s := range sessions {
 		carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
 		trees = append(trees, BuildTree(s, carry))
-		p.Calls += len(s.Invocations)
+		p.Calls += s.RealCalls()
 	}
 	p.Tree = MergeTrees(trees)
 	return p

@@ -113,7 +113,23 @@
       "unit": "ratio",
       "provenance": "derived"
     },
-    "note": "Expiry is attributed by elimination, after the observable causes. MCP server changes, plugin toggles and tool-deny rules also invalidate the cache and are not visible in a transcript, so they appear as unexplained rather than being blamed on the TTL."
+    "avoidable_by_1h": {
+      "value": 34500,
+      "unit": "tokens",
+      "provenance": "derived"
+    },
+    "longer_ttl_net": {
+      "value": -9375,
+      "unit": "eit",
+      "provenance": "counterfactual"
+    },
+    "longer_ttl_net_share": {
+      "value": -0.087323594695569,
+      "unit": "ratio",
+      "provenance": "counterfactual"
+    },
+    "note": "Expiry is attributed by elimination, after the observable causes. MCP server changes, plugin toggles and tool-deny rules also invalidate the cache and are not visible in a transcript, so they appear as unexplained rather than being blamed on the TTL.",
+    "net_note": "A counterfactual, but with no assumed parameter: every input is observed. The avoided rewrite is not free -- the prefix is still sent, as a cache read at a tenth of input price -- and every write you still make is repriced from 1.25x to 2.0x. Both are in the net figure. It comes out positive on a session of short bursts."
   },
   "notes": [
     "The TTL each call used is observed, from the API's own 5m/1h split.",

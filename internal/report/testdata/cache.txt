@@ -16,8 +16,18 @@ Why the cache was rebuilt
 TTL expiry
   Cost                         43,125   [derived]
   Share of prompt cost          40.2%   [derived]
+  Avoidable at 1h              34,500   [derived]
   Expiry is attributed by elimination, after the observable causes. MCP
   server changes, plugin toggles and tool-deny rules also invalidate the
   cache and are not visible in a transcript, so they appear as unexplained
   rather than being blamed on the TTL.
+
+Switching to the 1-hour TTL
+  Net change                   -9,375   [counterfactual]
+  Share of prompt cost          -8.7%   [counterfactual]
+  A counterfactual, but with no assumed parameter: every input is
+  observed. The avoided rewrite is not free -- the prefix is still sent,
+  as a cache read at a tenth of input price -- and every write you still
+  make is repriced from 1.25x to 2.0x. Both are in the net figure. It
+  comes out positive on a session of short bursts.
 
