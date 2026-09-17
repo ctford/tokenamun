@@ -173,7 +173,7 @@
       <tbody></tbody>
     </table>
     <div class="legend" id="legend">
-      <span>Shade: round trips</span>
+      <span>Round trips</span>
       <span id="ramp-low">1</span>
       <span class="ramp" id="ramp"></span>
       <span id="ramp-high"></span>
@@ -575,14 +575,20 @@ svg.addEventListener("mousemove", e => {
     <dl>
       <dt>tokens</dt><dd>${fmt(n.tokens)}</dd>
       <dt>share of session</dt><dd>${pct(pctOfSession(n))}</dd>
-      <dt>share of ${esc(shortName(parent.name))}</dt><dd>${pct(pctOfView(n, parent))}</dd>
+      ${path.length === 0 ? "" : `<dt>share of ${
+        esc(shortName(parent.name))}</dt><dd>${pct(pctOfView(n, parent))}</dd>`}
       <dt>cost as billed</dt><dd>${fmt(n.carry)}</dd>
       ${n.unscaled ? "" : `<dt>if nothing cached</dt><dd>${fmt(n.carryUncached)}</dd>
       <dt>caching saved</dt><dd>${pct(100 * cacheSaving(n))}</dd>`}
       <dt>bytes</dt><dd>${bytes(n.bytes)}</dd>
       <dt>retrievals</dt><dd>${fmt(n.items)}</dd>
+      ${n.unscaled || !n.roundTrips ? "" : `<dt>round trips</dt><dd>${
+        fmt(Math.round(n.roundTrips))}${leaf ? "" : ", on average"}</dd>`}
       ${leaf ? "" : `<dt>contains</dt><dd>${fmt(n.children.length)}</dd>`}
     </dl>
+    ${n.unscaled || leaf || !n.roundTrips ? "" : `<div class="muted" style="margin-top:4px">
+      Round trips here are averaged over tokens, not over files: a large thing
+      carried a long way counts for more than a small one.</div>`}
     ${n.detail ? `<div class="muted" style="margin-top:4px">${esc(n.detail)}</div>` : ""}
     ${leaf ? "" : `<div class="muted" style="margin-top:4px">click to zoom in</div>`}`;
   tip.style.opacity = 1;

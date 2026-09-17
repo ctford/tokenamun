@@ -134,6 +134,10 @@ func BuildTreeView(s *model.Session, carry analysis.CarryReport, at []string, mo
 			"again on every call and is billed each time: arriving early and staying is " +
 			"what makes content expensive, and being large is not. Absent where there " +
 			"is no token count to weight by.",
+		"On a leaf round_trips is that retrieval's own residency, observed. On a " +
+			"branch it is an average over the tokens inside, not over the nodes: a " +
+			"large thing carried a long way counts for more than a small one. So a " +
+			"branch can never read higher than the worst leaf in it.",
 		"Caching does not change round_trips. It changes what each trip cost -- a " +
 			"tenth of input price when the prefix was warm, the write rate when it had " +
 			"to be rebuilt -- so --mode moves the cost and never the round trips. What " +

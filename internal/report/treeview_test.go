@@ -444,3 +444,57 @@ func TestResidencyIsBoundedByAContextResetNotByTheSession(t *testing.T) {
 		}
 	}
 }
+
+func TestRoundTripsOnABranchAreWeightedByTokens(t *testing.T) {
+	// A branch's figure is an average, and which average matters. Weighted by
+	// tokens, because the question the shade answers is what happened to a
+	// typical token in there, not to a typical file: a big file carried a long
+	// way should dominate a small one that was not.
+	//
+	// Two children: 10,000 tokens going round 600 times, and 100 tokens going
+	// round 5. The unweighted mean is 302; the weighted mean is 594.
+	branch := &Node{Name: "dir", Kind: "dir", Children: []*Node{
+		{Name: "big.md", Kind: "item", Tokens: 10000, Carry: 1, Items: 1,
+			tokenCalls: 10000 * 600},
+		{Name: "small.md", Kind: "item", Tokens: 100, Carry: 1, Items: 1,
+			tokenCalls: 100 * 5},
+	}}
+	rollUp(branch)
+
+	want := (10000.0*600 + 100*5) / 10100
+	if branch.RoundTrips < want-0.5 || branch.RoundTrips > want+0.5 {
+		t.Errorf("branch round trips = %.1f, want %.1f (a token-weighted mean)",
+			branch.RoundTrips, want)
+	}
+	if branch.RoundTrips < 590 {
+		t.Errorf("%.1f looks like an unweighted mean of 600 and 5", branch.RoundTrips)
+	}
+}
+
+func TestTheRampMaximumIsAlwaysALeaf(t *testing.T) {
+	// A weighted mean cannot exceed the largest of its members, so the top of
+	// the ramp is some individual retrieval's own residency -- which is
+	// observed exactly rather than averaged. Worth knowing when reading the
+	// number at the dark end of the legend.
+	s := carrySession(t)
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	p := BuildTreemap(s, carry)
+	if p.RampMax <= 0 {
+		t.Skip("the fixture has no residency")
+	}
+
+	var leafHoldsIt bool
+	var walk func(*Node)
+	walk = func(n *Node) {
+		if len(n.Children) == 0 && !n.Unscaled && n.RoundTrips == p.RampMax {
+			leafHoldsIt = true
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(p.Tree)
+	if !leafHoldsIt {
+		t.Error("the ramp maximum should be an individual retrieval's residency")
+	}
+}
