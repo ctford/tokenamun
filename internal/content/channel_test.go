@@ -99,3 +99,43 @@ func TestOutputIsNotAttributedToASilentStage(t *testing.T) {
 		})
 	}
 }
+
+func TestOnlyToolsWithSubcommandsOpenUpByTheirSecondWord(t *testing.T) {
+	// `grep group`, `grep air`, `grep and`, `grep 25` were levels in a real
+	// report: 59 children under grep, each holding one retrieval, every one
+	// of them a search pattern mistaken for a mode of the tool.
+	//
+	// Whether a tool has subcommands is part of its published interface and
+	// the same in every codebase, which is what makes it safe to know here.
+	cases := []struct {
+		cmd  string
+		want []string
+	}{
+		{"git status -sb", []string{"git", "git status"}},
+		{"pnpm run build", []string{"pnpm", "pnpm run"}},
+		{"go test ./...", []string{"go", "go test"}},
+		{"brew install jq", []string{"brew", "brew install"}},
+		// Patterns and arguments, not modes.
+		{"grep -rn group .", []string{"grep"}},
+		{"grep air", []string{"grep"}},
+		{"wc -l", []string{"wc"}},
+		{"ls -la", []string{"ls"}},
+		// A target runner's second word is the repository's vocabulary, not
+		// the tool's, so it is deliberately not a level.
+		{"make build", []string{"make"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cmd, func(t *testing.T) {
+			got := CommandPath(tc.cmd)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("got %v, want %v", got, tc.want)
+					return
+				}
+			}
+		})
+	}
+}

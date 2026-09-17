@@ -224,12 +224,40 @@ func CommandPath(cmd string) []string {
 		return nil
 	}
 	out := []string{path.Base(words[0])}
-	// A path as the second word is not a subcommand: `cat foo.go` opens up by
-	// file, not by "cat foo.go".
-	if len(words) > 1 && !strings.ContainsAny(words[1], "/.") {
+	// The second word is a subcommand only for tools that have subcommands.
+	// For grep, find and ls it is a pattern or an argument, and treating it
+	// as a level produced 59 children under grep -- "grep group", "grep air",
+	// "grep and", "grep 25" -- each holding one retrieval and none of them a
+	// thing anybody could act on.
+	//
+	// Whether a tool has subcommands is part of its published interface and
+	// is the same in every codebase, which is what makes it safe to know
+	// here. What its subcommands are called is not enumerated: `git bisect`
+	// opens up the same way as `git add`.
+	if len(words) > 1 && hasSubcommands[out[0]] && !strings.ContainsAny(words[1], "/.") {
 		out = append(out, out[0]+" "+words[1])
 	}
 	return out
+}
+
+// hasSubcommands are tools whose first argument names a mode of the tool
+// rather than a thing to operate on.
+//
+// Deliberately absent: make, rake, just and the other target runners. Their
+// second word is a target defined by the repository, so opening up by it
+// would be filing output under a project's own vocabulary -- which is the one
+// thing the taxonomy in groups.go refuses to do.
+var hasSubcommands = map[string]bool{
+	"git": true, "gh": true, "hg": true, "svn": true,
+	"go": true, "cargo": true, "dotnet": true, "mvn": true, "gradle": true,
+	"npm": true, "pnpm": true, "yarn": true, "bun": true, "deno": true,
+	"pip": true, "pip3": true, "poetry": true, "uv": true, "pipx": true,
+	"bundle": true, "gem": true, "composer": true,
+	"docker": true, "podman": true, "kubectl": true, "helm": true,
+	"gcloud": true, "aws": true, "az": true, "terraform": true, "pulumi": true,
+	"brew": true, "apt": true, "apt-get": true, "dnf": true, "yum": true,
+	"mise": true, "asdf": true, "nvm": true, "rustup": true, "pyenv": true,
+	"systemctl": true, "launchctl": true, "openssl": true, "tsc": true,
 }
 
 // stage is one part of a compound command, and whether it was fed by a pipe.
