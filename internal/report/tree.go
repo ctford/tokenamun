@@ -34,16 +34,15 @@ type Node struct {
 	// payload; nothing displays it, because a price over a size needs a
 	// paragraph and ResidentCalls says the same thing in calls.
 	CarryPerToken float64 `json:"carryPerToken"`
-	// ResidentCalls is how many calls this content sat through, averaged over
-	// its tokens. It drives the colour ramp.
+	// RoundTrips is how many calls this content sat through, averaged over its
+	// tokens. It drives the colour ramp.
 	//
 	// The ramp used to be CarryPerToken, which is a price ratio and needed a
-	// paragraph to explain. This is the thing that causes it: the model has no
-	// memory, so content still in the context is sent again on every call and
-	// billed again each time. Arriving early and staying is what makes content
-	// expensive; being large is not. A number of calls says that without a
-	// caption.
-	ResidentCalls float64 `json:"residentCalls,omitempty"`
+	// paragraph nobody could make short enough. This is the thing that causes
+	// it: the model has no memory, so content still in the context goes back
+	// and forth on every call and is billed each time. "Round trips" is the
+	// reader's own word for it and needs no gloss.
+	RoundTrips float64 `json:"roundTrips,omitempty"`
 	// tokenCalls is the accumulator behind ResidentCalls: the sum over
 	// retrievals of tokens x calls resident. Weighted by tokens, so a big file
 	// carried briefly does not read the same as a small one carried
@@ -103,10 +102,19 @@ func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
 	// rather than of the session, which is the bug this block exists to
 	// prevent -- and merging the output blocks reintroduced it once already.
 	measured := carry.PromptCostEIT + outputCost(s)
+	// The no-caching total is the same arithmetic against a counterfactual
+	// bill: every prompt token at full input price, output unchanged. Without
+	// its own remainder the uncached mode reconciled against the cached total
+	// and reported the difference as a saving on content it had not repriced.
+	measuredUncached := carry.PromptCostUncachedEIT + outputCost(s)
+	restUncached := measuredUncached - root.CarryUncached
 	if rest := measured - root.Carry; rest > 0 {
+		if restUncached < rest {
+			restUncached = rest
+		}
 		root.Children = append(root.Children, &Node{
 			Name: "unattributed", Kind: "bucket", Unscaled: true,
-			Carry: rest, CarryUncached: rest, Items: 1,
+			Carry: rest, CarryUncached: restUncached, Items: 1,
 			Detail: "what the parts above do not account for: system reminders, per-call " +
 				"message envelope, thinking re-read if it is re-read at all, and the error " +
 				"in apportioning output by byte share. Reported rather than distributed.",
@@ -129,7 +137,7 @@ func preambleNode(carry analysis.CarryReport) *Node {
 	return &Node{
 		Name: "preamble", Kind: "bucket", Unscaled: true,
 		Tokens: float64(carry.Preamble),
-		Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryEIT, Items: 1,
+		Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryUncachedEIT, Items: 1,
 		Detail: "system prompt, tool schemas, instruction files and skills, carried on every " +
 			"call. Not decomposable: none of its parts are in the transcript.",
 	}
@@ -143,7 +151,7 @@ func promptNode(s *model.Session, carry analysis.CarryReport) *Node {
 	return &Node{
 		Name: "your prompts", Kind: "bucket", Unscaled: true,
 		Tokens: float64(bytes) / ratioOf(s),
-		Carry:  carry.PromptCarryEIT, CarryUncached: carry.PromptCarryEIT,
+		Carry:  carry.PromptCarryEIT, CarryUncached: carry.PromptCarryUncachedEIT,
 		Items:  len(s.PromptEntries),
 		Detail: "what you typed, carried for the rest of the session.",
 	}
@@ -179,11 +187,14 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 	}
 
 	if prose > 0 {
+		// Generation is at the output rate whatever the cache does, so only
+		// the re-reading differs between the two modes.
 		gen := prose * w.Output
 		held := carry.AssistantCarryEIT * proseShare
+		heldUncached := carry.AssistantCarryUncachedEIT * proseShare
 		n.Children = append(n.Children, &Node{
 			Name: "replies to you", Kind: "source", Unscaled: true,
-			Tokens: prose, Carry: gen + held, CarryUncached: gen + held, Items: 1,
+			Tokens: prose, Carry: gen + held, CarryUncached: gen + heldUncached, Items: 1,
 			Detail: fmt.Sprintf("the text it wrote for you to read, as opposed to its "+
 				"thinking or its tool calls: %s to write, %s to keep re-reading",
 				num(int(gen)), num(int(held))),
@@ -192,18 +203,23 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 	if args > 0 {
 		gen := args * w.Output
 		held := carry.AssistantCarryEIT * (1 - proseShare)
+		heldUncached := carry.AssistantCarryUncachedEIT * (1 - proseShare)
 		argNode := &Node{Name: "tool arguments", Kind: "source", Unscaled: true,
 			Detail: fmt.Sprintf("what it wrote to invoke tools - the command strings, "+
 				"file paths and patch text. The other side of the same calls is CLI "+
 				"output, which is what the tools printed back: %s to write, %s to keep "+
 				"re-reading", num(int(gen)), num(int(held)))}
-		argNode.Children = byToolArguments(s, gen+held, args)
+		argNode.Children = byToolArguments(s, gen+held, gen+heldUncached, args)
 		n.Children = append(n.Children, argNode)
 	}
 	if thinking > 0 {
 		gen := float64(thinking) * w.Output
 		n.Children = append(n.Children, &Node{
 			Name: "thinking", Kind: "source", Unscaled: true,
+			// The same in both modes, and deliberately so: this is generation
+			// only. Whether thinking is re-read as input is not knowable from
+			// a transcript, so there is no residency here for caching to
+			// discount.
 			Tokens: float64(thinking), Carry: gen, CarryUncached: gen, Items: 1,
 			Detail: "what it wrote for itself, not shown to you. Observed, and priced at " +
 				"the output rate for writing it. Whether it is re-read as input afterwards " +
@@ -216,7 +232,7 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 
 // byToolArguments splits a cost across the tools whose arguments produced it,
 // which is what "which tools" means on this side of the ledger.
-func byToolArguments(s *model.Session, totalCost, totalTokens float64) []*Node {
+func byToolArguments(s *model.Session, totalCost, totalCostUncached, totalTokens float64) []*Node {
 	bytesByTool := map[string]int{}
 	callsByTool := map[string]int{}
 	var total int
@@ -237,7 +253,7 @@ func byToolArguments(s *model.Session, totalCost, totalTokens float64) []*Node {
 		out = append(out, &Node{
 			Name: name, Kind: "tool", Unscaled: true,
 			Tokens: totalTokens * share,
-			Carry:  totalCost * share, CarryUncached: totalCost * share,
+			Carry:  totalCost * share, CarryUncached: totalCostUncached * share,
 			Items:  callsByTool[name],
 			Detail: fmt.Sprintf("%d calls, %s of arguments", callsByTool[name], byteStr(b)),
 		})
@@ -311,7 +327,7 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 		}
 		if c.Tokens > 0 {
 			leaf.CarryPerToken = it.CarryEIT / c.Tokens
-			leaf.ResidentCalls = float64(it.ResidentFor)
+			leaf.RoundTrips = float64(it.ResidentFor)
 		}
 		parent.Children = append(parent.Children, leaf)
 	}
@@ -644,7 +660,7 @@ func collapseByName(grp *Node) *Node {
 		}
 		if m.Tokens > 0 {
 			m.CarryPerToken = m.Carry / m.Tokens
-			m.ResidentCalls = m.tokenCalls / m.Tokens
+			m.RoundTrips = m.tokenCalls / m.Tokens
 		}
 		out.Children = append(out.Children, m)
 	}
@@ -676,7 +692,7 @@ func rollUp(n *Node) {
 	}
 	if n.Tokens > 0 {
 		n.CarryPerToken = n.Carry / n.Tokens
-		n.ResidentCalls = n.tokenCalls / n.Tokens
+		n.RoundTrips = n.tokenCalls / n.Tokens
 	}
 }
 

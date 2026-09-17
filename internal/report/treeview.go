@@ -56,14 +56,15 @@ type TreeNode struct {
 	Tokens         float64 `json:"tokens"`
 	Bytes          int     `json:"bytes"`
 	Items          int     `json:"retrievals"`
-	// ResidentCalls is how many calls the content sat through, averaged over
-	// its tokens. It is the viewer's colour ramp, as a number.
+	// RoundTrips is how many calls the content sat through, averaged over its
+	// tokens: how much of the back and forth it was part of. It is the
+	// viewer's colour ramp, as a number.
 	//
 	// There used to be a cost-per-token ratio here as well. It was a price
 	// divided by a size, it needed a paragraph to explain, and a reader who
 	// wants it has cost and tokens right beside it. This is the quantity that
 	// causes it and it explains itself.
-	ResidentCalls float64 `json:"resident_calls,omitempty"`
+	RoundTrips float64 `json:"round_trips,omitempty"`
 	// Unscaled marks a node with cost but no attributable token count, so
 	// neither rate is defined rather than being low. Grey in the viewer.
 	Unscaled bool `json:"unscaled,omitempty"`
@@ -128,11 +129,16 @@ func BuildTreeView(s *model.Session, carry analysis.CarryReport, at []string, mo
 			"session still adds up.",
 		"share_of_level is of this level; share_of_session is of the whole session. " +
 			"A large share of a small branch is not worth acting on.",
-		"resident_calls is how many calls the content sat through. The model has no " +
-			"memory, so content still in the context is sent again on every call and " +
-			"billed again each time: arriving early and staying is what makes content " +
-			"expensive, and being large is not. Absent where there is no token count " +
-			"to weight by.",
+		"round_trips is how much of the back and forth the content was part of. The " +
+			"model has no memory between calls, so anything still in the context goes " +
+			"again on every call and is billed each time: arriving early and staying is " +
+			"what makes content expensive, and being large is not. Absent where there " +
+			"is no token count to weight by.",
+		"Caching does not change round_trips. It changes what each trip cost -- a " +
+			"tenth of input price when the prefix was warm, the write rate when it had " +
+			"to be rebuilt -- so --mode moves the cost and never the round trips. What " +
+			"ends a run is a context reset, which is why the most here is fewer than " +
+			"the session's calls.",
 		"This is not a picture of the context window at any moment. It is what each " +
 			"token class was billed at, attributed to the content resident when it was sent.",
 	}
@@ -203,7 +209,7 @@ func flatten(n *Node, levelTotal, sessionTotal float64, mode string, path []stri
 		At: strings.Join(path, "/"),
 	}
 	if !n.Unscaled && n.Tokens > 0 {
-		out.ResidentCalls = n.ResidentCalls
+		out.RoundTrips = n.RoundTrips
 	}
 	if levelTotal > 0 {
 		out.ShareOfLevel = cost / levelTotal
@@ -242,13 +248,13 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 		b.WriteString("Nothing inside: this is a leaf.\n\n")
 	} else {
 		fmt.Fprintf(b, "%-38s %8s %9s %13s %7s  %s\n",
-			"INSIDE", "OF LEVEL", "SESSION", "COST", "CALLS", "CONTAINS")
+			"INSIDE", "OF LEVEL", "SESSION", "COST", "TRIPS", "CONTAINS")
 		for _, c := range v.Children {
-			// Calls resident, not cost per token: it is the cause rather than
+			// Round trips, not cost per token: it is the cause rather than
 			// the ratio, and it needs no explaining.
-			resident := "   --"
-			if c.ResidentCalls > 0 {
-				resident = num(int(c.ResidentCalls))
+			trips := "   --"
+			if c.RoundTrips > 0 {
+				trips = num(int(c.RoundTrips))
 			}
 			contains := fmt.Sprintf("%s retrievals", num(c.Items))
 			if c.Children > 0 {
@@ -258,7 +264,7 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 			}
 			fmt.Fprintf(b, "%-38s %8s %9s %13s %7s  %s\n",
 				trunc(c.Name, 38), pctStr(c.ShareOfLevel), pctStr(c.ShareOfSession),
-				num(int(c.Cost)), resident, contains)
+				num(int(c.Cost)), trips, contains)
 		}
 		b.WriteString("\n")
 	}

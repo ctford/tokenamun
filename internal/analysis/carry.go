@@ -23,8 +23,19 @@ type CarryReport struct {
 	// be decomposed into system prompt versus tool schemas versus instruction
 	// files, because none of those are in the transcript.
 	PreambleCarryEIT float64 `json:"preamble_carry_eit"`
-	PreambleShare    float64 `json:"preamble_share_of_prompt_cost"`
-	PromptCostEIT    float64 `json:"prompt_cost_eit"`
+	// PreambleCarryUncachedEIT is the same residency priced as though nothing
+	// cached. Every part of the prompt needs one of these, not just the
+	// retrieved content: the preamble, what you typed and the model's own
+	// words are all re-sent as input, and all three would be at full price
+	// without the cache.
+	PreambleCarryUncachedEIT float64 `json:"preamble_carry_uncached_eit"`
+	PreambleShare            float64 `json:"preamble_share_of_prompt_cost"`
+	PromptCostEIT            float64 `json:"prompt_cost_eit"`
+	// PromptCostUncachedEIT is the whole prompt bill with no caching: the same
+	// tokens, sent the same number of times, at full input price. It is the
+	// denominator the no-caching view needs, and the gap against PromptCostEIT
+	// is what prompt caching was worth on this session.
+	PromptCostUncachedEIT float64 `json:"prompt_cost_uncached_eit"`
 
 	// Peak and Final describe the context trajectory.
 	Peak  int64 `json:"peak_prompt_tokens"`
@@ -35,6 +46,8 @@ type CarryReport struct {
 
 	// PromptCarryEIT is what re-sending what you typed cost.
 	PromptCarryEIT float64 `json:"prompt_carry_eit"`
+	// PromptCarryUncachedEIT is the same, priced as though nothing cached.
+	PromptCarryUncachedEIT float64 `json:"prompt_carry_uncached_eit"`
 	// ThinkingTokens is observed: the model's reasoning, billed as output.
 	// Its carry is deliberately absent -- Claude Code records thinking blocks
 	// with empty text, so whether they are re-sent is not knowable from a
@@ -46,6 +59,10 @@ type CarryReport struct {
 	// generated, then carried as input on every later call; this is the second
 	// part, which is invisible if you only look at output tokens.
 	AssistantCarryEIT float64 `json:"assistant_carry_eit"`
+	// AssistantCarryUncachedEIT is the re-sends at full input price. The
+	// generation itself is not in either figure and is not affected by
+	// caching: output is billed at the output rate whatever the cache does.
+	AssistantCarryUncachedEIT float64 `json:"assistant_carry_uncached_eit"`
 	// Items ranks retrievals by what carrying them cost.
 	Items []CarriedItem `json:"items"`
 	// Unattributed is the share of observed growth the content could not
@@ -124,6 +141,9 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	for _, inv := range s.Invocations {
 		p := inv.Usage.PromptTokens()
 		r.PromptCostEIT += w.PromptCost(inv.Usage)
+		// The same tokens at full input price: what this session would have
+		// cost with no cache at all.
+		r.PromptCostUncachedEIT += float64(p) * w.Input
 		if !inv.IsRealCall() {
 			continue
 		}
@@ -149,6 +169,8 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	// apply to it: a clear certainly rebuilds the preamble rather than losing
 	// it, and an intervention that clears must price that write itself.
 	r.PreambleCarryEIT = residencyCost(float64(r.Preamble), 1, len(s.Invocations), cold, r.Resets, w)
+	preambleWarm, preambleCold := residency(1, len(s.Invocations), cold, r.Resets)
+	r.PreambleCarryUncachedEIT = float64(r.Preamble) * float64(preambleWarm+preambleCold) * w.Input
 
 	// Everything else is priced against the resets that a counterfactual adds
 	// as well as the ones that happened. r.Resets itself stays observed.
@@ -163,14 +185,17 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 			continue
 		}
 		warm, coldN := residency(pe.InvocationSeq+1, len(s.Invocations), cold, resets)
+		sends := 1 + warm + coldN
 		switch {
 		case warm > 0:
 			warm--
 		case coldN > 0:
 			coldN--
 		}
-		r.PromptCarryEIT += (float64(pe.Bytes) / ratioOf(s)) *
+		tokens := float64(pe.Bytes) / ratioOf(s)
+		r.PromptCarryEIT += tokens *
 			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+		r.PromptCarryUncachedEIT += tokens * float64(sends) * w.Input
 	}
 
 	// The model's own output is carried too: generated once at the output
@@ -184,6 +209,7 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 			continue
 		}
 		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, resets)
+		sends := 1 + warm + coldN
 		switch {
 		case warm > 0:
 			warm--
@@ -192,6 +218,7 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 		}
 		r.AssistantCarryEIT += float64(carried) *
 			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+		r.AssistantCarryUncachedEIT += float64(carried) * float64(sends) * w.Input
 	}
 
 	// The arguments the model wrote into tool calls are carried too, but they

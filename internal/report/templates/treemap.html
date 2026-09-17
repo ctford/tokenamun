@@ -173,12 +173,10 @@
       <tbody></tbody>
     </table>
     <div class="legend" id="legend">
-      <span>Shade: calls it sat through</span>
+      <span>Shade: round trips</span>
       <span id="ramp-low">1</span>
       <span class="ramp" id="ramp"></span>
       <span id="ramp-high"></span>
-      <span class="muted" id="ramp-caption"></span>
-      <span class="muted">· grey = no token count to weight by, so there is nothing to shade</span>
     </div>
   </div>
 
@@ -338,7 +336,7 @@ function inkFor(step) {
 }
 function stepFor(n) {
   const t = DATA.rampMax > 0
-    ? Math.min(1, (n.residentCalls || 0) / DATA.rampMax) : 0;
+    ? Math.min(1, (n.roundTrips || 0) / DATA.rampMax) : 0;
   return Math.min(RAMP.length - 1, Math.floor(Math.sqrt(t) * RAMP.length));
 }
 
@@ -463,18 +461,18 @@ function render() {
   // Both ends carry their value, so which end is "a lot" does not depend on
   // reading a caption or on which theme you are in -- the dark end inverts to
   // the bright end in dark mode, and a legend that says "darker" is then
-  // wrong.
+  // wrong. There is no caption: "round trips" with a number at each end needs
+  // no gloss, and every gloss written for it was longer than the thing it
+  // explained. The semantics live in `tokenamun tree`, where an agent needs
+  // them stated and a paragraph costs nothing.
   document.getElementById("ramp-high").textContent = fmt(Math.round(DATA.rampMax));
-  document.getElementById("ramp-caption").textContent =
-    "— the model has no memory between calls, so content still in the context is sent "
-    + "again on every call and billed again each time. Arriving early and staying is "
-    + "what makes content expensive; being large is not.";
+
 
   // What each level means is already on the node itself, in the tooltip. A
   // second copy up here was a guess keyed off node kind, and it went stale.
   document.getElementById("tm-sub").textContent = mode === "uncached"
     ? `Caching saved ${pct(100 * cacheSaving(nodeAt([])))} of the session.`
-    : "Click a box to go in.";
+    : "Click a box to drill down.";
 }
 
 /* The table is the same level as the boxes, not a separate listing: it

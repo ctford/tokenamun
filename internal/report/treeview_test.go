@@ -226,9 +226,9 @@ func TestCLIAndViewerCannotDiverge(t *testing.T) {
 		if c.Items != n.Items || c.Bytes != n.Bytes || c.Tokens != n.Tokens {
 			t.Errorf("%s: size differs between the two views", c.Name)
 		}
-		if c.ResidentCalls != n.ResidentCalls && !n.Unscaled {
+		if c.RoundTrips != n.RoundTrips && !n.Unscaled {
 			t.Errorf("%s: the ramp quantity differs: CLI %.2f, viewer %.2f",
-				c.Name, c.ResidentCalls, n.ResidentCalls)
+				c.Name, c.RoundTrips, n.RoundTrips)
 		}
 		if c.Detail != n.Detail {
 			t.Errorf("%s: the tooltip text is not in the CLI output", c.Name)
@@ -349,7 +349,7 @@ func TestRenderTreeViewSaysWhereItIsAndHowToGoDeeper(t *testing.T) {
 	}
 	out := b.String()
 	for _, want := range []string{
-		"At session", "OF LEVEL", "SESSION", "CALLS", "Drill in with:", "--at",
+		"At session", "OF LEVEL", "SESSION", "TRIPS", "Drill in with:", "--at",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the rendered level is missing %q:\n%s", want, out)
@@ -387,5 +387,60 @@ func whatIfContextFor(s *model.Session, carry analysis.CarryReport) whatif.Conte
 		// The same default as --ratio, so the summary in a test is the summary
 		// a reader gets.
 		CompressionRatio: 0.5,
+	}
+}
+
+func TestRoundTripsDoNotMoveWithTheCostMode(t *testing.T) {
+	// Caching changes what a re-send cost, not how many re-sends there were.
+	// So the ramp quantity must be identical in both modes, and only the cost
+	// moves. If this ever fails, one of the two has been derived from the
+	// other and the viewer's shade has quietly become a price.
+	s := carrySession(t)
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+
+	billed, err := BuildTreeView(s, carry, nil, ModeCarry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uncached, err := BuildTreeView(s, carry, nil, ModeUncached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range billed.Children {
+		u := uncached.Children[i]
+		if c.RoundTrips != u.RoundTrips {
+			t.Errorf("%s: residency moved with the cost mode: %.2f then %.2f",
+				c.Name, c.RoundTrips, u.RoundTrips)
+		}
+		if c.Tokens != u.Tokens || c.Bytes != u.Bytes {
+			t.Errorf("%s: size moved with the cost mode", c.Name)
+		}
+		if c.Cost == u.Cost && c.Cost != 0 {
+			t.Errorf("%s: cost did not move with the cost mode, so caching is not "+
+				"being priced", c.Name)
+		}
+	}
+}
+
+func TestResidencyIsBoundedByAContextResetNotByTheSession(t *testing.T) {
+	// A reset truncates every open residency span, so nothing can be resident
+	// for the whole session once one has happened. This is why the top of the
+	// ramp is well below the call count, and it is worth asserting because the
+	// alternative -- residency running past a compaction -- would overstate
+	// the cost of everything fetched early.
+	s := carrySession(t)
+	cache := analysis.Cache(s, analysis.TTL5m)
+	carry := analysis.Carry(s, cache)
+	if len(carry.Resets) == 0 {
+		t.Skip("the fixture has no context reset")
+	}
+
+	firstReset := carry.Resets[0]
+	for _, it := range carry.Items {
+		if it.EnteredAt < firstReset && it.EnteredAt+it.ResidentFor > firstReset {
+			t.Errorf("retrieval %d entered at call %d and is resident for %d calls, "+
+				"which runs past the reset at call %d",
+				it.RetrievalSeq, it.EnteredAt, it.ResidentFor, firstReset)
+		}
 	}
 }

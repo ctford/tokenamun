@@ -34,7 +34,7 @@ type TreemapPayload struct {
 	Session       treemapSession  `json:"session"`
 	Interventions []treemapWhatIf `json:"interventions"`
 	Tree          *Node           `json:"tree"`
-	// RampMax is the top of the colour ramp, in calls resident. Taken from the
+	// RampMax is the top of the colour ramp, in round trips. Taken from the
 	// tree, so the scale covers exactly what the viewer can draw.
 	RampMax float64 `json:"rampMax"`
 }
@@ -76,24 +76,24 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 	}
 	p.Interventions = interventionTable(s, carry)
 	p.Tree = BuildTree(s, carry)
-	p.RampMax = maxResidentCalls(p.Tree)
+	p.RampMax = maxRoundTrips(p.Tree)
 	return p
 }
 
-// maxResidentCalls is the top of the colour ramp. It comes from the tree
+// maxRoundTrips is the top of the colour ramp. It comes from the tree
 // rather than from the flat retrieval list, so the scale covers exactly the
 // nodes the viewer can draw and no others: a ramp topped out by something
 // off-screen would make every visible rectangle look pale.
-func maxResidentCalls(n *Node) float64 {
+func maxRoundTrips(n *Node) float64 {
 	if n == nil {
 		return 0
 	}
 	max := 0.0
 	if !n.Unscaled {
-		max = n.ResidentCalls
+		max = n.RoundTrips
 	}
 	for _, c := range n.Children {
-		if m := maxResidentCalls(c); m > max {
+		if m := maxRoundTrips(c); m > max {
 			max = m
 		}
 	}

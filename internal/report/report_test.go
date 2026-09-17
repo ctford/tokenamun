@@ -507,7 +507,7 @@ func TestTreemapRampScalesToWhatTheViewerCanDraw(t *testing.T) {
 	var found bool
 	var walk func(*Node)
 	walk = func(n *Node) {
-		if !n.Unscaled && n.ResidentCalls == p.RampMax {
+		if !n.Unscaled && n.RoundTrips == p.RampMax {
 			found = true
 		}
 		for _, c := range n.Children {
@@ -521,7 +521,7 @@ func TestTreemapRampScalesToWhatTheViewerCanDraw(t *testing.T) {
 	// And no drawable node may exceed it, or it would clamp off the top.
 	var over int
 	walk = func(n *Node) {
-		if !n.Unscaled && n.ResidentCalls > p.RampMax {
+		if !n.Unscaled && n.RoundTrips > p.RampMax {
 			over++
 		}
 		for _, c := range n.Children {
