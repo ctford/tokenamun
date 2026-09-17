@@ -21,7 +21,11 @@ import (
 // six Sonnet ones came to be summed into one figure without anyone noticing.
 //
 // Within one model it is exact and needs no price list, which is the reason to
-// have it. Across models, use Prices to get a commensurable total.
+// have it. Across models there is nothing here that makes the total
+// commensurable: an earlier version of this comment sent the reader to a
+// Prices type that does not exist. Reports say when a set spans two pricings;
+// converting to money would need a price table, which is configuration rather
+// than measurement and is deliberately not read.
 //
 // These are published Claude rates and are configuration, not measurement.
 // Check them against your own bill.

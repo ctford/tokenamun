@@ -1,7 +1,8 @@
 # 𓂀 Tokenamun
 
-A token profiler for coding agents. It answers where the tokens went, and what
-they actually cost — for the session you are in, or for a whole team's history.
+A token profiler for coding agents. It tells you and your coding agent where
+the tokens went, and what they actually cost — for the session you are in, or
+for a whole team's history.
 
 Costs are in cost-weighted tokens: every class on one scale where 1 is a
 full-price input token, a cache read is 0.1 and output is 5.0.
@@ -29,10 +30,6 @@ Or with Homebrew:
 ```sh
 brew install --HEAD ctford/tap/tokenamun
 ```
-
-The [formula](https://github.com/ctford/homebrew-tap) builds from `main`, so
-`--HEAD` is required and `brew upgrade --fetch-HEAD tokenamun` picks up new
-commits. Both routes need Go.
 
 To work on it, `go build ./cmd/tokenamun` and run `./scripts/checks.sh` — the
 same script the pre-commit hook and CI run.
