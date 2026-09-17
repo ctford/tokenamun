@@ -30,6 +30,7 @@ type TreemapPayload struct {
 	Tiles            []treemapTile  `json:"tiles"`
 	Categories       []treemapCat   `json:"categories"`
 	Items            []treemapItem  `json:"items"`
+	Tree             *Node          `json:"tree"`
 	MaxCarryPerToken float64        `json:"maxCarryPerToken"`
 	EstimatorNote    string         `json:"estimatorNote"`
 }
@@ -136,6 +137,8 @@ func BuildTreemap(s *model.Session, carry analysis.CarryReport) TreemapPayload {
 		}
 		p.Items = append(p.Items, item)
 	}
+
+	p.Tree = BuildTree(s, carry)
 
 	// Largest first, so the table reads in the same order the eye scans the
 	// treemap.

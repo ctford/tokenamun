@@ -104,12 +104,15 @@
      under it, and a surface-coloured stroke behind white ink on a dark fill
      just smears small labels. */
   .cell text { pointer-events: none; font-size: 11px; }
-  .group-label {
-    pointer-events: none; font-size: 12px; font-weight: 600;
-    fill: var(--text-secondary);
-    paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px;
-    stroke-linejoin: round;
-  }
+  .group-label { pointer-events: none; font-size: 12px; font-weight: 600; }
+
+  nav#crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 10px; font-size: 13px; }
+  nav#crumbs button { padding: 3px 9px; font-size: 13px; border-radius: 5px; border: 1px solid var(--rule); background: var(--surface-1); }
+  nav#crumbs .sep { color: var(--text-muted); }
+  nav#crumbs .here { font-weight: 600; padding: 3px 4px; }
+  .cell { cursor: pointer; }
+  .cell.leaf { cursor: default; }
+  .cell text.inner { font-size: 10px; }
 
   .legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
   .ramp { display: flex; height: 10px; width: 180px; border-radius: 2px; overflow: hidden; }
@@ -156,6 +159,7 @@
   <h2 id="tm-title"></h2>
   <p class="muted" id="tm-sub"></p>
   <div class="panel">
+    <nav id="crumbs" aria-label="Breadcrumb"></nav>
     <svg id="treemap" viewBox="0 0 1000 560" role="img" aria-labelledby="tm-title"></svg>
     <div class="legend">
       <span>carry cost per token: low</span>
@@ -283,16 +287,27 @@ function squarify(items, x, y, w, h) {
 
 const svg = document.getElementById("treemap");
 const tip = document.getElementById("tip");
-const W = 1000, H = 560, GROUP_LABEL = 16;
+const crumbs = document.getElementById("crumbs");
+const W = 1000, H = 560, HEADER = 18;
 let mode = "tokens";
 
+/* The drill-down path, as indices into successive children arrays. */
+let path = [];
+
+function nodeAt(p) {
+  let n = DATA.tree;
+  for (const i of p) n = n.children[i];
+  return n;
+}
+
+function value(n) { return mode === "tokens" ? (n.tokens || 0) : (n.carry || 0); }
+
 /* At 11px the glyphs average ~6px, so a label only earns its place if the
-   truncated form still says something. Measuring per-string would be more
-   precise and is not worth a reflow per cell. */
+   truncated form still says something. */
 function fitLabel(text, widthPx) {
   const room = Math.floor((widthPx - 10) / 6);
   if (room < 5) return "";
-  return text.length <= room ? text : text.slice(0, room - 1) + "\u2026";
+  return text.length <= room ? text : text.slice(0, room - 1) + "…";
 }
 
 /* The ramp inverts between themes - dark mode's high steps are pale blue - so
@@ -305,73 +320,57 @@ function inkFor(step) {
   const fillIsDark = darkMode() ? step <= 3 : step >= 2;
   return fillIsDark ? "#ffffff" : "var(--text-primary)";
 }
-
-function stepFor(item) {
+function stepFor(n) {
   const t = DATA.maxCarryPerToken > 0
-    ? Math.min(1, (item.carryPerToken || 0) / DATA.maxCarryPerToken) : 0;
+    ? Math.min(1, (n.carryPerToken || 0) / DATA.maxCarryPerToken) : 0;
   return Math.min(RAMP.length - 1, Math.floor(Math.sqrt(t) * RAMP.length));
 }
 
-function colourFor(item) {
-  /* Sequential on carry per token: how expensive this content was to keep,
-     relative to its size. Area already carries magnitude. */
-  return `var(${RAMP[stepFor(item)]})`;
-}
-
-function render() {
-  const key = mode === "tokens" ? "tokens" : "carry";
-  const groups = DATA.categories
-    .map(c => ({
-      name: c.name,
-      value: DATA.items.filter(i => i.category === c.name)
-        .reduce((s, i) => s + (i[key] || 0), 0),
-      items: DATA.items.filter(i => i.category === c.name),
-    }))
-    .filter(g => g.value > 0);
-
-  const placedGroups = squarify(groups, 0, 0, W, H);
-  let svgParts = [];
-
-  for (const g of placedGroups) {
-    const innerY = g.y + GROUP_LABEL;
-    const innerH = Math.max(0, g.h - GROUP_LABEL);
-    if (g.w > 46 && g.h > GROUP_LABEL + 4) {
-      const heading = fitLabel(`${g.name} · ${fmt(g.value)}`, g.w);
-      if (heading) {
-        svgParts.push(`<text class="group-label" x="${g.x + 3}" y="${
-          g.y + 11}">${esc(heading)}</text>`);
-      }
+/* Squarified treemap (Bruls, Huizing & van Wijk). Rows are laid out along the
+   shorter side so aspect ratios stay near 1, which is what makes areas
+   comparable by eye. */
+function squarify(items, x, y, w, h) {
+  const total = items.reduce((s, i) => s + i.value, 0);
+  if (total <= 0 || w <= 0 || h <= 0) return [];
+  const scale = (w * h) / total;
+  const queue = items.map(i => ({...i, area: i.value * scale}));
+  const out = [];
+  const worst = (area, side, items) => {
+    const thickness = area / side;
+    let max = 0;
+    for (const it of items) {
+      const len = it.area / thickness;
+      max = Math.max(max, Math.max(thickness / len, len / thickness));
     }
-    const cells = squarify(
-      g.items.map(i => ({...i, value: i[key] || 0})).filter(i => i.value > 0),
-      g.x, innerY, g.w, innerH);
+    return max;
+  };
 
-    for (const c of cells) {
-      const text = c.h > 20 ? fitLabel(c.shortLabel, c.w) : "";
-      const label = text
-        ? `<text x="${c.x + 5}" y="${c.y + 14}" fill="${inkFor(stepFor(c))}">${
-            esc(text)}</text>`
-        : "";
-      svgParts.push(`<g class="cell" data-id="${c.id}">
-        <rect x="${c.x}" y="${c.y}" width="${Math.max(0, c.w)}" height="${Math.max(0, c.h)}"
-          fill="${colourFor(c)}" rx="2"></rect>${label}</g>`);
+  let cx = x, cy = y, cw = w, ch = h;
+  while (queue.length) {
+    const vertical = cw >= ch;
+    const side = vertical ? ch : cw;
+    const row = [queue.shift()];
+    let rowArea = row[0].area;
+    while (queue.length) {
+      const candidate = [...row, queue[0]];
+      if (worst(rowArea + queue[0].area, side, candidate) <= worst(rowArea, side, row)) {
+        rowArea += queue[0].area;
+        row.push(queue.shift());
+      } else break;
     }
+    const thickness = Math.min(rowArea / side, vertical ? cw : ch);
+    let offset = 0;
+    for (const it of row) {
+      const len = rowArea > 0 ? (it.area / rowArea) * side : 0;
+      out.push(vertical
+        ? {...it, x: cx, y: cy + offset, w: thickness, h: len}
+        : {...it, x: cx + offset, y: cy, w: len, h: thickness});
+      offset += len;
+    }
+    if (vertical) { cx += thickness; cw -= thickness; } else { cy += thickness; ch -= thickness; }
+    if (cw <= 0.5 || ch <= 0.5) break;
   }
-  svg.innerHTML = svgParts.join("");
-
-  document.getElementById("tm-title").textContent = mode === "tokens"
-    ? "Area = retrieved tokens (observed size of what entered the context)"
-    : "Area = cost of carry in EIT (derived: what keeping it cost)";
-  /* A sequential ramp encodes "more" as darker on a light surface and as more
-     luminous on a dark one. Both are correct for their surface, so the caption
-     cannot be written once - it would be exactly wrong in one theme. */
-  const heavyEnd = darkMode() ? "brighter" : "darker";
-  const lightEnd = darkMode() ? "deeper" : "paler";
-  document.getElementById("ramp-caption").textContent =
-    `— ${lightEnd} is bulky but cheap to keep; ${heavyEnd} was carried for many calls`;
-  document.getElementById("tm-sub").textContent = mode === "tokens"
-    ? `Grouped by category. Fill shows carry cost per token, so a large ${lightEnd} block is bulky but cheap to keep.`
-    : "Grouped by category. This is the decision-relevant view: content is priced once and carried on every later call.";
+  return out;
 }
 
 function esc(s) {
@@ -379,23 +378,116 @@ function esc(s) {
     ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch]));
 }
 
+function shortName(name) {
+  const i = name.lastIndexOf("/");
+  return i >= 0 && i + 1 < name.length ? name.slice(i + 1) : name;
+}
+
+/* Rectangles are laid out for the current node's children. A child that has
+   children of its own gets a header strip and its contents drawn inside, so
+   one level down is visible without clicking. */
+function render() {
+  const here = nodeAt(path);
+  const kids = (here.children || []).filter(n => value(n) > 0);
+  const placed = squarify(kids.map((n, i) => ({node: n, index: i, value: value(n)})), 0, 0, W, H);
+
+  const parts = [];
+  for (const p of placed) {
+    const n = p.node;
+    const leaf = !n.children || n.children.length === 0;
+    const heading = fitLabel(`${n.name} · ${fmt(value(n))}`, p.w);
+
+    parts.push(`<g class="cell${leaf ? " leaf" : ""}" data-index="${p.index}">`);
+    // A branch gets a neutral fill and a header strip: colouring it the same
+    // way as its contents made the nesting invisible. The ramp carries meaning
+    // only on the smallest rectangles, which is what it is measuring.
+    const fill = leaf ? `var(${RAMP[stepFor(n)]})` : "var(--plane)";
+    parts.push(`<rect x="${p.x}" y="${p.y}" width="${Math.max(0, p.w)}" height="${
+      Math.max(0, p.h)}" fill="${fill}" rx="2" stroke="var(--rule)"></rect>`);
+
+    if (!leaf && p.h > HEADER + 6 && p.w > 60) {
+      const inner = squarify(
+        n.children.filter(k => value(k) > 0).map(k => ({node: k, value: value(k)})),
+        p.x + 1, p.y + HEADER, p.w - 2, p.h - HEADER - 1);
+      for (const q of inner) {
+        parts.push(`<rect x="${q.x}" y="${q.y}" width="${Math.max(0, q.w)}" height="${
+          Math.max(0, q.h)}" fill="var(${RAMP[stepFor(q.node)]})" rx="1"
+          stroke="var(--surface-1)" stroke-width="1.5"></rect>`);
+        const lbl = q.h > 18 ? fitLabel(shortName(q.node.name), q.w) : "";
+        if (lbl) {
+          parts.push(`<text class="inner" x="${q.x + 4}" y="${q.y + 13}" fill="${
+            inkFor(stepFor(q.node))}">${esc(lbl)}</text>`);
+        }
+      }
+    }
+    if (heading) {
+      const ink = leaf ? inkFor(stepFor(n)) : "var(--text-primary)";
+      parts.push(`<text class="group-label" x="${p.x + 4}" y="${p.y + 13}" fill="${
+        ink}">${esc(heading)}</text>`);
+    }
+    parts.push(`</g>`);
+  }
+  svg.innerHTML = parts.join("");
+  renderCrumbs();
+
+  const unit = mode === "tokens" ? "estimated tokens" : "EIT of carry cost";
+  document.getElementById("tm-title").textContent = mode === "tokens"
+    ? "Area = retrieved tokens (observed size of what entered the context)"
+    : "Area = cost of carry in EIT (derived: what keeping it cost)";
+
+  const heavyEnd = darkMode() ? "brighter" : "darker";
+  const lightEnd = darkMode() ? "deeper" : "paler";
+  document.getElementById("ramp-caption").textContent =
+    `— ${lightEnd} is bulky but cheap to keep; ${heavyEnd} was carried for many calls`;
+  document.getElementById("tm-sub").textContent =
+    `${here.name}: ${fmt(value(here))} ${unit} across ${fmt(here.items)} retrievals.` +
+    (path.length === 0
+      ? " The top level is how the content was obtained. Click to drill in."
+      : " Click a rectangle to go deeper, or use the trail above to come back. Esc goes up.");
+}
+
+function renderCrumbs() {
+  const parts = [`<button data-depth="0">all retrieved content</button>`];
+  let n = DATA.tree;
+  path.forEach((idx, depth) => {
+    n = n.children[idx];
+    parts.push(`<span class="sep">/</span>`);
+    if (depth === path.length - 1) {
+      parts.push(`<span class="here">${esc(n.name)}</span>`);
+    } else {
+      parts.push(`<button data-depth="${depth + 1}">${esc(n.name)}</button>`);
+    }
+  });
+  crumbs.innerHTML = parts.join("");
+  crumbs.querySelectorAll("button").forEach(b => {
+    b.onclick = () => { path = path.slice(0, Number(b.dataset.depth)); render(); };
+  });
+}
+
+svg.addEventListener("click", e => {
+  const cell = e.target.closest(".cell");
+  if (!cell || cell.classList.contains("leaf")) return;
+  path = [...path, Number(cell.dataset.index)];
+  tip.style.opacity = 0;
+  render();
+});
+
 /* Hover layer: a tooltip per mark, with hit targets the size of the rect. */
 svg.addEventListener("mousemove", e => {
   const cell = e.target.closest(".cell");
   if (!cell) { tip.style.opacity = 0; tip.setAttribute("aria-hidden", "true"); return; }
-  const item = DATA.items.find(i => String(i.id) === cell.dataset.id);
-  if (!item) return;
-  tip.innerHTML = `<div class="t">${esc(item.label)}</div>
+  const n = nodeAt([...path, Number(cell.dataset.index)]);
+  const leaf = !n.children || n.children.length === 0;
+  tip.innerHTML = `<div class="t">${esc(n.name)}</div>
     <dl>
-      <dt>category</dt><dd>${esc(item.category)}</dd>
-      <dt>tool</dt><dd>${esc(item.tool)}</dd>
-      <dt>tokens</dt><dd>${fmt(item.tokens)}</dd>
-      <dt>bytes</dt><dd>${bytes(item.bytes)}</dd>
-      <dt>entered at</dt><dd>call ${item.enteredAt}</dd>
-      <dt>resident for</dt><dd>${fmt(item.residentFor)} calls</dd>
-      <dt>carry</dt><dd>${fmt(item.carry)} EIT</dd>
-      ${item.range ? `<dt>range</dt><dd>${esc(item.range)}</dd>` : ""}
-    </dl>`;
+      <dt>tokens</dt><dd>${fmt(n.tokens)}</dd>
+      <dt>carry</dt><dd>${fmt(n.carry)} EIT</dd>
+      <dt>bytes</dt><dd>${bytes(n.bytes)}</dd>
+      <dt>retrievals</dt><dd>${fmt(n.items)}</dd>
+      ${leaf ? "" : `<dt>contains</dt><dd>${fmt(n.children.length)}</dd>`}
+    </dl>
+    ${n.detail ? `<div class="muted" style="margin-top:4px">${esc(n.detail)}</div>` : ""}
+    ${leaf ? "" : `<div class="muted" style="margin-top:4px">click to drill in</div>`}`;
   tip.style.opacity = 1;
   tip.setAttribute("aria-hidden", "false");
   const pad = 14;
@@ -409,6 +501,10 @@ svg.addEventListener("mousemove", e => {
 svg.addEventListener("mouseleave", () => {
   tip.style.opacity = 0;
   tip.setAttribute("aria-hidden", "true");
+});
+
+addEventListener("keydown", e => {
+  if (e.key === "Escape" && path.length) { path = path.slice(0, -1); render(); }
 });
 
 const byTokens = document.getElementById("mode-tokens");

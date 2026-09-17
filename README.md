@@ -142,7 +142,7 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun hotspots` | those properties joined against what the session cost |
 | `tokenamun compare` | two sessions side by side |
 | `tokenamun what-if` | would an optimisation have helped, and by how much |
-| `tokenamun treemap` | a standalone HTML report of retrieved content |
+| `tokenamun treemap` | standalone HTML viewer, drilling down from channel to file |
 | `tokenamun series` | experiment probe runs: median, range, payback |
 
 Every milestone in [`docs/plan.md`](docs/plan.md) is implemented. Activity

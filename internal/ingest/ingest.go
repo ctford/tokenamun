@@ -240,6 +240,8 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 		ToolID:        tc.ID,
 		Tool:          tc.Name,
 		Category:      cat,
+		Channel:       content.ChannelFor(tc.Name, meta.Path != ""),
+		CommandClass:  content.CommandClass(tc.Command),
 		CategoryProv:  prov,
 		Declared:      declared,
 		Path:          path,

@@ -41,7 +41,8 @@ Usage:
   tokenamun compare <a> <b>       two sessions side by side
   tokenamun what-if <name> [session]
                                   would an optimisation have helped, and by how much
-  tokenamun treemap [session]     standalone HTML report of retrieved content
+  tokenamun treemap [session]     standalone HTML viewer: drill down from how
+                                  content was obtained to the individual files
   tokenamun series <file>...      probe runs from an experiment: median, range, payback
   tokenamun version
 

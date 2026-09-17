@@ -27,6 +27,30 @@ func Categories() []Category {
 	}
 }
 
+// Channel is how content reached the context. It answers a different question
+// from Category: a decision record read through `cat` is an ADR by category
+// and file reading by channel, and both are worth seeing.
+type Channel string
+
+const (
+	ChanFileRead   Channel = "file reading"
+	ChanShell      Channel = "shell output"
+	ChanWeb        Channel = "web"
+	ChanSubagent   Channel = "subagents"
+	ChanEdit       Channel = "edits"
+	ChanMCP        Channel = "mcp"
+	ChanOtherTool  Channel = "other tools"
+	ChanUserPrompt Channel = "prompts"
+)
+
+// Channels lists every channel in report order.
+func Channels() []Channel {
+	return []Channel{
+		ChanFileRead, ChanShell, ChanWeb, ChanSubagent,
+		ChanEdit, ChanMCP, ChanOtherTool, ChanUserPrompt,
+	}
+}
+
 // RetrievedContent is one payload that entered the model's context as the
 // result of a tool call.
 //
@@ -41,6 +65,11 @@ type RetrievedContent struct {
 	ToolID   string   `json:"tool_id"`
 	Tool     string   `json:"tool"`
 	Category Category `json:"category"`
+	// Channel is how this content arrived, independent of what it is.
+	Channel Channel `json:"channel"`
+	// CommandClass groups shell commands by what they do -- tests, git,
+	// exploration -- so shell output can be drilled into meaningfully.
+	CommandClass string `json:"command_class,omitempty"`
 	// CategoryProv is derived when the path was observed in the tool result,
 	// and inferred when it was parsed out of a shell command line.
 	CategoryProv Provenance `json:"category_provenance"`
