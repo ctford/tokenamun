@@ -30,28 +30,18 @@ const dataPlaceholder = "__TOKENAMUN_DATA__"
 type TreemapPayload struct {
 	// Title is set by the caller, so an agent generating this for a
 	// particular repository can say whose session it is.
-	Title            string          `json:"title"`
-	Session          treemapSession  `json:"session"`
-	Tiles            []treemapTile   `json:"tiles"`
+	Title   string         `json:"title"`
+	Session treemapSession `json:"session"`
+	// Completeness records what the view does not account for. These used to
+	// be headline tiles, which put byte counts beside a cost-weighted
+	// treemap, duplicated the interventions table, and pushed the chart below
+	// the fold. They are caveats, so they now read as caveats.
+	Completeness     []string        `json:"completeness"`
 	Interventions    []treemapWhatIf `json:"interventions"`
 	Items            []treemapItem   `json:"items"`
 	Tree             *Node           `json:"tree"`
 	MaxCarryPerToken float64         `json:"maxCarryPerToken"`
 	EstimatorNote    string          `json:"estimatorNote"`
-}
-
-type treemapSession struct {
-	ID     string `json:"id"`
-	Calls  int    `json:"calls"`
-	Origin string `json:"origin"`
-}
-
-type treemapTile struct {
-	Label      string `json:"label"`
-	Value      string `json:"value"`
-	Provenance string `json:"provenance"`
-	// Note explains a figure whose label cannot carry its own meaning.
-	Note string `json:"note,omitempty"`
 }
 
 // treemapWhatIf is one intervention's bottom line, for the summary table.
@@ -65,6 +55,12 @@ type treemapWhatIf struct {
 	Applicable bool    `json:"applicable"`
 	Note       string  `json:"note"`
 	Caveat     string  `json:"caveat"`
+}
+
+type treemapSession struct {
+	ID     string `json:"id"`
+	Calls  int    `json:"calls"`
+	Origin string `json:"origin"`
 }
 
 type treemapItem struct {
@@ -101,30 +97,7 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 		EstimatorNote: estimatorNote(s),
 	}
 
-	p.Tiles = []treemapTile{
-		{Label: "Prompt cost", Value: num(int(carry.PromptCostEIT)),
-			Provenance: "derived, cost-weighted tokens"},
-		{Label: "Content retrieved", Value: bytesStr(retrieval.Total.Bytes.Value),
-			Provenance: "observed",
-			Note:       "what tools returned into the context"},
-		{Label: "Fetched more than once", Value: bytesStr(retrieval.Total.Redundant.Value),
-			Provenance: "derived",
-			Note:       "byte-identical content the agent asked for again"},
-	}
-	if retrieval.Total.Withheld.Value > 0 {
-		p.Tiles = append(p.Tiles, treemapTile{
-			Label: "Truncated by Claude Code", Value: bytesStr(retrieval.Total.Withheld.Value),
-			Provenance: "observed",
-			Note:       "output too large to send, spilled to a file instead — you were not billed for it",
-		})
-	}
-	if retrieval.Total.Images.Value > 0 {
-		p.Tiles = append(p.Tiles, treemapTile{
-			Label: "Images", Value: num(int(retrieval.Total.Images.Value)),
-			Provenance: "observed",
-			Note:       "priced by dimensions, so their tokens are not estimated here",
-		})
-	}
+	p.Completeness = completenessNotes(s, retrieval)
 
 	p.Interventions = interventionTable(s, carry)
 
@@ -180,6 +153,29 @@ func estimatorNote(s *model.Session) string {
 		"Content token counts are estimated at %.2f bytes per token, calibrated against this "+
 			"session's own observed prompt growth. Token-class costs are observed.",
 		s.Estimator.BytesPerToken)
+}
+
+// completenessNotes says what the view leaves out, which a total cannot.
+func completenessNotes(s *model.Session, retrieval Retrieval) []string {
+	var out []string
+	if v := retrieval.Total.Withheld.Value; v > 0 {
+		out = append(out, fmt.Sprintf(
+			"%s of tool output was too large to send, so Claude Code spilled it to a file "+
+				"and showed the model an excerpt. You were not billed for the rest, and it "+
+				"is not in this view.", bytesStr(v)))
+	}
+	if n := retrieval.Total.Images.Value; n > 0 {
+		out = append(out, fmt.Sprintf(
+			"%d image results are counted but their tokens are not: an image is priced by "+
+				"its dimensions, so a byte ratio would overstate a screenshot by more than "+
+				"an order of magnitude.", int(n)))
+	}
+	if r := retrieval.Total.Redundant.Value; r > 0 {
+		out = append(out, fmt.Sprintf(
+			"%s of what was fetched had already been fetched, byte for byte. The "+
+				"repeated-retrieval row below prices it.", bytesStr(r)))
+	}
+	return out
 }
 
 // interventionTable runs every intervention and keeps the one number each

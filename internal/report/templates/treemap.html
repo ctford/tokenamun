@@ -143,14 +143,14 @@
 
   footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--rule); }
   footer p { color: var(--text-muted); font-size: 12px; margin: 0 0 6px; max-width: 70ch; }
+  footer ul { margin: 6px 0 0; padding-left: 18px; max-width: 70ch; }
+  footer li { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
 </style>
 </head>
 <body>
 <div class="viz-root">
   <h1 id="title">Tokenamun</h1>
   <p class="sub">Session <strong id="sid"></strong> · <span id="calls"></span> API calls · <span id="origin"></span></p>
-
-  <div class="tiles" id="tiles"></div>
 
   <div class="controls">
     <span class="muted">Rectangle area:</span>
@@ -215,6 +215,7 @@
     at any moment. Costs are what each token class was billed at, attributed to the
     content resident when it was sent.</p>
     <p id="foot-est" class="muted"></p>
+    <ul id="completeness" class="muted"></ul>
   </footer>
 </div>
 
@@ -233,16 +234,6 @@ document.getElementById("sid").textContent = DATA.session.id;
 document.getElementById("calls").textContent = fmt(DATA.session.calls);
 document.getElementById("origin").textContent = DATA.session.origin;
 
-/* Stat tiles: headline numbers, each carrying its provenance. */
-document.getElementById("tiles").innerHTML = DATA.tiles.map(t => `
-  <div class="tile">
-    <div class="label">${t.label}</div>
-    <div class="value">${t.value}</div>
-    <div class="prov">${t.provenance}</div>
-    ${t.note ? `<div class="prov" style="margin-top:4px;max-width:20ch">${esc(t.note)}</div>` : ""}
-  </div>`).join("");
-
-/* Category bars: single hue, magnitude only, with the values shown. */
 document.querySelector("#interventions tbody").innerHTML = DATA.interventions.map(i => {
   const effect = i.applicable
     ? (i.effect ? fmt(i.effect) : "—")
@@ -663,6 +654,8 @@ document.getElementById("toggle-theme").onclick = () => {
   render(); // the ramp inverts, so the label ink has to be re-chosen
 };
 
+document.getElementById("completeness").innerHTML =
+  (DATA.completeness || []).map(c => `<li>${esc(c)}</li>`).join("");
 document.getElementById("foot-est").textContent = DATA.estimatorNote +
   (DATA.tree.reconciliation
     ? ` The parts above come to ${pct(100 * -DATA.tree.reconciliation / DATA.tree.carry)} more `
