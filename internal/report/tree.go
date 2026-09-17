@@ -304,17 +304,32 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 }
 
 // collapseLeaves merges repeated names wherever leaves sit, at any depth.
+//
+// A level can hold both leaves and branches -- file content holds individual
+// files alongside a "path not attributed" branch -- so it must do both. An
+// earlier version checked only the first child and returned, which left
+// eighteen separate rows all called "sed" inside a branch it never reached.
 func collapseLeaves(n *Node) {
 	if len(n.Children) == 0 {
 		return
 	}
-	if n.Children[0].Kind == "item" {
-		n.Children = collapseByName(n).Children
+
+	var leaves, branches []*Node
+	for _, child := range n.Children {
+		if child.Kind == "item" {
+			leaves = append(leaves, child)
+			continue
+		}
+		branches = append(branches, child)
+	}
+	for _, b := range branches {
+		collapseLeaves(b)
+	}
+	if len(leaves) == 0 {
 		return
 	}
-	for _, child := range n.Children {
-		collapseLeaves(child)
-	}
+	merged := collapseByName(&Node{Name: n.Name, Kind: n.Kind, Children: leaves})
+	n.Children = append(branches, merged.Children...)
 }
 
 // resultKind decides which mechanism returned a payload, and what to open it

@@ -210,3 +210,40 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// A level can hold both leaves and branches: file content holds individual
+// files alongside a "path not attributed" branch. Collapsing only the first
+// kind left eighteen separate rows all called "sed" in a branch that was
+// never reached.
+func TestRepeatedLeavesMergeEvenBesideBranches(t *testing.T) {
+	s := treeFixture()
+	// Three unattributed sed reads and two of the same file, at one level.
+	s.Retrievals = append(s.Retrievals,
+		model.RetrievedContent{Seq: 4, ToolID: "t4", Tool: "Bash", Channel: model.ChanShell,
+			CommandBinary: "sed", CommandDetail: "sed", Category: model.CatToolOutput,
+			Bytes: 1000, Tokens: 280, InvocationSeq: 0},
+		model.RetrievedContent{Seq: 5, ToolID: "t5", Tool: "Bash", Channel: model.ChanShell,
+			CommandBinary: "sed", CommandDetail: "sed", Category: model.CatToolOutput,
+			Bytes: 2000, Tokens: 550, InvocationSeq: 1},
+		model.RetrievedContent{Seq: 6, ToolID: "t6", Tool: "Bash", Channel: model.ChanShell,
+			CommandBinary: "sed", CommandDetail: "sed", Category: model.CatToolOutput,
+			Bytes: 3000, Tokens: 830, InvocationSeq: 2},
+		model.RetrievedContent{Seq: 7, ToolID: "t7", Tool: "Read", Channel: model.ChanFileRead,
+			Category: model.CatADR, Path: "docs/decisions/a.md",
+			Bytes: 4000, Tokens: 1000, InvocationSeq: 2},
+	)
+	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	files := child(t, tree, "file content")
+
+	// The branch is still there and its repeated leaves have merged.
+	unattributed := child(t, files, "path not attributed")
+	sed := child(t, unattributed, "sed")
+	if sed.Items != 3 {
+		t.Errorf("sed rows = %d, want one row covering 3 retrievals", sed.Items)
+	}
+	// And the files beside that branch merged too.
+	adr := child(t, files, "docs/decisions/a.md")
+	if adr.Items != 2 {
+		t.Errorf("repeated file rows = %d, want one row covering 2 retrievals", adr.Items)
+	}
+}
