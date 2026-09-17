@@ -148,7 +148,6 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun hotspots` | those properties joined against what the session cost |
 | `tokenamun compare` | two sessions side by side |
 | `tokenamun tree` | where the tokens went, one level at a time; `--at` drills in |
-| `tokenamun period` | every session in `--since`/`--until`, summed |
 | `tokenamun doctor` | whether either source is set up to record here |
 | `tokenamun optimise` | what a hypothetical optimisation of part of the tree would be worth |
 | `tokenamun treemap` | standalone HTML viewer, drilling down from channel to file |
@@ -167,17 +166,25 @@ That is deliberate, and a test enforces it. Anything the picture can show and
 the CLI cannot is a question this tool can only answer to a human, and an agent
 driving it would have to ask someone to read the screen.
 
-### Scoping to a period
+### Profiling a team, and a period
+
+`all` is a session selector, alongside `latest` and `current`. With Entire it
+means the whole team's recorded history, because that is what Entire is for —
+profiling one session is the special case, not the shape of the thing.
 
 `--since` and `--until` take a date, a date and time, or an age (`7d`), and
-scope every command to the sessions active in that window. `tokenamun period`
-sums them, which is the unit a before-and-after question needs — seventy
-sessions in a day is not something anybody reads one at a time.
+scope any command to the sessions active in that window.
 
 ```
-tokenamun period --since 2026-09-16          # after we added the thing
-tokenamun period --until 2026-09-16          # before
+tokenamun tree all --since 7d                    # the team's last week
+tokenamun tree all --since 2026-09-16            # after we changed the thing
+tokenamun tree all --until 2026-09-16            # before
+tokenamun treemap all --since 7d -o week.html --title "Last week"
 ```
+
+On one reference repository that is 259 sessions and 36,281 API calls from ten
+people, and every level, percentage and drill-in works exactly as it does over
+a single session.
 
 Whole sessions, never halves. Cost is attributed by residency *within* a
 session, so truncating one would leave content that entered before the window

@@ -99,7 +99,24 @@ func BuildTreeView(s *model.Session, carry analysis.CarryReport, at []string, mo
 		return TreeView{}, fmt.Errorf("unknown mode %q; use %q or %q",
 			mode, ModeCarry, ModeUncached)
 	}
-	root := BuildTree(s, carry)
+	return BuildTreeViewFrom(BuildTree(s, carry), sessionInfo(s), at, mode)
+}
+
+// BuildTreeViewFrom serves a level of a tree that is already built.
+//
+// Split out so a team's whole history can be viewed the same way one session
+// is: `all` merges every session's tree and hands it here, and every level,
+// percentage and drill-in works unchanged. Profiling one session is the
+// special case, not the shape of the thing.
+func BuildTreeViewFrom(root *Node, info SessionInfo, at []string, mode string) (
+	TreeView, error) {
+	if mode == "" {
+		mode = ModeCarry
+	}
+	if mode != ModeCarry && mode != ModeUncached {
+		return TreeView{}, fmt.Errorf("unknown mode %q; use %q or %q",
+			mode, ModeCarry, ModeUncached)
+	}
 	here, path, err := resolve(root, at)
 	if err != nil {
 		return TreeView{}, err
@@ -107,11 +124,10 @@ func BuildTreeView(s *model.Session, carry analysis.CarryReport, at []string, mo
 
 	v := TreeView{
 		SchemaVersion: SchemaVersion,
-		Session:       sessionInfo(s),
+		Session:       info,
 		Mode:          mode,
 		Path:          path,
 		Total:         costOf(root, mode),
-		Warns:         s.Warnings,
 	}
 	if len(path) == 0 {
 		v.Reconciliation = root.Reconciliation
@@ -123,7 +139,7 @@ func BuildTreeView(s *model.Session, carry analysis.CarryReport, at []string, mo
 		child := flatten(c, costOf(here, mode), v.Total, mode, append(path, c.Name))
 		v.Children = append(v.Children, child)
 		if len(c.Children) > 0 {
-			v.Drill = append(v.Drill, fmt.Sprintf("tokenamun tree %s --at %q", s.Ref.ID, child.At))
+			v.Drill = append(v.Drill, fmt.Sprintf("tokenamun tree %s --at %q", info.ID, child.At))
 		}
 	}
 
@@ -196,7 +212,7 @@ func resolve(root *Node, at []string) (*Node, []string, error) {
 
 func pathOrRoot(path []string) string {
 	if len(path) == 0 {
-		return "session"
+		return "everything"
 	}
 	return strings.Join(path, "/")
 }

@@ -155,7 +155,9 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	prev := int64(-1)
 	for _, inv := range s.Invocations {
 		p := inv.Usage.PromptTokens()
-		r.PromptCostEIT += w.PromptCost(inv.Usage)
+		// Priced with this call's own model, not the session's first one.
+		callPrompt, _ := cost.PerCall(inv)
+		r.PromptCostEIT += callPrompt
 		// The same tokens at full input price: what this session would have
 		// cost with no cache at all.
 		r.PromptCostUncachedEIT += float64(p) * w.Input

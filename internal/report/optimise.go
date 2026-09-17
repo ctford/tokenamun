@@ -119,11 +119,21 @@ func ParseOptimisation(at string, becomes float64, label, why string) (Optimisat
 // BuildHypothetical resolves the node and applies the change.
 func BuildHypothetical(s *model.Session, carry analysis.CarryReport, o Optimisation) (
 	Hypothetical, error) {
-	node, path, err := resolve(BuildTree(s, carry), o.At)
+	return BuildHypotheticalFrom(BuildTree(s, carry), sessionInfo(s), o)
+}
+
+// BuildHypotheticalFrom prices a change to a tree that is already built, so
+// "all" can be optimised the same way one session can.
+func BuildHypotheticalFrom(tree *Node, info SessionInfo, o Optimisation) (
+	Hypothetical, error) {
+	node, path, err := resolve(tree, o.At)
 	if err != nil {
 		return Hypothetical{}, err
 	}
-	total := carry.PromptCostEIT + outputCost(s)
+	// The root's own cost is the total, which is true of a merged tree as
+	// much as of one session's: the remainder node exists so the parts
+	// reconcile with the measured bill.
+	total := tree.Carry
 	if node.Carry <= 0 {
 		return Hypothetical{}, fmt.Errorf("%s cost nothing in this session, so there is "+
 			"nothing there to optimise", pathOrRoot(path))
@@ -131,7 +141,7 @@ func BuildHypothetical(s *model.Session, carry analysis.CarryReport, o Optimisat
 
 	h := Hypothetical{
 		SchemaVersion: SchemaVersion,
-		Session:       sessionInfo(s),
+		Session:       info,
 		Name:          o.Label,
 		Applies:       pathOrRoot(path),
 		Addressable:   node.Carry,

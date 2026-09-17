@@ -277,7 +277,7 @@ func TestRenderTreeViewSaysWhereItIsAndHowToGoDeeper(t *testing.T) {
 	}
 	out := b.String()
 	for _, want := range []string{
-		"At session", "OF LEVEL", "SESSION", "TRIPS", "Drill in with:", "--at",
+		"At everything", "OF LEVEL", "SESSION", "TRIPS", "Drill in with:", "--at",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the rendered level is missing %q:\n%s", want, out)

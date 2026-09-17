@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ctford/tokenamun/internal/model"
 )
 
 // capture calls run() with stdout redirected, so the dispatch layer is
@@ -313,7 +315,7 @@ func TestTreeIsNavigableWithoutABrowser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "At session") {
+	if !strings.Contains(out, "At everything") {
 		t.Errorf("the root level should say where it is:\n%s", out)
 	}
 
@@ -464,51 +466,55 @@ func TestWindowScopesToAPeriod(t *testing.T) {
 	}
 }
 
-func TestPeriodSumsEverySessionInTheWindow(t *testing.T) {
+func TestAllSumsEverySessionInTheWindow(t *testing.T) {
+	// "all" is a selector rather than a command, so every level, percentage
+	// and drill-in works over a team's whole history exactly as it does over
+	// one session. That is the point: with Entire, profiling a team is the
+	// normal case and one session is the special one.
 	repo := localFixture(t, "carry.jsonl")
-	out, err := capture(t, "period", "--dir", repo, "--since", "7d")
+	out, err := capture(t, "tree", "all", "--dir", repo, "--since", "7d")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Sessions", "API calls", "OF TOTAL", "TRIPS"} {
+	for _, want := range []string{"sessions", "OF LEVEL", "TRIPS"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("the period report is missing %q:\n%s", want, out)
+			t.Errorf("the summed tree is missing %q:\n%s", want, out)
 		}
 	}
 
-	var doc struct {
-		Window   string `json:"window"`
-		Sessions int    `json:"sessions"`
-		Calls    int    `json:"api_calls"`
-		Tree     struct {
-			Carry    float64 `json:"carry"`
-			Children []struct {
-				Name string `json:"name"`
-			} `json:"children"`
-		} `json:"tree"`
-		Notes []string `json:"notes"`
+	var v struct {
+		Session struct {
+			ID    string `json:"id"`
+			Calls int    `json:"api_calls"`
+		} `json:"session"`
+		Total    float64 `json:"session_total"`
+		Children []struct {
+			Name string `json:"name"`
+		} `json:"children"`
 	}
-	jsonOut, err := capture(t, "period", "--dir", repo, "--since", "7d", "--json")
+	jsonOut, err := capture(t, "tree", "all", "--dir", repo, "--json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal([]byte(jsonOut), &doc); err != nil {
+	if err := json.Unmarshal([]byte(jsonOut), &v); err != nil {
 		t.Fatal(err)
 	}
-	if doc.Sessions != 1 || doc.Calls == 0 || doc.Tree.Carry <= 0 {
-		t.Errorf("unexpected period totals: %+v", doc)
+	if v.Total <= 0 || len(v.Children) == 0 || v.Session.Calls == 0 {
+		t.Errorf("unexpected summed totals: %+v", v)
 	}
-	if doc.Window == "" {
-		t.Error("the report must state the window it covers")
+	// The header says what it covers, since "session" would be a lie.
+	if !strings.Contains(v.Session.ID, "session") {
+		t.Errorf("the id should describe the set, got %q", v.Session.ID)
 	}
-	// It must say that cost adds and residency does not, because that is the
-	// one thing a reader could get wrong about a summed report.
-	var explained bool
-	for _, n := range doc.Notes {
-		explained = explained || strings.Contains(n, "residency is not")
+
+	// And it drills in and optimises like any other selector.
+	if _, err := capture(t, "treemap", "all", "--dir", repo,
+		"-o", filepath.Join(t.TempDir(), "all.html")); err != nil {
+		t.Errorf("treemap all: %v", err)
 	}
-	if !explained {
-		t.Error("a summed report must say what is additive and what is not")
+	if _, err := capture(t, "optimise", "all", "--dir", repo, "--at", "cli output",
+		"--optimise", "0.5", "--why", "A guess."); err != nil {
+		t.Errorf("optimise all: %v", err)
 	}
 }
 
@@ -605,5 +611,45 @@ func TestOptimiseComposesWithTheTree(t *testing.T) {
 	}
 	if h.Share <= 0 || h.Share > 1 {
 		t.Errorf("addressable share %.4f is not a share", h.Share)
+	}
+}
+
+func TestSessionsAreNotListedTwiceWhenBothSourcesHaveThem(t *testing.T) {
+	// A repository with Entire recordings AND local Claude Code transcripts
+	// has both copies of the same session. Listing each twice was cosmetic;
+	// summing them in `period` was not -- eight of seventeen sessions in one
+	// repository appeared twice, so a week's total counted them both.
+	refs := []model.SessionRef{
+		{ID: "a", Origin: model.FromEntire},
+		{ID: "a", Origin: model.FromLocal},
+		{ID: "b", Origin: model.FromEntire},
+		{ID: "c", Origin: model.FromLocal},
+	}
+	got := dedupe(refs)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 unique sessions, got %d: %+v", len(got), got)
+	}
+	byID := map[string]model.SessionRef{}
+	for _, r := range got {
+		byID[r.ID] = r
+	}
+	// The local transcript wins the overlap: both are the same session, but
+	// Entire's copy is a checkpoint snapshot while the local file is appended
+	// to until the session ends.
+	if byID["a"].Origin != model.FromLocal {
+		t.Errorf("the more complete copy should win, got %q", byID["a"].Origin)
+	}
+	// And an Entire-only session must survive. This is the team case: a clone
+	// carries everybody's checkpoints and none of their local transcripts, so
+	// preferring local must never mean discarding what only Entire has.
+	if byID["b"].Origin != model.FromEntire {
+		t.Error("an Entire-only session must be kept")
+	}
+	if _, ok := byID["c"]; !ok {
+		t.Error("a local-only session must be kept")
+	}
+	// Order is preserved, so "latest" still means what it did.
+	if got[0].ID != "a" || got[2].ID != "c" {
+		t.Errorf("discovery order changed: %v", []string{got[0].ID, got[1].ID, got[2].ID})
 	}
 }

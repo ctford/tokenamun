@@ -1,6 +1,6 @@
 // Package cost converts token volume into cost. Volume is not cost: Anthropic
 // prompt caching prices cache reads at a tenth of fresh input and cache writes
-// above it, so on real sessions raw prompt volume overstates cost by ~6x.
+// above it, so on real sessions raw prompt volume overstates cost by 6x to 8x.
 // See METHODOLOGY.md section 3.
 package cost
 
@@ -10,10 +10,18 @@ import (
 	"github.com/ctford/tokenamun/internal/model"
 )
 
-// Weights are per-class multiples of a model's own input price. Because they
-// are relative, the resulting unit -- the effective input-equivalent token
-// (EIT) -- is comparable across models in a mixed session in a way that
-// dollars are not.
+// Weights are per-class multiples of a model's own input price.
+//
+// The resulting unit -- the cost-weighted token -- is therefore MODEL-RELATIVE,
+// and that is a limit, not a feature. One cost-weighted token means "one
+// full-price input token of this model", so a total that spans two models adds
+// quantities of different sizes. An earlier version of this comment claimed
+// the opposite -- that the unit was comparable across models "in a way that
+// dollars are not" -- and that claim is how a week of twelve Opus sessions and
+// six Sonnet ones came to be summed into one figure without anyone noticing.
+//
+// Within one model it is exact and needs no price list, which is the reason to
+// have it. Across models, use Prices to get a commensurable total.
 //
 // These are published Claude rates and are configuration, not measurement.
 // Check them against your own bill.
@@ -72,4 +80,50 @@ func (w Weights) PromptCost(u model.TokenUsage) float64 {
 // OutputCost returns the cost of generated tokens, in EIT.
 func (w Weights) OutputCost(u model.TokenUsage) float64 {
 	return float64(u.Output) * w.Output
+}
+
+// PerCall prices one invocation using its own model's weights.
+//
+// Weights used to be chosen once per session, from the first model seen, and
+// applied to every call in it. That is wrong the moment a session switches
+// model -- which `opusplan` does on every plan-mode toggle -- and badly wrong
+// for a model whose cache reads are priced differently: Fable reads at 0.025x
+// against 0.1x, a fourfold error on the class that is 98% of the volume.
+//
+// The model is recorded on every invocation, so there is no reason to guess.
+func PerCall(inv model.ModelInvocation) (prompt, output float64) {
+	w := For(inv.Model)
+	return w.PromptCost(inv.Usage), w.OutputCost(inv.Usage)
+}
+
+// SessionCost totals a session, pricing each call with its own model.
+func SessionCost(invocations []model.ModelInvocation) (prompt, output float64) {
+	for _, inv := range invocations {
+		p, o := PerCall(inv)
+		prompt += p
+		output += o
+	}
+	return prompt, output
+}
+
+// Mixed reports whether more than one pricing applies across these calls.
+//
+// Worth knowing before quoting a total: within one model the unit is exact,
+// and across models it is a sum of differently-sized things.
+func Mixed(invocations []model.ModelInvocation) bool {
+	var first *Weights
+	for _, inv := range invocations {
+		if !inv.IsRealCall() {
+			continue
+		}
+		w := For(inv.Model)
+		if first == nil {
+			first = &w
+			continue
+		}
+		if w != *first {
+			return true
+		}
+	}
+	return false
 }

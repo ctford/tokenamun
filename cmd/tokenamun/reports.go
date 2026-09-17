@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/codescan"
+	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
 	"github.com/ctford/tokenamun/internal/report"
@@ -21,7 +23,7 @@ import (
 // name, so an agent can answer "where did the tokens go" without a person
 // reading a picture to it.
 func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
-	s, err := loadSelected(dir, source, selector)
+	tree, info, err := loadTree(dir, source, selector)
 	if err != nil {
 		return err
 	}
@@ -29,8 +31,7 @@ func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
 	if at != "" {
 		path = strings.Split(at, "/")
 	}
-	v, err := report.BuildTreeView(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)),
-		path, mode)
+	v, err := report.BuildTreeViewFrom(tree, info, path, mode)
 	if err != nil {
 		return err
 	}
@@ -41,12 +42,12 @@ func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
 }
 
 func cmdTreemap(dir, source, selector, title, outPath string, asJSON bool) error {
-	s, err := loadSelected(dir, source, selector)
+	tree, info, err := loadTree(dir, source, selector)
 	if err != nil {
 		return err
 	}
-	payload := report.BuildTreemapTitled(s,
-		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)), title)
+	payload := report.BuildTreemapFrom(tree,
+		report.TreemapSession(info.ID, info.Calls, string(info.Origin)), title)
 
 	// --json prints the report's own payload: byte for byte what the HTML
 	// viewer is given. It is the guarantee that the two views cannot diverge,
@@ -64,7 +65,7 @@ func cmdTreemap(dir, source, selector, title, outPath string, asJSON bool) error
 	if err := report.RenderTreemap(f, payload); err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s (%d retrievals)\n", outPath, len(s.Retrievals))
+	fmt.Printf("wrote %s (%d retrievals)\n", outPath, payload.Tree.Items)
 	fmt.Println("Area is cost-weighted tokens. It is not a picture of the context window.")
 	return nil
 }
@@ -164,28 +165,72 @@ func cmdHotspots(dir, scanDir, source, selector string, asJSON bool) error {
 	return report.RenderHotspots(os.Stdout, out)
 }
 
-// cmdPeriod sums every session in the window.
+// SelectAll is the session selector that means every session discovered.
 //
-// The unit a before-and-after question needs: 73 sessions in a day is not
-// something anybody reads one at a time.
-func cmdPeriod(dir, source string, asJSON bool) error {
+// A magic selector rather than a separate command, because profiling a team
+// is the point of Entire mode and not a special case of profiling one
+// session. `tokenamun tree all`, `treemap all`, `optimise all` -- every
+// level, percentage and drill-in works unchanged.
+const SelectAll = "all"
+
+// loadAll merges every discovered session into one tree.
+//
+// Trees are merged rather than sessions concatenated: cost is additive across
+// sessions, residency is not, since each session has its own context. See
+// report.BuildPeriod.
+func loadAll(dir, source string) (*report.Node, report.SessionInfo, error) {
 	refs, err := discover(dir, source)
 	if err != nil {
-		return err
+		return nil, report.SessionInfo{}, err
 	}
 	if len(refs) == 0 {
-		return fmt.Errorf("no sessions in %s", window)
+		return nil, report.SessionInfo{}, fmt.Errorf("no sessions in %s", window)
 	}
 	sessions, failed := report.Readable(refs, func(r model.SessionRef) (*model.Session, error) {
 		return ingest.Load(r)
 	})
 	if len(sessions) == 0 {
-		return fmt.Errorf("none of the %d sessions in %s could be read", len(refs), window)
+		return nil, report.SessionInfo{}, fmt.Errorf(
+			"none of the %d sessions in %s could be read", len(refs), window)
+	}
+	for _, f := range failed {
+		fmt.Fprintf(os.Stderr, "tokenamun: skipping %s\n", f)
 	}
 
-	out := report.BuildPeriod(sessions, window.String(), failed)
-	if asJSON {
-		return writeJSON(out)
+	p := report.BuildPeriod(sessions, window.String(), failed)
+	var models []string
+	seen := map[string]bool{}
+	mixed := false
+	for _, s := range sessions {
+		for _, m := range s.Models() {
+			if m != model.SyntheticModel && !seen[m] {
+				seen[m] = true
+				models = append(models, m)
+			}
+		}
+		mixed = mixed || cost.Mixed(s.Invocations)
 	}
-	return report.RenderPeriod(os.Stdout, out)
+	sort.Strings(models)
+	// More than one model across the set is the same problem as within one
+	// session: the unit is relative to a model's own input price.
+	mixed = mixed || len(models) > 1
+	return p.Tree, report.SessionInfo{
+		ID:           fmt.Sprintf("%d sessions, %s", p.Sessions, window),
+		Calls:        p.Calls,
+		Models:       models,
+		MixedPricing: mixed,
+	}, nil
+}
+
+// loadTree resolves a selector to a tree, which is "all" or one session.
+func loadTree(dir, source, selector string) (*report.Node, report.SessionInfo, error) {
+	if selector == SelectAll {
+		return loadAll(dir, source)
+	}
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return nil, report.SessionInfo{}, err
+	}
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	return report.BuildTree(s, carry), report.SessionOf(s), nil
 }

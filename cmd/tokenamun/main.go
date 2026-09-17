@@ -39,7 +39,6 @@ Usage:
   tokenamun compare <a> <b>       two sessions side by side
   tokenamun tree [session]        where the tokens went, one level at a time;
                                   drill in with --at. The HTML viewer as text.
-  tokenamun period                every session in --since/--until, summed
   tokenamun treemap [session]     standalone HTML viewer: drill down from how
                                   content was obtained to the individual files.
                                   --json prints the viewer's own payload.
@@ -49,8 +48,17 @@ Usage:
   tokenamun version
 
 Session selector:
-  a session-id prefix, or "current" for the session invoking this tool,
-  or "latest" (the default) for the most recently active one.
+  "all"      every session discovered, summed. With Entire this is the
+             whole team's history, which is what Entire is for.
+  "current"  the session invoking this tool
+  "latest"   the most recently active (the default)
+  or a session-id prefix.
+
+Profiling a period, which is what an experiment needs:
+  tokenamun tree all --since 7d           the team's last week
+  tokenamun tree all --since 2026-09-16   since we changed the thing
+  tokenamun tree all --until 2026-09-16   before we changed it
+  tokenamun treemap all --since 7d -o week.html --title "Last week"
 
 Hypothetical optimisations:
   tokenamun optimise --at "cli output" --optimise 0.5 --why "..."
@@ -150,8 +158,6 @@ func run(args []string) error {
 	switch cmd {
 	case "doctor":
 		return cmdDoctor(*dir, *asJSON)
-	case "period":
-		return cmdPeriod(*dir, *source, *asJSON)
 	case "sessions":
 		return cmdSessions(*dir, *source, *asJSON)
 	case "profile":
@@ -234,6 +240,7 @@ func discover(dir, source string) ([]model.SessionRef, error) {
 		}
 		refs = append(refs, found...)
 	}
+	refs = dedupe(refs)
 	refs = model.InWindow(refs, window)
 	sort.SliceStable(refs, func(i, j int) bool {
 		if refs[i].Current != refs[j].Current {
@@ -496,12 +503,11 @@ func cmdOptimise(dir, source, selector string, a optimiseArgs, asJSON bool) erro
 	if err != nil {
 		return err
 	}
-	s, err := loadSelected(dir, source, selector)
+	tree, info, err := loadTree(dir, source, selector)
 	if err != nil {
 		return err
 	}
-	h, err := report.BuildHypothetical(s,
-		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)), o)
+	h, err := report.BuildHypotheticalFrom(tree, info, o)
 	if err != nil {
 		return err
 	}
@@ -509,4 +515,38 @@ func cmdOptimise(dir, source, selector string, a optimiseArgs, asJSON bool) erro
 		return writeJSON(h)
 	}
 	return report.RenderHypothetical(os.Stdout, h)
+}
+
+// dedupe keeps one ref per session id.
+//
+// A repository with Entire recordings AND local Claude Code transcripts has
+// both copies of the same session, and `sessions` listed each of them twice
+// without anyone questioning it. That was cosmetic until `period` started
+// summing: eight of seventeen sessions in one repository appeared twice, so
+// the week's total was inflated by counting them both.
+//
+// The local transcript wins. Both are the same session, but Entire's copy is
+// a snapshot taken at a checkpoint while the local file is appended to until
+// the session ends, so local is the more complete of the two. Where Entire is
+// the only source -- a clone, where the local transcripts stayed on the
+// machine that recorded them -- it is used unchanged.
+func dedupe(refs []model.SessionRef) []model.SessionRef {
+	best := map[string]model.SessionRef{}
+	var order []string
+	for _, r := range refs {
+		prev, seen := best[r.ID]
+		if !seen {
+			best[r.ID] = r
+			order = append(order, r.ID)
+			continue
+		}
+		if prev.Origin != model.FromLocal && r.Origin == model.FromLocal {
+			best[r.ID] = r
+		}
+	}
+	out := make([]model.SessionRef, 0, len(order))
+	for _, id := range order {
+		out = append(out, best[id])
+	}
+	return out
 }

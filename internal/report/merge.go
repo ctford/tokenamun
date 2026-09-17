@@ -1,10 +1,7 @@
 package report
 
 import (
-	"fmt"
-	"io"
 	"sort"
-	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/model"
@@ -145,54 +142,4 @@ func Readable(refs []model.SessionRef, load func(model.SessionRef) (*model.Sessi
 		return out[i].Ref.Modified.Before(out[j].Ref.Modified)
 	})
 	return out, failed
-}
-
-// RenderPeriod writes the summed level, the same shape as one session's.
-func RenderPeriod(w io.Writer, p Period) error {
-	b := &strings.Builder{}
-	b.WriteString("TOKENAMUN  where the tokens went, over a period\n\n")
-	fmt.Fprintf(b, "%s\n", p.Window)
-	fmt.Fprintf(b, "  Sessions           %14s\n", num(p.Sessions))
-	fmt.Fprintf(b, "  API calls          %14s\n", num(p.Calls))
-	fmt.Fprintf(b, "  Cost               %14s\n\n", num(int(p.Tree.Carry)))
-
-	if len(p.Failed) > 0 {
-		fmt.Fprintf(b, "%s could not be read, so this total is over %s of %s:\n",
-			num(len(p.Failed)), num(p.Sessions), num(p.Sessions+len(p.Failed)))
-		for i, f := range p.Failed {
-			if i >= 3 {
-				fmt.Fprintf(b, "  ... and %s more\n", num(len(p.Failed)-i))
-				break
-			}
-			fmt.Fprintf(b, "  %s\n", f)
-		}
-		b.WriteString("\n")
-	}
-
-	fmt.Fprintf(b, "%-38s %8s %13s %7s  %s\n",
-		"INSIDE", "OF TOTAL", "COST", "TRIPS", "CONTAINS")
-	for _, c := range p.Tree.Children {
-		trips := "   --"
-		if c.RoundTrips > 0 {
-			trips = num(int(c.RoundTrips))
-		}
-		contains := pluralRetrievals(c.Items)
-		if len(c.Children) > 0 {
-			contains = num(len(c.Children)) + " inside"
-		}
-		share := 0.0
-		if p.Tree.Carry > 0 {
-			share = c.Carry / p.Tree.Carry
-		}
-		fmt.Fprintf(b, "%-38s %8s %13s %7s  %s\n",
-			trunc(c.Name, 38), pctStr(share), num(int(c.Carry)), trips, contains)
-	}
-	b.WriteString("\n")
-
-	for _, n := range p.Notes {
-		fmt.Fprintf(b, "%s\n", wrap(n, 74, ""))
-	}
-	b.WriteString("\n")
-	_, err := io.WriteString(w, b.String())
-	return err
 }

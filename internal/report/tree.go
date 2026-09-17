@@ -568,7 +568,10 @@ func collapseSingleChildDirs(n *Node) {
 //
 
 func outputCost(s *model.Session) float64 {
-	return cost.For(firstModel(s)).OutputCost(s.Usage())
+	// Per call, so a session that switched model is priced with the weights
+	// that actually applied to each call rather than to its first.
+	_, out := cost.SessionCost(s.Invocations)
+	return out
 }
 
 // apportion splits non-thinking output between prose and tool arguments by

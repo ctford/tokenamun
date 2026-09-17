@@ -140,7 +140,8 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 	var usage model.TokenUsage
 	for _, inv := range s.Invocations {
 		usage = usage.Add(inv.Usage)
-		r.TotalCostEIT += w.PromptCost(inv.Usage)
+		callPrompt, _ := cost.PerCall(inv)
+		r.TotalCostEIT += callPrompt
 	}
 	r.Writes5m, r.Writes1h = usage.CacheCreation5m, usage.CacheCreation1h
 	switch {

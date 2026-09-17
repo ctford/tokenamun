@@ -30,14 +30,20 @@ type Profile struct {
 
 // SessionInfo identifies what was profiled.
 type SessionInfo struct {
-	ID       string       `json:"id"`
-	Origin   model.Origin `json:"origin"`
-	Current  bool         `json:"current"`
-	Models   []string     `json:"models"`
-	Branch   string       `json:"branch,omitempty"`
-	Calls    int          `json:"api_calls"`
-	Prompts  int          `json:"user_prompts"`
-	Duration string       `json:"duration"`
+	ID      string       `json:"id"`
+	Origin  model.Origin `json:"origin"`
+	Current bool         `json:"current"`
+	Models  []string     `json:"models"`
+	Branch  string       `json:"branch,omitempty"`
+	Calls   int          `json:"api_calls"`
+	// MixedPricing is true when more than one pricing applies across the
+	// calls. A cost-weighted token is relative to a model's own input price,
+	// so a total that spans two of them adds quantities of different sizes.
+	// Reported rather than corrected: correcting it needs a price list, which
+	// is configuration this tool does not have.
+	MixedPricing bool   `json:"mixed_pricing,omitempty"`
+	Prompts      int    `json:"user_prompts"`
+	Duration     string `json:"duration"`
 }
 
 // UsageReport separates volume from cost, which are different quantities.
@@ -146,7 +152,8 @@ func sessionInfo(s *model.Session) SessionInfo {
 		ID: s.Ref.ID, Origin: s.Ref.Origin, Current: s.Ref.Current,
 		Models: s.Models(), Branch: s.Branch,
 		Calls: s.RealCalls(), Prompts: s.Prompts,
-		Duration: s.Duration().Round(time.Second).String(),
+		MixedPricing: cost.Mixed(s.Invocations),
+		Duration:     s.Duration().Round(time.Second).String(),
 	}
 }
 
@@ -200,6 +207,10 @@ func RenderText(w io.Writer, p Profile) error {
 	b.WriteString("\n")
 	fmt.Fprintf(b, "  Source             %s\n", p.Session.Origin)
 	fmt.Fprintf(b, "  Model              %s\n", strings.Join(p.Session.Models, ", "))
+	if p.Session.MixedPricing {
+		b.WriteString("  ! these models are priced differently, so the cost-weighted\n" +
+			"    total adds quantities of different sizes\n")
+	}
 	fmt.Fprintf(b, "  API calls          %s\n", num(p.Session.Calls))
 	fmt.Fprintf(b, "  User prompts       %s\n", num(p.Session.Prompts))
 	fmt.Fprintf(b, "  Duration           %s\n\n", p.Session.Duration)
@@ -310,3 +321,7 @@ func trunc(s string, n int) string {
 	}
 	return s[:n-1] + "…"
 }
+
+// SessionOf is the session header a report prints, for callers outside this
+// package that need it beside a tree.
+func SessionOf(s *model.Session) SessionInfo { return sessionInfo(s) }

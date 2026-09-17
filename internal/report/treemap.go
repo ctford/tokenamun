@@ -51,15 +51,31 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 	if title == "" {
 		title = "Tokenamun"
 	}
-	p := TreemapPayload{
-		Title: title,
-		Session: treemapSession{
-			ID: s.Ref.ID, Calls: s.RealCalls(), Origin: string(s.Ref.Origin),
-		},
+	return BuildTreemapFrom(BuildTree(s, carry), treemapSession{
+		ID: s.Ref.ID, Calls: s.RealCalls(), Origin: string(s.Ref.Origin),
+	}, title)
+}
+
+// BuildTreemapFrom renders a tree that is already built.
+//
+// So a team's whole history draws the same picture one session does: `all`
+// merges every session's tree and hands it here.
+func BuildTreemapFrom(tree *Node, session treemapSession, title string) TreemapPayload {
+	if title == "" {
+		title = "Tokenamun"
 	}
-	p.Tree = BuildTree(s, carry)
-	p.RampMax = maxRoundTrips(p.Tree)
-	return p
+	return TreemapPayload{
+		Title:   title,
+		Session: session,
+		Tree:    tree,
+		RampMax: maxRoundTrips(tree),
+	}
+}
+
+// TreemapSession describes what a payload covers, for callers outside this
+// package that have merged several sessions.
+func TreemapSession(id string, calls int, origin string) treemapSession {
+	return treemapSession{ID: id, Calls: calls, Origin: origin}
 }
 
 // maxRoundTrips is the top of the colour ramp. It comes from the tree
