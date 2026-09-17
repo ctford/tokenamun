@@ -343,6 +343,26 @@ func cmdCarry(dir, source, selector string, asJSON bool) error {
 }
 
 func cmdCache(dir, source, selector string, asJSON bool) error {
+	// "all" parses each transcript once in this process. Summing it by
+	// shelling out per session took long enough on 131 sessions that I gave
+	// up waiting, which is its own argument for the selector being
+	// everywhere rather than only where it was convenient.
+	if selector == SelectAll {
+		sessions, info, err := loadSessions(dir, source)
+		if err != nil {
+			return err
+		}
+		var reports []analysis.CacheReport
+		for _, s := range sessions {
+			reports = append(reports, analysis.Cache(s, analysis.TTL5m))
+		}
+		r := report.BuildCacheOf(info, analysis.Merge(reports))
+		if asJSON {
+			return writeJSON(r)
+		}
+		return report.RenderCache(os.Stdout, r)
+	}
+
 	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err

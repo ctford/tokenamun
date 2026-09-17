@@ -294,3 +294,58 @@ func ColdCalls(r CacheReport) map[int]bool {
 	}
 	return cold
 }
+
+// Merge adds cache reports together, for a period or a team.
+//
+// Cost is additive across sessions, so the totals add: each report was
+// computed against its own session's model weights and its own gaps. What is
+// not additive is a session-shaped narrative -- the individual misses, whose
+// sequence numbers mean nothing once two sessions are in one list -- so they
+// are dropped rather than concatenated into a list that reads like one
+// session's history.
+//
+// The TTL, by contrast, has to be reconciled rather than summed: a set where
+// some sessions ran the 5-minute lifetime and others the 1-hour one is a
+// different situation from either, and saying "5m" would hide it.
+func Merge(reports []CacheReport) CacheReport {
+	out := CacheReport{ByCause: map[string]CauseAgg{}}
+	ttls := map[string]bool{}
+	for _, r := range reports {
+		out.Writes5m += r.Writes5m
+		out.Writes1h += r.Writes1h
+		out.TotalCostEIT += r.TotalCostEIT
+		out.ExpiryCostEIT += r.ExpiryCostEIT
+		out.UnexplainedCost += r.UnexplainedCost
+		out.AvoidableTokens += r.AvoidableTokens
+		out.LongerTTLNetEIT += r.LongerTTLNetEIT
+		if r.ObservedTTL != "" {
+			ttls[r.ObservedTTL] = true
+		}
+		for cause, agg := range r.ByCause {
+			cur := out.ByCause[cause]
+			cur.Calls += agg.Calls
+			cur.Tokens += agg.Tokens
+			cur.CostEIT += agg.CostEIT
+			cur.TTLFixes = cur.TTLFixes || agg.TTLFixes
+			out.ByCause[cause] = cur
+		}
+	}
+	switch len(ttls) {
+	case 0:
+	case 1:
+		for t := range ttls {
+			out.ObservedTTL = t
+		}
+	default:
+		out.ObservedTTL = "mixed across sessions"
+	}
+	if out.TotalCostEIT > 0 {
+		out.ExpiryShare = out.ExpiryCostEIT / out.TotalCostEIT
+		out.LongerTTLShare = out.LongerTTLNetEIT / out.TotalCostEIT
+		for cause, agg := range out.ByCause {
+			agg.Share = agg.CostEIT / out.TotalCostEIT
+			out.ByCause[cause] = agg
+		}
+	}
+	return out
+}

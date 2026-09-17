@@ -305,3 +305,57 @@ func TestRebuildAfterCompactionIsAttributedToTheCompaction(t *testing.T) {
 		t.Error("nothing should be left unexplained here")
 	}
 }
+
+func TestMergeAddsCostsAndReconcilesTheTTL(t *testing.T) {
+	// Cost is additive across sessions: each report was computed against its
+	// own session's weights and its own gaps, so the totals add.
+	a := CacheReport{
+		ObservedTTL: "5m", Writes5m: 1000, TotalCostEIT: 5000,
+		ExpiryCostEIT: 1000, AvoidableTokens: 800, LongerTTLNetEIT: -400,
+		ByCause: map[string]CauseAgg{"ttl_expiry": {Calls: 2, Tokens: 800, CostEIT: 1000}},
+		// Misses are session-shaped: their sequence numbers mean nothing once
+		// two sessions are in one list.
+		Misses: []Miss{{Seq: 3, Cause: CauseTTLExpiry}},
+	}
+	b := CacheReport{
+		ObservedTTL: "1h", Writes1h: 500, TotalCostEIT: 3000,
+		ExpiryCostEIT: 300, AvoidableTokens: 100, LongerTTLNetEIT: 200,
+		ByCause: map[string]CauseAgg{
+			"ttl_expiry":   {Calls: 1, Tokens: 100, CostEIT: 300},
+			"model_switch": {Calls: 1, Tokens: 50, CostEIT: 60},
+		},
+		Misses: []Miss{{Seq: 3, Cause: CauseModelSwitch}},
+	}
+
+	m := Merge([]CacheReport{a, b})
+	if m.TotalCostEIT != 8000 || m.ExpiryCostEIT != 1300 {
+		t.Errorf("costs did not add: %.0f total, %.0f expiry", m.TotalCostEIT, m.ExpiryCostEIT)
+	}
+	if m.AvoidableTokens != 900 || m.LongerTTLNetEIT != -200 {
+		t.Errorf("the TTL figures did not add: %d avoidable, %.0f net",
+			m.AvoidableTokens, m.LongerTTLNetEIT)
+	}
+	// A set where some sessions ran 5m and others 1h is a different situation
+	// from either, and reporting "5m" would hide it.
+	if m.ObservedTTL != "mixed across sessions" {
+		t.Errorf("observed TTL = %q, want it to admit the mixture", m.ObservedTTL)
+	}
+	// Causes combine by name; shares are recomputed against the new total.
+	if got := m.ByCause["ttl_expiry"]; got.Calls != 3 || got.CostEIT != 1300 {
+		t.Errorf("ttl_expiry merged to %+v", got)
+	}
+	if got := m.ByCause["ttl_expiry"].Share; got < 0.162 || got > 0.163 {
+		t.Errorf("share = %.4f, want 1300/8000", got)
+	}
+	// And the session-shaped narrative is dropped rather than concatenated
+	// into a list that reads like one session's history.
+	if len(m.Misses) != 0 {
+		t.Errorf("individual misses must not survive a merge, got %d", len(m.Misses))
+	}
+
+	// One report in, the same report out.
+	if one := Merge([]CacheReport{a}); one.ObservedTTL != "5m" ||
+		one.TotalCostEIT != a.TotalCostEIT {
+		t.Errorf("merging one report changed it: %+v", one)
+	}
+}

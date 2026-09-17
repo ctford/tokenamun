@@ -179,6 +179,20 @@ const SelectAll = "all"
 // sessions, residency is not, since each session has its own context. See
 // report.BuildPeriod.
 func loadAll(dir, source string) (*report.Node, report.SessionInfo, error) {
+	sessions, info, err := loadSessions(dir, source)
+	if err != nil {
+		return nil, report.SessionInfo{}, err
+	}
+	p := report.BuildPeriod(sessions, window.String(), nil)
+	return p.Tree, info, nil
+}
+
+// loadSessions parses every discovered session once, in this process.
+//
+// Shared by every command that takes "all", so a team-wide report reads each
+// transcript a single time. Summing by invoking the binary per session was
+// slow enough on 131 sessions to be unusable.
+func loadSessions(dir, source string) ([]*model.Session, report.SessionInfo, error) {
 	refs, err := discover(dir, source)
 	if err != nil {
 		return nil, report.SessionInfo{}, err
@@ -197,11 +211,12 @@ func loadAll(dir, source string) (*report.Node, report.SessionInfo, error) {
 		fmt.Fprintf(os.Stderr, "tokenamun: skipping %s\n", f)
 	}
 
-	p := report.BuildPeriod(sessions, window.String(), failed)
 	var models []string
+	var calls int
 	seen := map[string]bool{}
 	mixed := false
 	for _, s := range sessions {
+		calls += s.RealCalls()
 		for _, m := range s.Models() {
 			if m != model.SyntheticModel && !seen[m] {
 				seen[m] = true
@@ -214,9 +229,9 @@ func loadAll(dir, source string) (*report.Node, report.SessionInfo, error) {
 	// More than one model across the set is the same problem as within one
 	// session: the unit is relative to a model's own input price.
 	mixed = mixed || len(models) > 1
-	return p.Tree, report.SessionInfo{
-		ID:           fmt.Sprintf("%d sessions, %s", p.Sessions, window),
-		Calls:        p.Calls,
+	return sessions, report.SessionInfo{
+		ID:           fmt.Sprintf("%d sessions, %s", len(sessions), window),
+		Calls:        calls,
 		Models:       models,
 		MixedPricing: mixed,
 	}, nil

@@ -146,3 +146,11 @@ func RenderCache(w io.Writer, r Cache) error {
 	_, err := io.WriteString(w, b.String())
 	return err
 }
+
+// BuildCacheOf assembles the report from an already-merged analysis, for the
+// "all" selector where there is no single session to describe.
+func BuildCacheOf(info SessionInfo, c analysis.CacheReport) Cache {
+	r := BuildCache(&model.Session{}, c)
+	r.Session = info
+	return r
+}
