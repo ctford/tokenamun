@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "session": {
+    "id": "carry-fixture",
+    "origin": "entire",
+    "current": false,
+    "models": [
+      "claude-opus-5"
+    ],
+    "branch": "main",
+    "api_calls": 8,
+    "user_prompts": 1,
+    "duration": "28m40s"
+  },
+  "context": {
+    "peak_prompt_tokens": {
+      "value": 35701,
+      "unit": "tokens",
+      "provenance": "observed"
+    },
+    "final_prompt_tokens": {
+      "value": 6501,
+      "unit": "tokens",
+      "provenance": "observed"
+    },
+    "prompt_cost": {
+      "value": 107359.29999999999,
+      "unit": "eit",
+      "provenance": "derived"
+    },
+    "reset_calls": [
+      6
+    ]
+  },
+  "preamble": {
+    "tokens": {
+      "value": 30001,
+      "unit": "tokens",
+      "provenance": "observed"
+    },
+    "carry": {
+      "value": 49501.65,
+      "unit": "eit",
+      "provenance": "derived"
+    },
+    "share_of_prompt_cost": {
+      "value": 0.46108394894527077,
+      "unit": "ratio",
+      "provenance": "derived"
+    },
+    "note": "The preamble is the first call's whole prompt: system prompt, tool schemas, instruction files and skills together. It cannot be decomposed, because none of those are in the transcript."
+  },
+  "items": [
+    {
+      "tool": "Read",
+      "path": "internal/payment/charge.go",
+      "category": "source code",
+      "tokens": {
+        "value": 1194.3992401190255,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 0,
+      "resident_for_calls": {
+        "value": 5,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 1970.758746196392,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    },
+    {
+      "tool": "Bash",
+      "category": "tool output",
+      "tokens": {
+        "value": 59.71996200595128,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 1,
+      "resident_for_calls": {
+        "value": 4,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 92.56594110922448,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    },
+    {
+      "tool": "Bash",
+      "category": "tool output",
+      "tokens": {
+        "value": 59.71996200595128,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 2,
+      "resident_for_calls": {
+        "value": 3,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 86.59394490862935,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    },
+    {
+      "tool": "Bash",
+      "category": "tool output",
+      "tokens": {
+        "value": 59.71996200595128,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 3,
+      "resident_for_calls": {
+        "value": 2,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 80.62194870803424,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    },
+    {
+      "tool": "Bash",
+      "path": "docs/adr/0003-retries.md",
+      "category": "adrs",
+      "tokens": {
+        "value": 663.5551333994587,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 4,
+      "resident_for_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 0,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 66.35551333994587,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    }
+  ],
+  "unattributed_growth_share": {
+    "value": -0.03267373356334402,
+    "unit": "ratio",
+    "provenance": "derived"
+  },
+  "notes": [
+    "Carry is the cost of re-sending content on later calls, not the cost of fetching it.",
+    "Cold calls rebuilt the prefix and were billed at the cache write rate; warm calls were read at a tenth of input price.",
+    "Per-item cache class is not directly observable: the API reports one split per call, so residency is priced per call."
+  ]
+}

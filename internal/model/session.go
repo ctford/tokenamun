@@ -44,6 +44,19 @@ type ModelInvocation struct {
 	Entries int `json:"entries"`
 }
 
+// SyntheticModel is the marker Claude Code writes when an entry stands in for
+// a failed request rather than recording a real one.
+const SyntheticModel = "<synthetic>"
+
+// IsRealCall reports whether this invocation was an actual API request.
+//
+// It matters for any comparison between consecutive calls: an error entry
+// carries no prompt and a placeholder model, so treating it as the predecessor
+// makes the next real call look like a model switch when nothing switched.
+func (m ModelInvocation) IsRealCall() bool {
+	return m.Usage.PromptTokens() > 0 && m.Model != SyntheticModel
+}
+
 // ToolCall pairs a tool invocation with its result.
 type ToolCall struct {
 	Seq           int    `json:"seq"`

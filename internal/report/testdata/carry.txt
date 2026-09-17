@@ -1,0 +1,31 @@
+TOKENAMUN  cost of carry
+
+Session carry-fixture
+  API calls          8
+
+Context trajectory
+  Peak prompt                  35,701   [observed]
+  Final prompt                  6,501   [observed]
+  Prompt cost                 107,359   [derived]
+  Context resets               call 6   [observed]  (content does not survive these)
+
+Session preamble, paid on every call
+  Preamble                     30,001   [observed]
+  Cost of carrying it          49,501   [derived]
+  Share of prompt cost          46.1%   [derived]
+  The preamble is the first call's whole prompt: system prompt, tool
+  schemas, instruction files and skills together. It cannot be decomposed,
+  because none of those are in the transcript.
+
+Most expensive to carry (not the largest)
+  CONTENT                                TOKENS   CALLS   COLD  CARRY (EIT)
+  internal/payment/charge.go              1,194       5      1        1,970
+  (Bash output)                              59       4      1           92
+  (Bash output)                              59       3      1           86
+  (Bash output)                              59       2      1           80
+  docs/adr/0003-retries.md                  663       1      0           66
+
+Unattributed growth             -3.3%   [derived]
+  System reminders, attachments and message envelopes. Reported
+  rather than distributed across items.
+

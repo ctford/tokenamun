@@ -130,10 +130,16 @@ counterfactual.
 ## Status
 
 Experimental and partly built. Working today, against both sources:
-`tokenamun sessions`, `tokenamun profile` (deduplicated token accounting and
-cache-weighted cost) and `tokenamun retrieval` (what entered the context, by
-category, with repeated-retrieval detection). Carry, cache-miss attribution,
-code scans, counterfactuals and the treemap are planned — see the milestones in
+
+| command | what it answers |
+| --- | --- |
+| `tokenamun sessions` | what transcripts it can see |
+| `tokenamun profile` | where the tokens went, and what they cost |
+| `tokenamun retrieval` | what content entered the context, and from where |
+| `tokenamun carry` | what it cost to *keep* content, not to fetch it |
+| `tokenamun cache` | why the prompt cache was rebuilt, and what that cost |
+
+Code scans, counterfactuals and the treemap are planned — see the milestones in
 [`docs/plan.md`](docs/plan.md). Activity classification is deliberately last:
 it is inferred, and the observed answers are the ones worth trusting.
 

@@ -374,9 +374,10 @@ func estimate(s *model.Session) {
 	var samples []tokens.Sample
 	for k := 1; k < len(s.Invocations); k++ {
 		prev, cur := s.Invocations[k-1], s.Invocations[k]
-		// A model switch rebuilds the whole prefix, so the growth across that
-		// boundary is not content arriving.
-		if prev.Model != cur.Model {
+		// Error entries are not requests, so the growth across them is not
+		// content arriving; nor is the growth across a model switch, which
+		// rebuilds the whole prefix.
+		if !prev.IsRealCall() || !cur.IsRealCall() || prev.Model != cur.Model {
 			continue
 		}
 		samples = append(samples, tokens.Sample{

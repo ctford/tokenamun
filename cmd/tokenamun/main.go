@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/claudecode"
 	"github.com/ctford/tokenamun/internal/entire"
 	"github.com/ctford/tokenamun/internal/ingest"
@@ -29,6 +30,8 @@ Usage:
   tokenamun sessions              list the sessions it can see
   tokenamun profile [session]     where the tokens went, and what they cost
   tokenamun retrieval [session]   what content entered the context, and from where
+  tokenamun carry [session]       what it cost to keep content, not to fetch it
+  tokenamun cache [session]       why the prompt cache was rebuilt, and what it cost
   tokenamun version
 
 Session selector:
@@ -74,6 +77,10 @@ func run(args []string) error {
 		return cmdProfile(*dir, *source, selector, *asJSON)
 	case "retrieval":
 		return cmdRetrieval(*dir, *source, selector, *asJSON)
+	case "carry":
+		return cmdCarry(*dir, *source, selector, *asJSON)
+	case "cache":
+		return cmdCache(*dir, *source, selector, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
 		fmt.Println("validated against Entire CLI 0.10.2 and Claude Code 2.1.x transcripts")
@@ -166,6 +173,30 @@ func cmdRetrieval(dir, source, selector string, asJSON bool) error {
 		return writeJSON(r)
 	}
 	return report.RenderRetrieval(os.Stdout, r)
+}
+
+func cmdCarry(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return err
+	}
+	r := report.BuildCarry(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	if asJSON {
+		return writeJSON(r)
+	}
+	return report.RenderCarry(os.Stdout, r)
+}
+
+func cmdCache(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return err
+	}
+	r := report.BuildCache(s, analysis.Cache(s, analysis.TTL5m))
+	if asJSON {
+		return writeJSON(r)
+	}
+	return report.RenderCache(os.Stdout, r)
 }
 
 // loadSelected resolves a selector and parses the transcript it names.

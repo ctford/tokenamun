@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "session": {
+    "id": "carry-fixture",
+    "origin": "entire",
+    "current": false,
+    "models": [
+      "claude-opus-5"
+    ],
+    "branch": "main",
+    "api_calls": 8,
+    "user_prompts": 1,
+    "duration": "28m40s"
+  },
+  "observed_ttl": "5m",
+  "cache_writes_5m": {
+    "value": 74900,
+    "unit": "tokens",
+    "provenance": "observed"
+  },
+  "cache_writes_1h": {
+    "value": 0,
+    "unit": "tokens",
+    "provenance": "observed"
+  },
+  "prompt_cost": {
+    "value": 107359.29999999999,
+    "unit": "eit",
+    "provenance": "derived"
+  },
+  "by_cause": [
+    {
+      "cause": "ttl_expiry",
+      "calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "rebuilt_tokens": {
+        "value": 34500,
+        "unit": "tokens",
+        "provenance": "observed"
+      },
+      "cost": {
+        "value": 43125,
+        "unit": "eit",
+        "provenance": "derived"
+      },
+      "share_of_prompt_cost": {
+        "value": 0.4016885355996174,
+        "unit": "ratio",
+        "provenance": "derived"
+      },
+      "avoidable_by_longer_ttl": true
+    },
+    {
+      "cause": "session_start",
+      "calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "rebuilt_tokens": {
+        "value": 30000,
+        "unit": "tokens",
+        "provenance": "observed"
+      },
+      "cost": {
+        "value": 37500,
+        "unit": "eit",
+        "provenance": "derived"
+      },
+      "share_of_prompt_cost": {
+        "value": 0.349294378782276,
+        "unit": "ratio",
+        "provenance": "derived"
+      },
+      "avoidable_by_longer_ttl": false
+    },
+    {
+      "cause": "compaction_or_reset",
+      "calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "rebuilt_tokens": {
+        "value": 6100,
+        "unit": "tokens",
+        "provenance": "observed"
+      },
+      "cost": {
+        "value": 7625,
+        "unit": "eit",
+        "provenance": "derived"
+      },
+      "share_of_prompt_cost": {
+        "value": 0.07102319035239613,
+        "unit": "ratio",
+        "provenance": "derived"
+      },
+      "avoidable_by_longer_ttl": false
+    }
+  ],
+  "ttl_expiry": {
+    "cost": {
+      "value": 43125,
+      "unit": "eit",
+      "provenance": "derived"
+    },
+    "share_of_prompt_cost": {
+      "value": 0.4016885355996174,
+      "unit": "ratio",
+      "provenance": "derived"
+    },
+    "note": "Expiry is attributed by elimination, after the observable causes. MCP server changes, plugin toggles and tool-deny rules also invalidate the cache and are not visible in a transcript, so they appear as unexplained rather than being blamed on the TTL."
+  },
+  "notes": [
+    "The TTL each call used is observed, from the API's own 5m/1h split.",
+    "A cache entry's lifetime runs from request start and a read refreshes it, so calls starting closer together than the TTL keep the prefix warm.",
+    "Claude Code exposes promptCacheTtl and subagentPromptCacheTtl (5m or 1h) since v2.1.242."
+  ]
+}

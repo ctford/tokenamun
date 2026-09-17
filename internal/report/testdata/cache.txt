@@ -1,0 +1,23 @@
+TOKENAMUN  prompt cache
+
+Session carry-fixture
+  API calls          8
+  Observed TTL                     5m   [observed]
+  Writes at 5m                 74,900   [observed]
+  Writes at 1h                      0   [observed]
+  Prompt cost                 107,359   [derived]
+
+Why the cache was rebuilt
+  CAUSE                    CALLS         TOKENS   COST (EIT)   % COST
+  ttl_expiry                   1         34,500       43,125    40.2%  <- a longer TTL would have avoided this
+  session_start                1         30,000       37,500    34.9%
+  compaction_or_reset          1          6,100        7,625     7.1%
+
+TTL expiry
+  Cost                         43,125   [derived]
+  Share of prompt cost          40.2%   [derived]
+  Expiry is attributed by elimination, after the observable causes. MCP
+  server changes, plugin toggles and tool-deny rules also invalidate the
+  cache and are not visible in a transcript, so they appear as unexplained
+  rather than being blamed on the TTL.
+

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
 )
@@ -179,4 +180,53 @@ func compareGolden(t *testing.T, name string, got []byte) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("%s differs from golden file.\n--- got ---\n%s\n--- want ---\n%s", name, got, want)
 	}
+}
+
+func carrySession(t *testing.T) *model.Session {
+	t.Helper()
+	s, err := ingest.Load(model.SessionRef{
+		ID:         "carry-fixture",
+		Transcript: filepath.Join("..", "ingest", "testdata", "carry.jsonl"),
+		Origin:     model.FromEntire,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func TestCarryGoldenOutput(t *testing.T) {
+	s := carrySession(t)
+	r := BuildCarry(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+
+	var text bytes.Buffer
+	if err := RenderCarry(&text, r); err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "carry.txt", text.Bytes())
+
+	pretty, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "carry.json", append(pretty, '\n'))
+	walkQuantities(t, "carry", mustTree(t, r))
+}
+
+func TestCacheGoldenOutput(t *testing.T) {
+	s := carrySession(t)
+	r := BuildCache(s, analysis.Cache(s, analysis.TTL5m))
+
+	var text bytes.Buffer
+	if err := RenderCache(&text, r); err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "cache.txt", text.Bytes())
+
+	pretty, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "cache.json", append(pretty, '\n'))
+	walkQuantities(t, "cache", mustTree(t, r))
 }
