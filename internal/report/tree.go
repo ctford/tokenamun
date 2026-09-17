@@ -271,7 +271,7 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 				key += "/" + level
 				child := nested[key]
 				if child == nil {
-					child = &Node{Name: level, Kind: "command"}
+					child = &Node{Name: level, Kind: "command", Detail: levelDetail(level)}
 					nested[key] = child
 					parent.Children = append(parent.Children, child)
 				}
@@ -281,8 +281,14 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 
 		leafName := c.Path
 		if leafName == "" {
-			leafName = c.CommandDetail
-			if leafName == "" {
+			// Inside the unidentified-files branch the only thing known
+			// about a payload is the command that produced it, so the label
+			// has to say that is what it is naming.
+			if kind == "file content" && c.CommandBinary != "" {
+				leafName = "read via " + c.CommandBinary
+			} else if c.CommandDetail != "" {
+				leafName = c.CommandDetail
+			} else {
 				leafName = "(unattributed " + c.Tool + " output)"
 			}
 		}
@@ -469,7 +475,7 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 			if c.Path != "" {
 				return "file content", ""
 			}
-			return "file content", "path not attributed"
+			return "file content", "unidentified files"
 		}
 		// Grouped by the tool that ran, not by a purpose category: "which
 		// CLI" is a question about tools.
@@ -493,12 +499,23 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 	return "harness tools", c.Tool
 }
 
+// levelDetail explains a level whose name cannot carry its own meaning.
+func levelDetail(level string) string {
+	if level == "unidentified files" {
+		return "file contents read through the shell where the filename could not be " +
+			"recovered, because the command was compound or the path was in a variable: " +
+			"`cd /repo && echo \"=== spec ===\" && sed -n '1,80p' \"$SPEC\"`. It is real file " +
+			"reading with the file unknown. Reads through the Read tool, or through simpler " +
+			"commands, are attributed to their files."
+	}
+	return ""
+}
+
 func kindDetail(kind string) string {
 	switch kind {
 	case "file content":
 		return "the contents of files, however they arrived: the Read tool, cat and sed, or a " +
-			"tool that returned a document. Reads whose path could not be recovered from a " +
-			"compound command are grouped separately rather than counted as commands."
+			"tool that returned a document."
 	case "CLI output":
 		return "what command-line tools reported: git, test runners, builds, searches, listings."
 	case "harness tools":

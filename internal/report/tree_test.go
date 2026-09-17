@@ -272,8 +272,8 @@ func TestRepeatedLeavesMergeEvenBesideBranches(t *testing.T) {
 	files := child(t, tree, "file content")
 
 	// The branch is still there and its repeated leaves have merged.
-	unattributed := child(t, files, "path not attributed")
-	sed := child(t, unattributed, "sed")
+	unidentified := child(t, files, "unidentified files")
+	sed := child(t, unidentified, "read via sed")
 	if sed.Items != 3 {
 		t.Errorf("sed rows = %d, want one row covering 3 retrievals", sed.Items)
 	}
