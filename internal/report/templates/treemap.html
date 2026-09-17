@@ -173,11 +173,11 @@
       <tbody></tbody>
     </table>
     <div class="legend" id="legend">
-      <span>carry cost per token: low</span>
+      <span id="ramp-low">Shade: what a token of it cost</span>
       <span class="ramp" id="ramp"></span>
-      <span>high</span>
+      <span id="ramp-high"></span>
       <span class="muted" id="ramp-caption"></span>
-      <span class="muted">· grey = no attributable token count, so the ramp does not apply</span>
+      <span class="muted">· grey = nothing to divide by, so there is no rate to shade</span>
     </div>
   </div>
 
@@ -459,10 +459,15 @@ function render() {
   document.getElementById("tm-title").textContent =
     mode === "uncached" ? `${here.name} — without caching` : here.name;
 
-  const heavyEnd = darkMode() ? "brighter" : "darker";
-  const lightEnd = darkMode() ? "deeper" : "paler";
+  // The shade is carry cost divided by content size: what a single token of
+  // this content ended up costing, on the same scale the areas use. Said as a
+  // multiple, because a multiple is the part a reader can act on -- it is how
+  // many times over you paid for content you fetched once.
+  document.getElementById("ramp-high").textContent =
+    `up to ${fmt(Math.round(DATA.maxCarryPerToken))}\u00d7`;
   document.getElementById("ramp-caption").textContent =
-    `— ${lightEnd} is bulky but cheap to keep; ${heavyEnd} was carried for many calls`;
+    "— content that arrived on the last call was paid for about once. Content that "
+    + "arrived early was re-sent on every call after it, and each of those paid again.";
 
   // What each level means is already on the node itself, in the tooltip. A
   // second copy up here was a guess keyed off node kind, and it went stale.

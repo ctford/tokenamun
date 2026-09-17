@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -96,6 +97,7 @@ func ParseWith(r io.Reader, ref model.SessionRef, opts Options) (*model.Session,
 	}
 
 	resolveTools(s, toolIndex)
+	relativise(s)
 	estimate(s)
 	findRepeats(s)
 	diagnose(s)
@@ -441,6 +443,40 @@ func estimate(s *model.Session) {
 	for i := range s.Retrievals {
 		s.Retrievals[i].Tokens = ratio.Count(s.Retrievals[i].Bytes)
 		s.Retrievals[i].TokensProv = ratio.Provenance()
+	}
+}
+
+// relativise rewrites retrieval paths to be relative to the repository the
+// session ran in.
+//
+// Two reasons, and the second is the one that matters. A tree of file content
+// rooted at /Users/<someone> spends its first two levels on directories that
+// are the same for every file, so the drill-down starts one useful level deep.
+// And an absolute path carries the name of whoever ran the session: these
+// reports get pasted into issues and talks, and a profiler should not be the
+// thing that publishes a home directory.
+//
+// A path outside the repository keeps its shape but loses the home directory,
+// because where it is relative to the work is the informative part.
+func relativise(s *model.Session) {
+	if s.CWD == "" {
+		return
+	}
+	home, _ := os.UserHomeDir()
+	shorten := func(p string) string {
+		if p == "" || !filepath.IsAbs(p) {
+			return p
+		}
+		if rel, err := filepath.Rel(s.CWD, p); err == nil && !strings.HasPrefix(rel, "..") {
+			return rel
+		}
+		if home != "" && strings.HasPrefix(p, home+string(filepath.Separator)) {
+			return "~" + p[len(home):]
+		}
+		return p
+	}
+	for i := range s.Retrievals {
+		s.Retrievals[i].Path = shorten(s.Retrievals[i].Path)
 	}
 }
 

@@ -1,6 +1,8 @@
 package ingest
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -143,4 +145,54 @@ func hasWarning(s *model.Session, code string) bool {
 		}
 	}
 	return false
+}
+
+func TestPathsAreRelativeToTheRepositoryAndCarryNoHomeDirectory(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory to test against")
+	}
+	repo := filepath.Join(home, "work", "project")
+	s := &model.Session{CWD: repo}
+	s.Retrievals = []model.RetrievedContent{
+		{Path: filepath.Join(repo, "internal", "thing.go")},
+		{Path: filepath.Join(home, "Downloads", "notes.txt")},
+		{Path: "/etc/hosts"},
+		{Path: "already/relative.md"},
+		{Path: ""},
+	}
+	relativise(s)
+
+	want := []string{
+		// Inside the repository: relative, so the drill-down starts at a
+		// level that tells you something.
+		filepath.Join("internal", "thing.go"),
+		// Outside it: keeps its shape, loses the username. These reports get
+		// pasted into issues.
+		filepath.Join("~", "Downloads", "notes.txt"),
+		"/etc/hosts",
+		"already/relative.md",
+		"",
+	}
+	for i, w := range want {
+		if got := s.Retrievals[i].Path; got != w {
+			t.Errorf("path %d: got %q, want %q", i, got, w)
+		}
+	}
+	for _, r := range s.Retrievals {
+		if strings.Contains(r.Path, home) {
+			t.Errorf("%q still contains the home directory", r.Path)
+		}
+	}
+}
+
+func TestRelativiseDoesNothingWithoutACheckout(t *testing.T) {
+	// An Entire export or a transcript without a cwd entry: a path we cannot
+	// place is left exactly as it was found rather than guessed at.
+	s := &model.Session{Retrievals: []model.RetrievedContent{{Path: "/somewhere/else.go"}}}
+	relativise(s)
+	if s.Retrievals[0].Path != "/somewhere/else.go" {
+		t.Errorf("path was rewritten without a repository to be relative to: %q",
+			s.Retrievals[0].Path)
+	}
 }
