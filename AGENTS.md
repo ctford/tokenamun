@@ -2,200 +2,132 @@
 
 Guidance for coding agents working in this repository.
 
-Tokenamun is an **experimental** profiler for coding-agent token usage. It reads
-session data that Entire has already recorded and reports where tokens went.
-[`SPEC.md`](SPEC.md) is the brief, [`docs/plan.md`](docs/plan.md) is the
-architecture and milestone plan, and [`docs/research-entire.md`](docs/research-entire.md)
-records what the data actually contains.
-[`docs/optimisation-claims.md`](docs/optimisation-claims.md) surveys the claims
-this tool exists to adjudicate. Read the research notes before touching
-the adapters — most of the non-obvious design decisions are consequences of
-something measured there.
+Tokenamun is an **experimental** profiler for coding-agent token usage.
+[`METHODOLOGY.md`](METHODOLOGY.md) is canonical on how every number is
+computed; [`docs/research-entire.md`](docs/research-entire.md) on what the
+data contains. Read the latter before touching an adapter — most non-obvious
+decisions there follow from something measured in it.
 
 ## Everything committed here is published publicly
 
-This repository is intended to be released as open source. Treat every commit
-as public the moment it is made.
-
-Before staging anything, confirm it contains nothing that isn't yours to
-publish:
+Treat every commit as public the moment it is made. Commit messages included.
 
 * **No data from the repositories we profile.** No transcripts, no `.entire/`
-  directories, no prompts, no tool output, no source code from another project.
-  This includes data quoted inside documentation and tests.
-* **No identifiers from private work.** No real session UUIDs, no checkpoint
-  ULIDs, no file paths from private repositories, no branch names, no commit
-  SHAs, no author names or email addresses beyond this repo's own git history.
-  **Never name a profiled project**, in code, in documentation, in a test
-  fixture, or in a commit message.
+  directories, no prompts, no tool output, no source from another project,
+  including inside documentation and tests.
+* **Never name a profiled project** — not in code, documentation, a fixture,
+  or a commit message.
 * **Never attribute a measurement to a project.** A number measured from
-  private work does not become publishable by being an aggregate. "131
-  sessions and 1.5B cost-weighted tokens" is that team's week, and naming the
-  repository beside it hands over their volume, their headcount and their
-  bill. What survives is the lesson without the measurement: "a repository
-  had a fraction of its checkpoints locally and the rest on the remote" says
-  everything the version with the counts in it said.
-* **Measurements from this repository's own sessions are fine**, and they are
-  what most of the reasoning in the history rests on. The distinction is
-  whose data it is, not how big the number is.
-* **No credentials.** No API keys, no tokens, no `.env`. `--tokenizer=api` reads
-  from the environment and nothing else.
+  private work does not become publishable by being an aggregate: "131
+  sessions and 1.5B cost-weighted tokens" is that team's week, and the name
+  beside it hands over their volume, headcount and bill. Keep the lesson,
+  drop the measurement.
+* **No identifiers from private work**: session UUIDs, checkpoint ULIDs,
+  paths, branch names, commit SHAs, author names. No credentials.
+* **This repository's own sessions are fine.** The distinction is whose data
+  it is, not how large the number is.
 
-Commit messages are committed content, and are checked as such.
+`.gitignore` is a backstop, not the control. If something private is already
+committed, say so rather than fixing it forward: it needs history rewriting
+before any push.
 
-`.gitignore` blocks the obvious accidents (`.entire/`, `*.jsonl` outside
-`testdata/`, `.env`), but it is a backstop, not the control. Check `git diff
---staged` before committing, and if something private has already been
-committed, say so immediately rather than layering a fix on top — it needs
-history rewriting before any push.
+### The guard contains no private names
 
-### The guard, and why the names are not in it
+`scripts/leakscan.sh` scans tracked file contents and every commit message.
 
-`scripts/leakscan.sh` scans tracked file contents *and* every commit message.
-Two rules about its own construction:
+A public repository carrying a denylist of client names publishes the list it
+exists to protect. So the built-in patterns are generic shapes — a real home
+directory, a path out into a named sibling checkout — and specific names live
+in `.private-names`: one regex per line, gitignored, a failure if ever
+tracked. Without it the generic rules still run. It never prints what it
+matched, because that copies the secret into the CI log.
 
-* **It contains no private names.** A public repository carrying a denylist of
-  client project names publishes the list it exists to protect. The built-in
-  patterns are generic shapes — a real home directory, a relative path up and
-  out into a named sibling checkout — and specific names live in
-  `.private-names`, one extended regex per line, gitignored and local. The guard fails if that file is ever tracked.
-  Without it the generic rules still run.
-* **It never prints what it matched.** A failure names the file, the line and
-  the rule. Echoing the offending line would copy the secret into the CI log,
-  which is the leak with extra steps.
+`scripts/test-leak-guard.sh` exercises it against strings it must catch and
+must not, under the shell options the gates use. Keep it that way: a guard
+whose patterns quietly match nothing reports success, so the only evidence it
+works is a case where it fails.
 
-`scripts/test-leak-guard.sh` runs it against strings it must catch and strings
-it must not, and runs it under the same shell options the gates use. Keep it
-that way: a guard whose patterns quietly match nothing reports success, so the
-only evidence it works is a case where it fails.
+### Fixtures are synthetic
 
-### Test fixtures must be anonymised
+Real transcripts teach you the format's *shape*; they do not go in
+`testdata/`. Write fixtures by hand for a specific shape — repeated
+`requestId`s, a partial Read, a truncated Bash result — with filler content
+sized to the counts a test asserts on. Never commit a fixture copied from a
+real transcript, even partially, even in a comment.
 
-Real Entire data is the right way to learn the *shape* of the format. It is not
-allowed into `testdata/`.
-
-Fixtures come from two places:
-
-1. **Synthetic** — hand-written to exercise a specific shape (repeated
-   `requestId`s, a partial Read, a truncated Bash result, a checkpoint with no
-   transcript offset).
-2. **Anonymised** — generated by `tools/anonymise` from a real session. It
-   replaces content with deterministic filler of *identical byte length*,
-   rewrites paths and identifiers, and preserves every size, count, hash
-   relationship and usage number. The accounting behaviour survives; the content
-   does not.
-
-Never commit a fixture you obtained by copying a real transcript, even
-partially, even in a comment. If a test needs real-world scale, generate it.
-
-## The three rules that the tests protect
-
-These come from [`docs/plan.md`](docs/plan.md) and are not negotiable without
-changing the plan first.
+## The four rules the tests protect
 
 1. **Every number carries a provenance label** — `observed`, `derived`,
-   `inferred`, or `counterfactual`. This is a type, not a comment, and the
+   `inferred` or `counterfactual`. It is a type, not a comment, and the
    renderer cannot print an unlabelled number.
 2. **Token accounting comes from the transcript, deduplicated by `requestId`.**
-   An `assistant` entry is a content block, not an API call; summing per entry
-   overstates by ~70%. Never derive token totals from checkpoint `token_usage` —
-   it is cumulative in some checkpoints and a delta in others with nothing to
-   distinguish them.
-3. **Retrieved-content tokens and billed tokens are different quantities and are
-   never added together.**
-4. **Volume is not cost.** Rankings are in effective input-equivalent tokens,
-   weighted by the Anthropic prompt-cache class each re-send was actually billed
-   at — cache read 0.1×, 5-minute write 1.25×, 1-hour write 2×. Raw token counts
-   overstate cost by ~6× on real sessions. Raw volume may be shown alongside;
-   it is never shown alone, and nothing is called expensive on volume alone.
+   An `assistant` entry is a content block, not an API call. Never derive
+   totals from checkpoint `token_usage`: it is cumulative in some checkpoints
+   and a delta in others, with nothing to distinguish them.
+3. **Retrieved-content tokens and billed tokens are different quantities**, and
+   are never added together.
+4. **Volume is not cost.** Rankings are in cost-weighted tokens, priced at the
+   cache class each re-send was actually billed at. Raw volume may appear
+   alongside; never alone, and nothing is called expensive on volume alone.
 
-If a change makes one of those harder to hold, that is the thing to discuss, not
-route around. [`METHODOLOGY.md`](METHODOLOGY.md) is the canonical statement of
-all four and of how every reported number is computed; if you change the
-accounting, you change that document in the same commit.
+Changing one of these means changing [`METHODOLOGY.md`](METHODOLOGY.md) in the
+same commit.
 
 ## Conventions
 
-* **Go only.** Single static binary, no runtime dependencies. No Node, no
-  Python in the shipped tool (`tools/` helpers may be Go too — keep them Go
-  unless there's a reason). `go.mod` may carry `tool` dependencies for the
-  checks — they are pinned so an analyser release cannot change what a check
-  says about an unchanged commit, and nothing in the shipped binary imports
-  them. `examples/` is outside the tool and may be in any language.
+* **Go only.** One static binary, no runtime dependencies. `go.mod` may carry
+  pinned `tool` dependencies for the checks; nothing shipped imports them.
+* **Stream, don't slurp.** Transcripts reach 9 MB. Nothing loads a whole one.
 * **The adapters are a quarantine.** Only `internal/entire` and
   `internal/claudecode` may know a field name from someone else's format.
-  Everything downstream consumes `internal/model` types. New format knowledge
-  goes in `assumptions.go` with a note on how we detect it breaking.
-* **Stream, don't slurp.** Transcripts reach 9 MB. Nothing loads a whole one.
+  Everything downstream consumes `internal/model`. New format knowledge goes
+  in `assumptions.go` with a note on how we detect it breaking.
 * **Output is terse; the argument goes where there is room.** No paragraphs in
-  a table cell, a tooltip, a chart legend or beside a number. A reader hovering
-  a box is competing with the box for their own attention, and a table of eight
-  rows with a paragraph in each is eight paragraphs nobody reads. So: say the
-  one thing in a sentence, and put the reasoning in the field or command that
-  exists for it — `caveat` with `caveat_detail`, `Detail` with `DetailMore`,
-  the treemap legend with `tokenamun tree`. Enforced where it can be: caveats
-  and not-measurable reasons are capped at 64 characters, tooltips at 280, and
-  tests hold the built-ins to both.
+  a table cell, tooltip, legend, or beside a number. Say the one thing in a
+  sentence and put the reasoning in the field that exists for it — `caveat`
+  with `caveat_detail`, `Detail` with `DetailMore`, the legend with
+  `tokenamun tree`. Caveats are capped at 64 characters, tooltips at 280. A
+  node's description is a definition: what is in the box, not why it matters.
 
-  This is not a licence to drop the caveat. Terse is not silent, and every
-  number still arrives with the thing to know before quoting it. What changed
-  is where the argument for it lives. A short caveat must still be a claim —
-  "A ceiling, not an estimate." — because a one-word label qualifies nothing.
-
-  Code comments are the exception and stay as long as they need to be: they
-  explain decisions to whoever changes them next, and nobody is reading them
-  on a chart.
-* **Filter by developer, never report by developer.** Scoping an analysis to
-  whose sessions you are looking at is legitimate and useful -- it is how you
-  help somebody. A dimension that ranks people is the failure mode this tool
-  is closest to. Selecting is not the same as comparing.
-* **Measure; do not model.** The tool reports what a session cost and where it
-  went. It does not model named techniques: a vendor's figure applied to your
-  session is that vendor's claim wearing this tool's authority. The one
-  counterfactual is `optimise`, where the caller names both the change and the
-  reason it is plausible, and the unknown section always prints. If a new
-  question needs an assumed parameter, that is a sign it belongs to the caller.
+  Terse is not silent: a short caveat must still be a claim — "A ceiling, not
+  an estimate." — because a one-word label qualifies nothing. Code comments
+  are the exception and stay as long as they need to be.
+* **Filter by developer, never report by developer.** Scoping to whose
+  sessions you look at is how you help somebody. A dimension that ranks people
+  is the failure mode this tool is closest to.
+* **Measure; do not model.** No named techniques: a vendor's figure applied to
+  your session is that vendor's claim wearing this tool's authority. The one
+  counterfactual is `optimise`, where the caller supplies both the change and
+  the reason, and the unknown section always prints. A new question needing an
+  assumed parameter belongs to the caller.
 * **Nothing is viewer-only.** The HTML report and the CLI answer the same
-  questions: `tree` is the drill-down, `what-if --all` is the interventions
-  table, `treemap --json` is the payload the HTML is handed. A test asserts
-  they cannot diverge. This tool is meant to be driven by an agent, and a
-  finding only a browser can show is a finding the agent has to ask a human to
-  read out.
-* **The checks are gates, not reports.** `scripts/checks.sh` enforces a
-  coverage floor (80%), a file-length, function-complexity and duplication
-  budget measured by the tool's own scanner, and a dead-code check. The
-  budgets are ratchets set just above where the codebase is. Raise one only
-  with the reason in the commit message; the failure mode of a budget nobody
-  defends is a budget that only ever goes up.
+  questions, from the same payload, and a test asserts they cannot diverge. A
+  finding only a browser can show is one the agent must ask a human to read
+  out.
+* **The checks are gates, not reports.** `scripts/checks.sh` runs gofmt, vet,
+  race tests, the private-data guards, dead code, an 80% coverage floor and
+  file-length, complexity and duplication budgets from the tool's own scanner.
+  The budgets are ratchets set just above where the code is; raise one only
+  with the reason in the commit message.
 * **Tests before green.** Table-driven unit tests per package; golden-file
-  integration tests over `testdata/` that exercise the whole pipeline without
-  Entire, git-over-network, or an API key. `-update` regenerates goldens —
-  inspect the diff, don't rubber-stamp it.
+  tests over `testdata/` with no network and no API key. `-update` regenerates
+  goldens — read the diff.
 * **Accounting invariants are property tests**, not fixed numbers: deduplicated
-  totals never exceed naive totals; carry never exceeds summed prompt tokens;
-  every counterfactual reduction is ≤ its observed eligible volume; every
-  intervention returns a non-empty `unknown`.
-* **JSON output is an API.** It is how coding agents consume this tool. It has a
-  `schema_version` and golden tests. Changing a key is a breaking change even
-  while the project is experimental — bump and note it.
-* **No network in tests.** `--tokenizer=api` is exercised against a fake.
-* **Commit as you go.** Small, working commits at each natural checkpoint rather
-  than one large drop at the end — a milestone is several commits, not one. Run
-  the private-data check in the section above before each `git add`, and keep the
-  message about *why* the change was made. Don't push without being asked.
-* **Iconography: no pyramids.** Tutankhamun reigned around 1330 BC, roughly
-  twelve centuries after the pyramid age. If this project ever gets a logo or
-  README art, the Egyptian references need to be New Kingdom, not Old.
+  totals never exceed naive ones; carry never exceeds summed prompt tokens; a
+  counterfactual reduction never exceeds the volume it applies to.
+* **JSON output is an API** — it is how agents consume this tool. It has a
+  `schema_version` and golden tests; changing a key is a breaking change.
+* **Commit as you go.** Small working commits at each natural checkpoint, with
+  the message about *why*. Don't push without being asked.
+* **Iconography: no pyramids.** Tutankhamun reigned around 1330 BC, twelve
+  centuries after the pyramid age — New Kingdom references only.
 
 ## Things not to build
 
-The spec is explicit about scope, and the temptations are real:
-
 * No session capture, hooks, or proxy. Tokenamun reads; Entire records.
-* No SaaS, accounts, centralised telemetry, or dashboards.
-* No exact context-window reconstruction. We report observed prompt sizes and
-  say what we cannot decompose.
-* No developer-level metrics or leaderboards. Tokenamun is a sensor, not a
-  judge — see [`docs/interventions.md`](docs/interventions.md#the-anti-pattern-to-avoid-building).
-* No fabricated precision. If the evidence isn't in the data, the command says
-  `not measurable from this data`. That output is a feature.
+* No SaaS, accounts, telemetry, or dashboards.
+* No exact context-window reconstruction: report observed prompt sizes and say
+  what cannot be decomposed.
+* No developer-level metrics or leaderboards.
+* No fabricated precision. Where the evidence is not in the data, the command
+  says `not measurable from this data`. That output is a feature.

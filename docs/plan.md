@@ -539,33 +539,28 @@ profiles should stay small enough to be uninteresting, and we should check
 rather than assume. `tokenamun profile` run against a session that itself used
 Tokenamun is the test.
 
-## Retiring the spec
+## The spec is retired
 
-`SPEC.md` is a brief, and a brief is spent once it has been delivered. The
-intention is to delete it when v0.1 works. Two things have to be true first,
-and they are worth stating now because the second is easy to get wrong.
+`SPEC.md` was the brief, and a brief is spent once it has been delivered. It
+is deleted. Everything load-bearing from it has a durable home: the epistemic
+principle is [`METHODOLOGY.md`](../METHODOLOGY.md) §1, the counterfactual
+output contract §6, the not-a-leaderboard constraint §8 and
+[`interventions.md`](interventions.md), the scope limits are AGENTS.md
+§"Things not to build", and the positioning is the README. The content
+taxonomy it proposed — source code, tests, ADRs, specifications — was
+deliberately replaced; see "Content classification: removed" above.
 
-**Everything load-bearing has to have a durable home.** Most of it already
-does: the epistemic principle is [`METHODOLOGY.md`](../METHODOLOGY.md) §1, the
-counterfactual output contract is §6, the not-a-leaderboard constraint is §8
-and [`interventions.md`](interventions.md), the scope limits are AGENTS.md
-§"Things not to build", the positioning and the questions are the README, and
-the Caveman and MCP-to-CLI specifics are `interventions.md` and
-`optimisation-claims.md`.
+Three things it named are still unbuilt, recorded here so that deleting it
+does not lose them:
 
-What is **not** yet durably housed is the content-classification table and the
-activity taxonomy. Both currently live here, in the plan — and this document is
-itself temporary, because a plan describing work that has been done is just a
-stale description of the code. So those two tables need to move to a reference
-doc or to documented code before either file is deleted, or the spec and the
-plan will take them down together.
+- **`Activity`** — designed above under "Activity classification, deferred",
+  and deferred for the reasons given there.
+- **`Artifact` and `GitChange`** — named in the spec's data model and never
+  defined beyond the name. What they were reaching for is which files a
+  session touched and what it committed, which Entire records as
+  `files_touched` and which nothing here reads yet. That is the shape of the
+  next real question: cost per change, rather than cost per session.
 
-**The model has to actually exist.** `RetrievedContent`, `Activity`, `Artifact`
-and `GitChange` are specified but unimplemented. Until they are in
-`internal/model`, the spec is the only description of them and deleting it
-loses real information.
-
-Order of operations, when the time comes: migrate the two tables, confirm the
-domain model is complete, then delete `SPEC.md` and trim this plan to whatever
-is still unbuilt. The README and AGENTS.md links to `SPEC.md` need removing in
-the same commit.
+This plan is itself temporary. A plan describing work that has been done is a
+stale description of the code, so what remains here is the deferred designs
+and the reasoning that has not moved into the code or the methodology.
