@@ -17,12 +17,12 @@ Derived
   compression ratio applied                           50.0%   [derived]
       assumed surviving fraction 0.50, stated rather than measured
   eligible content, estimated tokens                    842   [derived]
-  carry cost of eligible content                        326   [derived]
+  carry cost of eligible content                      1,295   [derived]
 
 Counterfactual
   compressed size                                    2.5 KB   [counterfactual]
   bytes removed                                      2.5 KB   [counterfactual]
-  carry cost avoided, before invalidation              -163   [counterfactual]
+  carry cost avoided, before invalidation              -647   [counterfactual]
       proportional to the content removed; the cache-invalidation cost of
       rewriting context is in unknown, not netted out here
   local reduction of eligible content                 50.0%   [counterfactual]

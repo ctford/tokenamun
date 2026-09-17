@@ -72,82 +72,7 @@
         "provenance": "derived"
       },
       "carry_cost": {
-        "value": 1970.758746196392,
-        "unit": "eit",
-        "provenance": "derived"
-      }
-    },
-    {
-      "tool": "Bash",
-      "category": "tool output",
-      "tokens": {
-        "value": 59.71996200595128,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "entered_at_call": 1,
-      "resident_for_calls": {
-        "value": 4,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "cold_calls": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "derived"
-      },
-      "carry_cost": {
-        "value": 92.56594110922448,
-        "unit": "eit",
-        "provenance": "derived"
-      }
-    },
-    {
-      "tool": "Bash",
-      "category": "tool output",
-      "tokens": {
-        "value": 59.71996200595128,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "entered_at_call": 2,
-      "resident_for_calls": {
-        "value": 3,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "cold_calls": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "derived"
-      },
-      "carry_cost": {
-        "value": 86.59394490862935,
-        "unit": "eit",
-        "provenance": "derived"
-      }
-    },
-    {
-      "tool": "Bash",
-      "category": "tool output",
-      "tokens": {
-        "value": 59.71996200595128,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "entered_at_call": 3,
-      "resident_for_calls": {
-        "value": 2,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "cold_calls": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "derived"
-      },
-      "carry_cost": {
-        "value": 80.62194870803424,
+        "value": 3344.317872333271,
         "unit": "eit",
         "provenance": "derived"
       }
@@ -173,7 +98,82 @@
         "provenance": "derived"
       },
       "carry_cost": {
-        "value": 66.35551333994587,
+        "value": 829.4439167493233,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    },
+    {
+      "tool": "Bash",
+      "category": "tool output",
+      "tokens": {
+        "value": 59.71996200595128,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 1,
+      "resident_for_calls": {
+        "value": 4,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 161.24389741606848,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    },
+    {
+      "tool": "Bash",
+      "category": "tool output",
+      "tokens": {
+        "value": 59.71996200595128,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 2,
+      "resident_for_calls": {
+        "value": 3,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 155.27190121547335,
+        "unit": "eit",
+        "provenance": "derived"
+      }
+    },
+    {
+      "tool": "Bash",
+      "category": "tool output",
+      "tokens": {
+        "value": 59.71996200595128,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 3,
+      "resident_for_calls": {
+        "value": 2,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 149.2999050148782,
         "unit": "eit",
         "provenance": "derived"
       }

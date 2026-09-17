@@ -11,10 +11,10 @@ Observed
 
 Derived
   redundant content, estimated tokens                   119   [derived]
-  carry cost of the redundant copies                    167   [derived]
+  carry cost of the redundant copies                    304   [derived]
 
 Counterfactual
-  avoidable carry cost                                 -167   [counterfactual]
+  avoidable carry cost                                 -304   [counterfactual]
       the saving is the carry of the later copies; the first fetch still
       happens
 

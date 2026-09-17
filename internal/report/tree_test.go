@@ -183,11 +183,11 @@ func TestTheModelsOwnOutputAndToolCallsAreCarriedSeparately(t *testing.T) {
 	}
 
 	tree := BuildTree(s, carry)
-	replies := child(t, tree, "the model's own replies, re-sent")
+	replies := child(t, tree, "model replies")
 	if replies.Carry != carry.AssistantCarryEIT {
 		t.Errorf("replies block = %v, want %v", replies.Carry, carry.AssistantCarryEIT)
 	}
-	child(t, tree, "the tool calls it wrote, re-sent")
+	child(t, tree, "tool calls")
 }
 
 func TestCarryJoinsOntoLeaves(t *testing.T) {

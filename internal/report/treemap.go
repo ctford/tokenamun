@@ -94,7 +94,7 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 	p.Tiles = []treemapTile{
 		{"Retrieved content", bytesStr(retrieval.Total.Bytes.Value), "observed"},
 		{"Estimated tokens", num(int(retrieval.Total.Tokens.Value)), "derived-approx"},
-		{"Prompt cost", num(int(carry.PromptCostEIT)) + " cwt", "derived"},
+		{"Prompt cost", num(int(carry.PromptCostEIT)), "derived, cost-weighted tokens"},
 		{"Retrieved again", bytesStr(retrieval.Total.Redundant.Value), "derived"},
 	}
 	if retrieval.Total.Withheld.Value > 0 {

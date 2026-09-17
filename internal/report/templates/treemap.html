@@ -159,11 +159,11 @@
   </div>
 
   <p class="muted" id="unit-note">
-    <strong>Cost-weighted tokens (cwt)</strong> put every token class on one scale: one cwt is
-    one full-price input token of this model. A cache read counts 0.1, a 5-minute cache write
-    1.25, a 1-hour write 2.0, a generated token 5.0 — the published Claude multipliers. It is
-    model-relative, so a mixed-model session still adds up; convert to money with that model's
-    input price.
+    <strong>Costs are in cost-weighted tokens.</strong> Every token class is put on one
+    scale, where 1 is one full-price input token of this model: a cache read counts 0.1, a
+    5-minute cache write 1.25, a 1-hour write 2.0, a generated token 5.0 — the published
+    Claude multipliers. Being model-relative, a mixed-model session still adds up; multiply
+    by that model's input price for money.
   </p>
 
   <h2 id="tm-title"></h2>
@@ -573,8 +573,8 @@ svg.addEventListener("mousemove", e => {
       <dt>tokens</dt><dd>${fmt(n.tokens)}</dd>
       <dt>share of session</dt><dd>${pct(pctOfSession(n))}</dd>
       <dt>share of ${esc(shortName(parent.name))}</dt><dd>${pct(pctOfView(n, parent))}</dd>
-      <dt>cost as billed</dt><dd>${fmt(n.carry)} cwt</dd>
-      ${n.unscaled ? "" : `<dt>if nothing cached</dt><dd>${fmt(n.carryUncached)} cwt</dd>
+      <dt>cost as billed</dt><dd>${fmt(n.carry)}</dd>
+      ${n.unscaled ? "" : `<dt>if nothing cached</dt><dd>${fmt(n.carryUncached)}</dd>
       <dt>caching saved</dt><dd>${pct(100 * cacheSaving(n))}</dd>`}
       <dt>bytes</dt><dd>${bytes(n.bytes)}</dd>
       <dt>retrievals</dt><dd>${fmt(n.items)}</dd>

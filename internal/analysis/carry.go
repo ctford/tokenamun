@@ -78,10 +78,20 @@ type CarriedItem struct {
 
 // Carry computes residency costs for a session.
 //
+// Everything a piece of content costs is attributed to that content: the call
+// that first carried it in, and every later call that re-sent it. So a file
+// read once and then carried for thirty calls shows one number covering all
+// thirty-one sends, rather than the first send landing somewhere else.
+//
+// The first send is priced at the cache *write* rate, because new content is
+// what a request writes to the cache; later sends are reads at a tenth of
+// input price, or writes again on any call that rebuilt its prefix. Pricing
+// the first send as a read understated late-arriving content by more than an
+// order of magnitude -- content that arrives near the end of a session is
+// written once and barely re-read, so the write is nearly all of its cost.
+//
 // Per-item cache class is not directly observable -- the API reports one split
-// per call, not per block -- so residency is priced by call: content resident
-// across a call that rebuilt its prefix was re-created at the write rate, and
-// content resident across a warm call was read at the cheap one. Caching is
+// per call, not per block -- so residency is priced by call. Caching is
 // prefix-based and retrievals sit in the prefix, so this follows the mechanism
 // rather than guessing.
 func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
@@ -129,8 +139,16 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 			continue
 		}
 		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, r.Resets)
+		if warm+coldN == 0 {
+			continue
+		}
+		if warm > 0 {
+			warm--
+		} else {
+			coldN--
+		}
 		r.AssistantCarryEIT += float64(inv.Usage.Output) *
-			(float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
 	}
 
 	// So are the tool calls it wrote, which are not free: the arguments sit in
@@ -144,8 +162,16 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 			continue
 		}
 		warm, coldN := residency(tc.InvocationSeq+1, len(s.Invocations), cold, r.Resets)
+		if warm+coldN == 0 {
+			continue
+		}
+		if warm > 0 {
+			warm--
+		} else {
+			coldN--
+		}
 		r.ToolInputCarryEIT += (float64(tc.InputBytes) / ratio) *
-			(float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
 	}
 
 	for _, c := range s.Retrievals {
@@ -157,18 +183,28 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 		if warm+coldN == 0 {
 			continue
 		}
+		// The call that first carries the content in writes it to cache; the
+		// rest read it.
+		if warm > 0 {
+			warm--
+		} else if coldN > 0 {
+			coldN--
+		}
+
 		r.Items = append(r.Items, CarriedItem{
 			RetrievalSeq: c.Seq,
 			Tool:         c.Tool, Path: c.Path, Category: c.Category,
 			Bytes: c.Bytes, Tokens: c.Tokens,
 			EnteredAt:   entered,
-			ResidentFor: warm + coldN,
+			ResidentFor: 1 + warm + coldN,
 			WarmCalls:   warm,
 			ColdCalls:   coldN,
-			CarryEIT:    c.Tokens * (float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m),
-			// Every re-send at full input price: the counterfactual of no
-			// caching at all, on the same trajectory.
-			CarryUncachedEIT: c.Tokens * float64(warm+coldN) * w.Input,
+			// The first send writes the content to cache; the rest read it.
+			CarryEIT: c.Tokens * (w.CacheWrite5m + float64(warm)*w.CacheRead +
+				float64(coldN)*w.CacheWrite5m),
+			// Every send at full input price: the counterfactual of no caching
+			// at all, on the same trajectory.
+			CarryUncachedEIT: c.Tokens * float64(1+warm+coldN) * w.Input,
 		})
 	}
 	sort.SliceStable(r.Items, func(i, j int) bool { return r.Items[i].CarryEIT > r.Items[j].CarryEIT })

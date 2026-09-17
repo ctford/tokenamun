@@ -6,11 +6,11 @@ Session carry-fixture, 8 API calls
 Observed
   shell and tool output                              5.0 KB   [observed]
   covered by an RTK adapter                          5.0 KB   [observed]
-  carry cost of covered output                          326   [observed]
-  carry cost of all shell output                        326   [observed]
-    tests (3 results)                                   259   [observed]
+  carry cost of covered output                        1,295   [observed]
+  carry cost of all shell output                      1,295   [observed]
+    tests (3 results)                                   465   [observed]
       RTK publishes -90% for this family
-    files (1 results)                                    66   [observed]
+    files (1 results)                                   829   [observed]
       no published per-command figure; the conservative end of RTK's
       60-90% band applied
 
@@ -21,10 +21,10 @@ Derived
       adapter for these.
 
 Counterfactual
-  saving, RTK's published figures per family           -273   [counterfactual]
-  saving, whole band at 90% off covered output         -293   [counterfactual]
-  saving, whole band at 60% off covered output         -195   [counterfactual]
-  share of prompt cost, published figures             -0.3%   [counterfactual]
+  saving, RTK's published figures per family           -916   [counterfactual]
+  saving, whole band at 90% off covered output       -1,165   [counterfactual]
+  saving, whole band at 60% off covered output         -777   [counterfactual]
+  share of prompt cost, published figures             -0.9%   [counterfactual]
       the cache-invalidation cost of rewriting context is in unknown, not
       netted out here
 

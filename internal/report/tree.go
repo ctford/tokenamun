@@ -164,7 +164,8 @@ func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryRepor
 	if carry.PreambleCarryEIT > 0 {
 		root.Children = append(root.Children, &Node{
 			Name: "session preamble", Kind: "bucket", Unscaled: true,
-			Carry: carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryEIT, Items: 1,
+			Tokens: float64(carry.Preamble),
+			Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryEIT, Items: 1,
 			Detail: "system prompt, tool schemas, instruction files and skills, carried on " +
 				"every call. Not decomposable: none of it is in the transcript.",
 		})
@@ -172,19 +173,21 @@ func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryRepor
 
 	if carry.AssistantCarryEIT > 0 {
 		root.Children = append(root.Children, &Node{
-			Name: "the model's own replies, re-sent", Kind: "bucket", Unscaled: true,
-			Carry: carry.AssistantCarryEIT, CarryUncached: carry.AssistantCarryEIT, Items: 1,
-			Detail: "text and thinking the model generated, carried as input on every later " +
-				"call. Billed once at the output rate when written, then again as input for " +
-				"the rest of the session.",
+			Name: "model replies", Kind: "bucket", Unscaled: true,
+			Tokens: float64(s.Usage().Output),
+			Carry:  carry.AssistantCarryEIT, CarryUncached: carry.AssistantCarryEIT, Items: 1,
+			Detail: "text and thinking the model wrote, priced as input for the rest of the " +
+				"session. Its own replies are part of the conversation it re-reads on every " +
+				"call, and that is billed separately from writing them.",
 		})
 	}
 	if carry.ToolInputCarryEIT > 0 {
 		root.Children = append(root.Children, &Node{
-			Name: "the tool calls it wrote, re-sent", Kind: "bucket", Unscaled: true,
-			Carry: carry.ToolInputCarryEIT, CarryUncached: carry.ToolInputCarryEIT, Items: 1,
+			Name: "tool calls", Kind: "bucket", Unscaled: true,
+			Tokens: toolInputTokens(s),
+			Carry:  carry.ToolInputCarryEIT, CarryUncached: carry.ToolInputCarryEIT, Items: 1,
 			Detail: "the arguments of every tool call - shell commands, file paths, patches - " +
-				"which sit in the conversation exactly as the results do.",
+				"which sit in the conversation and are re-sent exactly as the results are.",
 		})
 	}
 
@@ -209,11 +212,26 @@ func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryRepor
 	w := cost.For(firstModel(s))
 	if out := w.OutputCost(s.Usage()); out > 0 {
 		root.Children = append(root.Children, &Node{
-			Name: "output generated", Kind: "bucket", Unscaled: true,
-			Carry: out, CarryUncached: out, Items: 1,
-			Detail: "tokens the model wrote, priced at the output rate. Observed.",
+			Name: "writing output", Kind: "bucket", Unscaled: true,
+			Tokens: float64(s.Usage().Output),
+			Carry:  out, CarryUncached: out, Items: 1,
+			Detail: "the output-rate charge for generating those tokens, five times the input " +
+				"rate. Separate from carrying them afterwards, which is model replies.",
 		})
 	}
+}
+
+// toolInputTokens estimates the arguments the model wrote into tool calls.
+func toolInputTokens(s *model.Session) float64 {
+	ratio := s.Estimator.BytesPerToken
+	if ratio <= 0 {
+		return 0
+	}
+	var bytes int
+	for _, tc := range s.ToolCalls {
+		bytes += tc.InputBytes
+	}
+	return float64(bytes) / ratio
 }
 
 func firstModel(s *model.Session) string {
