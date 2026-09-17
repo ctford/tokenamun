@@ -71,12 +71,40 @@ func MergeTrees(trees []*Node) *Node {
 		}
 		mergeInto(out, t)
 	}
+	// Collapsed after merging as well as before, because a shape reconciled
+	// during the merge may turn out to have a single same-name child, and
+	// because whether a group earns its place is a question about the set
+	// being reported rather than about each session in it.
+	collapseEmptyLevels(out)
 	rollUp(out)
 	sortTree(out)
 	return out
 }
 
 func mergeInto(dst, src *Node) {
+	// The same name can arrive in two shapes, so reconcile before adding.
+	//
+	// collapseEmptyLevels dissolves a node whose only child repeats its
+	// name, which is what a command run exactly once becomes: `command:
+	// python3` with a single `item: python3` under it collapses to the item.
+	// Run several times in another session, it stays a branch with a child
+	// per subcommand. Merging those by name *and* kind produced two
+	// siblings called python3 at the same level -- and, worse, two nodes
+	// with the same --at path, so drilling in resolved to whichever came
+	// first. Reconcile to the branch shape; the trailing collapse in
+	// MergeTrees puts it back if it turns out to be the only child.
+	switch {
+	case len(src.Children) == 0 && len(dst.Children) > 0:
+		// A collapsed leaf meeting subdivisions: it is the portion of this
+		// command that was never subdivided, which is a child of it.
+		mergeInto(childByName(dst, src), src)
+		return
+	case len(src.Children) > 0 && dst.Items > 0:
+		// Subdivisions meeting a collapsed leaf: move what dst has
+		// accumulated down into a child, so rollUp still reconciles.
+		demote(dst)
+	}
+
 	// Leaves carry the numbers; branches are recomputed by rollUp, so only
 	// the leaf totals need adding.
 	if len(src.Children) == 0 {
@@ -103,9 +131,18 @@ func mergeInto(dst, src *Node) {
 
 // childByName finds or creates the matching child, copying the parts of the
 // source node that describe rather than measure.
+//
+// Matched on name alone. Matching on kind as well split every command that
+// one session ran once and another ran repeatedly, because the collapse rule
+// gives those two different kinds.
 func childByName(parent, like *Node) *Node {
 	for _, c := range parent.Children {
-		if c.Name == like.Name && c.Kind == like.Kind {
+		if c.Name == like.Name {
+			// The branch shape wins: a node with subdivisions is a branch
+			// whatever the session that contributed a bare leaf called it.
+			if len(like.Children) > 0 {
+				c.Kind = like.Kind
+			}
 			return c
 		}
 	}
@@ -118,6 +155,25 @@ func childByName(parent, like *Node) *Node {
 	}
 	parent.Children = append(parent.Children, child)
 	return child
+}
+
+// demote moves a node's own measurements into a child of the same name.
+//
+// The inverse of the collapse rule, used when a node that arrived as a leaf
+// turns out to have subdivisions in another session. Its own fields are
+// cleared because rollUp recomputes a branch from its children, so leaving
+// them would either be double-counted or silently dropped.
+func demote(n *Node) {
+	child := &Node{
+		Name: n.Name, Kind: "item",
+		Detail: n.Detail, DetailMore: n.DetailMore,
+		Tokens: n.Tokens, Carry: n.Carry, CarryUncached: n.CarryUncached,
+		Bytes: n.Bytes, Items: n.Items, tokenCalls: n.tokenCalls,
+		Unscaled: n.Unscaled,
+	}
+	n.Children = append(n.Children, child)
+	n.Tokens, n.Carry, n.CarryUncached = 0, 0, 0
+	n.Bytes, n.Items, n.tokenCalls = 0, 0, 0
 }
 
 // Readable loads every session it can and says which it could not.
