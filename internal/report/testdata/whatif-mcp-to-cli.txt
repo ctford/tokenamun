@@ -1,0 +1,27 @@
+TOKENAMUN  what-if: mcp-to-cli
+
+put an MCP server behind a CLI instead of exposing its tool schemas
+Session carry-fixture, 8 API calls
+
+Observed
+  mcp tool results                                        0   [observed]
+  mcp result content                                    0 B   [observed]
+  session preamble, a ceiling on the category        30,001   [observed]
+  cost of carrying the preamble                      49,501   [observed]
+
+Not measurable from this data
+  The saving lives in tool-schema size, and tool schemas are not in the
+  transcript. The observed session preamble is a ceiling on the whole
+  category, not a measurement of the schemas inside it. To measure it, run
+  the same opening prompt with the server connected and disconnected and
+  compare the first call's prompt size: that difference is observed.
+  `tokenamun compare` is the command for it.
+
+Unknown
+  - schema_tokens: not observable from a transcript at all.
+  - tools_available: only tools that were used appear; the ones that
+    merely occupied context do not.
+  - task_success: not observable from this data. An agent that fails the
+    task consumes the fewest tokens of all, so a reduction is not an
+    improvement.
+

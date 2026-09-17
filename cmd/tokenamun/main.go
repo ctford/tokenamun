@@ -16,10 +16,12 @@ import (
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/claudecode"
 	"github.com/ctford/tokenamun/internal/codescan"
+	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/entire"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
 	"github.com/ctford/tokenamun/internal/report"
+	"github.com/ctford/tokenamun/internal/whatif"
 )
 
 // version is overridden at build time with -X main.version.
@@ -35,16 +37,29 @@ Usage:
   tokenamun cache [session]       why the prompt cache was rebuilt, and what it cost
   tokenamun scan [path]           code properties: size, complexity, duplication
   tokenamun hotspots [session]    code properties joined against session cost
+  tokenamun compare <a> <b>       two sessions side by side
+  tokenamun what-if <name> [session]
+                                  would an optimisation have helped, and by how much
   tokenamun version
 
 Session selector:
   a session-id prefix, or "current" for the session invoking this tool,
   or "latest" (the default) for the most recently active one.
 
+Interventions for what-if:
+  cache-ttl            5-minute prompt cache to 1-hour
+  repeated-retrieval   fetch byte-identical content once
+  output-compression   compress tool output before it enters context
+  caveman              Caveman-style compression
+  mcp-to-cli           put an MCP server behind a CLI
+
 Flags:
   --json          machine-readable output
   --dir PATH      directory to look in (default: working directory)
   --source SRC    entire | local | any (default: any)
+  --ratio N       assumed surviving fraction for compression (default 0.5)
+  --replay-with C pipe this session's own content through a real compressor
+                  instead of assuming a ratio; C reads stdin, writes stdout
 `
 
 func main() {
@@ -65,6 +80,8 @@ func run(args []string) error {
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	dir := fs.String("dir", ".", "directory to look in")
 	source := fs.String("source", "any", "entire | local | any")
+	ratio := fs.Float64("ratio", 0.5, "assumed surviving fraction for compression")
+	replayWith := fs.String("replay-with", "", "command to replay content through")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
 	// For a CLI agents invoke, silently dropping a flag is the worst failure
@@ -76,6 +93,10 @@ func run(args []string) error {
 	selector := "latest"
 	if len(positional) > 0 {
 		selector = positional[0]
+	}
+	second := ""
+	if len(positional) > 1 {
+		second = positional[1]
 	}
 
 	switch cmd {
@@ -93,6 +114,10 @@ func run(args []string) error {
 		return cmdScan(*dir, selector, *asJSON)
 	case "hotspots":
 		return cmdHotspots(*dir, *source, selector, *asJSON)
+	case "compare":
+		return cmdCompare(*dir, *source, selector, second, *asJSON)
+	case "what-if", "whatif":
+		return cmdWhatIf(*dir, *source, selector, second, *ratio, *replayWith, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
 		fmt.Println("validated against Entire CLI 0.10.2 and Claude Code 2.1.x transcripts")
@@ -263,6 +288,83 @@ func cmdHotspots(dir, source, selector string, asJSON bool) error {
 		return writeJSON(out)
 	}
 	return report.RenderHotspots(os.Stdout, out)
+}
+
+func cmdCompare(dir, source, a, b string, asJSON bool) error {
+	if a == "" || b == "" {
+		return fmt.Errorf("compare needs two sessions: tokenamun compare <a> <b>")
+	}
+	sa, err := loadSelected(dir, source, a)
+	if err != nil {
+		return fmt.Errorf("session a: %w", err)
+	}
+	sb, err := loadSelected(dir, source, b)
+	if err != nil {
+		return fmt.Errorf("session b: %w", err)
+	}
+	out := report.BuildCompare(
+		report.BuildProfile(sa), report.BuildProfile(sb),
+		report.BuildRetrieval(sa), report.BuildRetrieval(sb))
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderCompare(os.Stdout, out)
+}
+
+// cmdWhatIf takes the intervention name first, then an optional session.
+func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith string, asJSON bool) error {
+	if name == "" || name == "latest" {
+		var names []string
+		for _, i := range whatif.All() {
+			names = append(names, i.Name())
+		}
+		return fmt.Errorf("what-if needs an intervention: %v", names)
+	}
+	intervention, err := whatif.Find(name)
+	if err != nil {
+		return err
+	}
+	if selector == "" {
+		selector = "latest"
+	}
+
+	refs, err := discover(dir, source)
+	if err != nil {
+		return err
+	}
+	ref, err := selectSession(refs, selector)
+	if err != nil {
+		return err
+	}
+	s, err := ingest.Load(ref)
+	if err != nil {
+		return err
+	}
+
+	cache := analysis.Cache(s, analysis.TTL5m)
+	ctx := whatif.Context{
+		Session:          s,
+		Cache:            cache,
+		Carry:            analysis.Carry(s, cache),
+		Weights:          cost.Default,
+		CompressionRatio: ratio,
+	}
+	if ms := s.Models(); len(ms) > 0 {
+		ctx.Weights = cost.For(ms[0])
+	}
+	if replayWith != "" {
+		replay, err := whatif.Replay(ref, replayWith)
+		if err != nil {
+			return fmt.Errorf("replay failed: %w", err)
+		}
+		ctx.Replay = replay
+	}
+
+	out := report.BuildWhatIf(s, intervention.Estimate(ctx))
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderWhatIf(os.Stdout, out)
 }
 
 // loadSelected resolves a selector and parses the transcript it names.

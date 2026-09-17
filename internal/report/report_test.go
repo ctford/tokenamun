@@ -11,8 +11,10 @@ import (
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/codescan"
+	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
+	"github.com/ctford/tokenamun/internal/whatif"
 )
 
 var update = flag.Bool("update", false, "regenerate golden files")
@@ -374,4 +376,82 @@ func jsonKeys(t *testing.T, v any) []string {
 	}
 	walk(mustTree(t, v))
 	return keys
+}
+
+func TestWhatIfGoldenOutput(t *testing.T) {
+	s := carrySession(t)
+	cache := analysis.Cache(s, analysis.TTL5m)
+	ctx := whatif.Context{
+		Session:          s,
+		Cache:            cache,
+		Carry:            analysis.Carry(s, cache),
+		Weights:          cost.Default,
+		CompressionRatio: 0.5,
+	}
+	for _, i := range whatif.All() {
+		out := BuildWhatIf(s, i.Estimate(ctx))
+		var text bytes.Buffer
+		if err := RenderWhatIf(&text, out); err != nil {
+			t.Fatal(err)
+		}
+		compareGolden(t, "whatif-"+i.Name()+".txt", text.Bytes())
+		walkQuantities(t, "whatif."+i.Name(), mustTree(t, out))
+	}
+}
+
+// The unknown section must always render, because it is the thing that stops a
+// counterfactual being read as a measurement.
+func TestWhatIfAlwaysRendersItsUnknowns(t *testing.T) {
+	s := carrySession(t)
+	cache := analysis.Cache(s, analysis.TTL5m)
+	ctx := whatif.Context{
+		Session: s, Cache: cache, Carry: analysis.Carry(s, cache),
+		Weights: cost.Default, CompressionRatio: 0.5,
+	}
+	for _, i := range whatif.All() {
+		var text bytes.Buffer
+		if err := RenderWhatIf(&text, BuildWhatIf(s, i.Estimate(ctx))); err != nil {
+			t.Fatal(err)
+		}
+		out := text.String()
+		if !strings.Contains(out, "Unknown") {
+			t.Errorf("%s: no Unknown section rendered", i.Name())
+		}
+		if !strings.Contains(out, "task_success") {
+			t.Errorf("%s: the outcome caveat must be visible in the text output", i.Name())
+		}
+	}
+}
+
+func TestCompareGoldenOutput(t *testing.T) {
+	a := carrySession(t)
+	b, err := ingest.Load(model.SessionRef{
+		ID:         "retrieval-fixture",
+		Transcript: filepath.Join("..", "ingest", "testdata", "retrieval.jsonl"),
+		Origin:     model.FromLocal,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := BuildCompare(BuildProfile(a), BuildProfile(b), BuildRetrieval(a), BuildRetrieval(b))
+
+	var text bytes.Buffer
+	if err := RenderCompare(&text, out); err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "compare.txt", text.Bytes())
+	walkQuantities(t, "compare", mustTree(t, out))
+}
+
+// A comparison must not be presented as an experiment.
+func TestCompareSaysItIsNotAControlledExperiment(t *testing.T) {
+	a := carrySession(t)
+	out := BuildCompare(BuildProfile(a), BuildProfile(a), BuildRetrieval(a), BuildRetrieval(a))
+	var text bytes.Buffer
+	if err := RenderCompare(&text, out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text.String(), "not a controlled experiment") {
+		t.Error("the caveat must be in the output, not only in the docs")
+	}
 }

@@ -1,0 +1,42 @@
+TOKENAMUN  what-if: caveman
+
+compress agent-facing content the way Caveman claims to
+Session carry-fixture, 8 API calls
+
+Observed
+  retrieved content                                 12.0 KB   [observed]
+  eligible tool and MCP output                       1.1 KB   [observed]
+  eligible items                                          3   [observed]
+
+Derived
+  compression ratio applied                           50.0%   [derived]
+      assumed surviving fraction 0.50, stated rather than measured
+  eligible content, estimated tokens                    179   [derived]
+  carry cost of eligible content                        259   [derived]
+
+Counterfactual
+  compressed size                                     540 B   [counterfactual]
+  bytes removed                                       540 B   [counterfactual]
+  carry cost avoided, before invalidation              -129   [counterfactual]
+      proportional to the content removed; the cache-invalidation cost of
+      rewriting context is in unknown, not netted out here
+  local reduction of eligible content                 50.0%   [counterfactual]
+      a local reduction is not a session saving and is not presented as
+      one
+
+Unknown
+  - additional_tool_calls: content the agent could no longer read may have
+    been fetched again.
+  - cache_invalidation_point: rewriting context breaks the cached prefix
+    from that point, converting cheap reads into full-price writes. Where
+    the change point cannot be determined this is not netted out.
+  - behavioural_change: the agent's trajectory is assumed identical. It
+    would not have been.
+  - task_success: not observable from this data. An agent that fails the
+    task consumes the fewest tokens of all, so a reduction is not an
+    improvement.
+  - published_ratio: Caveman's own figure is a 65% output reduction, while
+    an independent test measured 8.5% on real agentic tasks. Neither was
+    measured here. Use --replay-with to pipe this session's own content
+    through the real compressor and settle it for this repository.
+

@@ -286,15 +286,20 @@ func pct(b *strings.Builder, label string, q model.Quantity) {
 }
 
 func num(n int) string {
-	s := fmt.Sprintf("%d", n)
+	sign := ""
+	if n < 0 {
+		sign = "-"
+		n = -n
+	}
+	digits := fmt.Sprintf("%d", n)
 	var out []byte
-	for i, c := range []byte(s) {
-		if i > 0 && (len(s)-i)%3 == 0 && c != '-' {
+	for i, c := range []byte(digits) {
+		if i > 0 && (len(digits)-i)%3 == 0 {
 			out = append(out, ',')
 		}
 		out = append(out, c)
 	}
-	return string(out)
+	return sign + string(out)
 }
 
 func bytesStr(v float64) string {

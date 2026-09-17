@@ -1,0 +1,20 @@
+TOKENAMUN  compare
+
+A  carry-fixture  (8 calls)
+B  retrieval-fixture  (7 calls)
+
+  METRIC                          A              B          DELTA     B/A
+  api calls                       8              7             -1   0.88x
+  prompt volume             212,171         83,607       -128,564   0.39x
+  prompt cost               107,359         15,957        -91,402   0.15x
+  output tokens                 630            273           -357   0.43x
+  total cost                110,509         17,322        -93,187   0.16x
+  retrieved bytes            12,292         13,508          1,216   1.10x
+  redundant bytes               720            204           -516   0.28x
+
+  Two sessions are not a controlled experiment. They differ in task, code
+  and operator as well as in whatever you changed.
+  A difference here is a question worth asking, not an effect size.
+  The preamble differs whenever the harness version, model or instruction
+  files differ, which is almost always.
+

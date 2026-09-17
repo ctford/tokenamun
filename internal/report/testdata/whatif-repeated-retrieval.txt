@@ -1,0 +1,29 @@
+TOKENAMUN  what-if: repeated-retrieval
+
+retrieve byte-identical content once instead of repeatedly
+Session carry-fixture, 8 API calls
+
+Observed
+  retrieved content                                 12.0 KB   [observed]
+  repeated payloads                                       1   [observed]
+  redundant bytes                                     720 B   [observed]
+  redundant share of retrieved bytes                   5.9%   [observed]
+
+Derived
+  redundant content, estimated tokens                   119   [derived]
+  carry cost of the redundant copies                      0   [derived]
+
+Counterfactual
+  avoidable carry cost                                    0   [counterfactual]
+      the saving is the carry of the later copies; the first fetch still
+      happens
+
+Unknown
+  - recovery_requests: the agent re-read this content for a reason.
+    Removing the second copy assumes it still had the first in mind.
+  - behavioural_change: the agent's trajectory is assumed identical. It
+    would not have been.
+  - task_success: not observable from this data. An agent that fails the
+    task consumes the fewest tokens of all, so a reduction is not an
+    improvement.
+

@@ -140,8 +140,10 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun cache` | why the prompt cache was rebuilt, and what that cost |
 | `tokenamun scan` | code properties: size, complexity, duplication |
 | `tokenamun hotspots` | those properties joined against what the session cost |
+| `tokenamun compare` | two sessions side by side |
+| `tokenamun what-if` | would an optimisation have helped, and by how much |
 
-Counterfactuals and the treemap are planned — see the milestones in
+The treemap and `series` are planned — see the milestones in
 [`docs/plan.md`](docs/plan.md). Activity classification is deliberately last:
 it is inferred, and the observed answers are the ones worth trusting.
 
