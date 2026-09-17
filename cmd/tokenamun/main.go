@@ -62,12 +62,17 @@ func run(args []string) error {
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	dir := fs.String("dir", ".", "directory to look in")
 	source := fs.String("source", "any", "entire | local | any")
-	if err := fs.Parse(rest); err != nil {
+	// Go's flag package stops parsing at the first positional argument, which
+	// would make `tokenamun profile current --json` silently ignore --json.
+	// For a CLI agents invoke, silently dropping a flag is the worst failure
+	// mode available, so flags and positionals are allowed to intersperse.
+	positional, err := parseInterspersed(fs, rest)
+	if err != nil {
 		return err
 	}
 	selector := "latest"
-	if fs.NArg() > 0 {
-		selector = fs.Arg(0)
+	if len(positional) > 0 {
+		selector = positional[0]
 	}
 
 	switch cmd {
@@ -91,6 +96,24 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q; try `tokenamun help`", cmd)
 	}
+}
+
+// parseInterspersed parses flags that may appear before, after or between
+// positional arguments, returning the positionals in order.
+func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positional []string
+	for len(args) > 0 {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		args = fs.Args()
+		if len(args) == 0 {
+			break
+		}
+		positional = append(positional, args[0])
+		args = args[1:]
+	}
+	return positional, nil
 }
 
 // discover lists candidate sessions from the requested sources, most recently
