@@ -114,6 +114,12 @@ accounting, you change that document in the same commit.
   Code comments are the exception and stay as long as they need to be: they
   explain decisions to whoever changes them next, and nobody is reading them
   on a chart.
+* **Measure; do not model.** The tool reports what a session cost and where it
+  went. It does not model named techniques: a vendor's figure applied to your
+  session is that vendor's claim wearing this tool's authority. The one
+  counterfactual is `optimise`, where the caller names both the change and the
+  reason it is plausible, and the unknown section always prints. If a new
+  question needs an assumed parameter, that is a sign it belongs to the caller.
 * **Nothing is viewer-only.** The HTML report and the CLI answer the same
   questions: `tree` is the drill-down, `what-if --all` is the interventions
   table, `treemap --json` is the payload the HTML is handed. A test asserts

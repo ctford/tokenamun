@@ -161,87 +161,6 @@ func TestTreemapWritesAStandaloneFileWithTheGivenTitle(t *testing.T) {
 	}
 }
 
-func TestInterventionsListsBuiltInsAndSaysWhereScriptsGo(t *testing.T) {
-	localFixture(t, "carry.jsonl")
-	out, err := capture(t, "interventions")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"cache-ttl", "repeated-retrieval", "clear-on-new-task", "file-compression"} {
-		if !strings.Contains(out, name) {
-			t.Errorf("the listing is missing %q", name)
-		}
-	}
-	if !strings.Contains(out, "interventions") {
-		t.Error("it should say where scripts are loaded from")
-	}
-
-	var rows []struct {
-		Name    string `json:"name"`
-		Targets string `json:"targets"`
-		Source  string `json:"source"`
-	}
-	jsonOut, err := capture(t, "interventions", "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal([]byte(jsonOut), &rows); err != nil {
-		t.Fatalf("the machine-readable listing is what an agent reads: %v", err)
-	}
-	for _, r := range rows {
-		if r.Name == "" || r.Targets == "" || r.Source == "" {
-			t.Errorf("every row needs a name, a target and a source: %+v", r)
-		}
-	}
-}
-
-func TestWhatIfNeedsAnInterventionAndNamesThemWhenAsked(t *testing.T) {
-	repo := localFixture(t, "carry.jsonl")
-	_, err := capture(t, "what-if", "--dir", repo)
-	if err == nil {
-		t.Fatal("what-if with no intervention must be an error")
-	}
-	if !strings.Contains(err.Error(), "cache-ttl") {
-		t.Errorf("the error should list what can be asked: %v", err)
-	}
-	if _, err := capture(t, "what-if", "no-such-thing", "--dir", repo); err == nil {
-		t.Error("an unknown intervention must be an error")
-	}
-}
-
-func TestWhatIfRunsEveryBuiltInOverAFixture(t *testing.T) {
-	// Each intervention has its own unit tests; this asserts that none of them
-	// panics or fails on a real parsed session, which is how the report is
-	// actually produced.
-	repo := localFixture(t, "carry.jsonl")
-	for _, name := range []string{
-		"cache-ttl", "repeated-retrieval", "clear-on-new-task",
-		"output-compression", "file-compression", "caveman", "rtk", "mcp-to-cli",
-	} {
-		t.Run(name, func(t *testing.T) {
-			out, err := capture(t, "what-if", name, "--dir", repo, "--json")
-			if err != nil {
-				t.Fatalf("%s: %v", name, err)
-			}
-			var doc struct {
-				Result struct {
-					Unknown []string `json:"unknown"`
-				} `json:"result"`
-				Unknown []string `json:"unknown"`
-			}
-			if err := json.Unmarshal([]byte(out), &doc); err != nil {
-				t.Fatalf("%s produced unparseable JSON: %v", name, err)
-			}
-			// The rule that holds for every intervention, checked through the
-			// command rather than in the package, so a report cannot ship
-			// without it.
-			if len(doc.Unknown) == 0 && len(doc.Result.Unknown) == 0 {
-				t.Errorf("%s reported nothing it cannot know", name)
-			}
-		})
-	}
-}
-
 func TestScanBudgetsFailTheCommandRatherThanJustPrinting(t *testing.T) {
 	// A budget nobody enforces is a budget that gets raised, so the exit code
 	// is the feature.
@@ -385,29 +304,6 @@ func TestSeriesReadsProbeRunsFromProfileOutput(t *testing.T) {
 	}
 }
 
-func TestNamedInterventionScriptIsLoadedAndAppearsInTheListing(t *testing.T) {
-	localFixture(t, "carry.jsonl")
-	script := filepath.Join(t.TempDir(), "example")
-	body := `#!/bin/sh
-case "$1" in
-describe) printf '{"name":"example","description":"an example"}' ;;
-esac
-`
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	out, err := capture(t, "interventions", "--intervention", script)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "example") {
-		t.Errorf("a script named with --intervention must be listed: %q", out)
-	}
-	if !strings.Contains(out, script) {
-		t.Error("the listing should say which file an intervention came from")
-	}
-}
-
 func TestTreeIsNavigableWithoutABrowser(t *testing.T) {
 	// The whole point: an agent must be able to learn what the HTML viewer
 	// shows a person. That means reaching every level by name.
@@ -494,41 +390,6 @@ func TestTreeUncachedModeIsReachableFromTheCLI(t *testing.T) {
 	}
 }
 
-func TestWhatIfAllRanksEveryInterventionInOneCall(t *testing.T) {
-	repo := localFixture(t, "carry.jsonl")
-	out, err := capture(t, "what-if", "--all", "--dir", repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "INTERVENTION") {
-		t.Errorf("the summary should be a table:\n%s", out)
-	}
-
-	var doc struct {
-		Rows []struct {
-			Name       string `json:"name"`
-			Applicable bool   `json:"applicable"`
-			Detail     string `json:"detail_command"`
-		} `json:"interventions"`
-		Notes []string `json:"notes"`
-	}
-	jsonOut, err := capture(t, "what-if", "--all", "--dir", repo, "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal([]byte(jsonOut), &doc); err != nil {
-		t.Fatal(err)
-	}
-	if len(doc.Rows) < 8 {
-		t.Errorf("expected every intervention, got %d", len(doc.Rows))
-	}
-	for _, r := range doc.Rows {
-		if r.Detail == "" {
-			t.Errorf("%s does not say how to see the full result", r.Name)
-		}
-	}
-}
-
 func TestTreemapJSONIsTheViewersOwnPayload(t *testing.T) {
 	// The strongest parity guarantee available: --json prints what the HTML is
 	// given, so nothing can reach the picture without reaching the CLI.
@@ -546,7 +407,7 @@ func TestTreemapJSONIsTheViewersOwnPayload(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
 		t.Fatalf("--json must print the payload: %v", err)
 	}
-	if payload.Title != "T" || payload.Tree == nil || len(payload.Interventions) == 0 {
+	if payload.Title != "T" || payload.Tree == nil || payload.RampMax <= 0 {
 		t.Errorf("the payload is missing pieces the viewer draws: %+v", payload)
 	}
 
@@ -558,52 +419,6 @@ func TestTreemapJSONIsTheViewersOwnPayload(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err == nil {
 		t.Error("--json wrote an HTML file as well")
-	}
-}
-
-func TestAdHocInterventionNeedsNoVendorSupport(t *testing.T) {
-	// The generic form: name a slice of the tree and how much of it goes
-	// away. Everything that shrinks content is that shape, so an agent can
-	// ask about a technique this tool has never heard of.
-	repo := localFixture(t, "carry.jsonl")
-	out, err := capture(t, "what-if", "--dir", repo, "--at", "cli output",
-		"--cut", "0.5", "--name", "some-proxy", "--why", "Vendor figure, not measured.")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "some-proxy") {
-		t.Errorf("the caller names the row:\n%s", out)
-	}
-	if !strings.Contains(out, "Vendor figure, not measured.") {
-		t.Error("the caller's caveat must be printed with the number")
-	}
-
-	// It must not be possible to get a number without saying why it is
-	// plausible, or what it applies to.
-	for _, args := range [][]string{
-		{"what-if", "--dir", repo, "--cut", "0.5", "--why", "x."},
-		{"what-if", "--dir", repo, "--at", "cli output", "--cut", "0.5"},
-		{"what-if", "--dir", repo, "--at", "cli output", "--cut", "9", "--why", "x."},
-	} {
-		if _, err := capture(t, args...); err == nil {
-			t.Errorf("%v should have been refused", args[3:])
-		}
-	}
-}
-
-func TestAdHocInterventionJoinsTheSummaryTable(t *testing.T) {
-	repo := localFixture(t, "carry.jsonl")
-	out, err := capture(t, "what-if", "--all", "--dir", repo, "--at", "file content",
-		"--cut", "0.3", "--name", "trim-the-docs", "--why", "A guess, not a measurement.")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Ranked among the built-ins, with no way to tell it apart structurally.
-	if !strings.Contains(out, "trim-the-docs") {
-		t.Errorf("an ad-hoc intervention must rank with the rest:\n%s", out)
-	}
-	if !strings.Contains(out, "ADDRESSABLE") || !strings.Contains(out, "OPTIMISATION") {
-		t.Error("the summary must show the decomposition, not just the product")
 	}
 }
 
@@ -694,5 +509,101 @@ func TestPeriodSumsEverySessionInTheWindow(t *testing.T) {
 	}
 	if !explained {
 		t.Error("a summed report must say what is additive and what is not")
+	}
+}
+
+func TestOptimiseNeedsAPartAndAReason(t *testing.T) {
+	// The whole of what is left of the interventions: name a part of the
+	// tree and what it becomes. The part is measured; the figure is yours,
+	// and so is the reason it is plausible.
+	repo := localFixture(t, "carry.jsonl")
+	out, err := capture(t, "optimise", "--dir", repo, "--at", "cli output",
+		"--optimise", "0.5", "--name", "some-proxy", "--why", "Vendor figure, not measured.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "some-proxy") {
+		t.Errorf("the caller names the hypothetical:\n%s", out)
+	}
+	if !strings.Contains(out, "Vendor figure, not measured.") {
+		t.Error("the caller's reason must be printed with the number")
+	}
+	// Both halves of the answer: what the part is, and what the session
+	// becomes.
+	for _, want := range []string{"Applies to", "Addressable", "Optimisation", "Impact"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the report is missing %q:\n%s", want, out)
+		}
+	}
+
+	// It must not be possible to get a number without saying what it applies
+	// to, what it becomes, or why that is plausible.
+	for _, args := range [][]string{
+		{"optimise", "--dir", repo, "--optimise", "0.5", "--why", "x."},
+		{"optimise", "--dir", repo, "--at", "cli output", "--optimise", "0.5"},
+		{"optimise", "--dir", repo, "--at", "cli output", "--optimise", "1", "--why", "x."},
+		{"optimise", "--dir", repo, "--at", "nowhere", "--optimise", "0.5", "--why", "x."},
+	} {
+		if _, err := capture(t, args...); err == nil {
+			t.Errorf("%v should have been refused", args[2:])
+		}
+	}
+}
+
+func TestOptimiseComposesWithTheTree(t *testing.T) {
+	// The addressable figure has to be the node's own cost, or the
+	// hypothetical and the picture disagree about the same session.
+	repo := localFixture(t, "carry.jsonl")
+	var tree struct {
+		Total    float64 `json:"session_total"`
+		Children []struct {
+			Name string  `json:"name"`
+			Cost float64 `json:"cost"`
+		} `json:"children"`
+	}
+	treeOut, err := capture(t, "tree", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(treeOut), &tree); err != nil {
+		t.Fatal(err)
+	}
+	var branch string
+	var cost float64
+	for _, c := range tree.Children {
+		if c.Cost > 0 {
+			branch, cost = c.Name, c.Cost
+			break
+		}
+	}
+
+	var h struct {
+		Applies     string  `json:"applies_to"`
+		Addressable float64 `json:"addressable_eit"`
+		Share       float64 `json:"addressable_share"`
+		Becomes     float64 `json:"becomes"`
+		Impact      float64 `json:"impact"`
+		Saving      float64 `json:"saving_eit"`
+	}
+	jsonOut, err := capture(t, "optimise", "--dir", repo, "--at", branch,
+		"--optimise", "0.25", "--why", "A guess.", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &h); err != nil {
+		t.Fatal(err)
+	}
+	if h.Addressable != cost {
+		t.Errorf("%s costs %.2f in the tree and %.2f here", branch, cost, h.Addressable)
+	}
+	// impact = 1 - addressable x (1 - becomes), and the saving agrees.
+	if want := cost * (0.25 - 1); h.Saving != want {
+		t.Errorf("saving = %.2f, want %.2f", h.Saving, want)
+	}
+	if want := 1 + h.Saving/tree.Total; h.Impact != want {
+		t.Errorf("impact = %.6f, want %.6f", h.Impact, want)
+	}
+	if h.Share <= 0 || h.Share > 1 {
+		t.Errorf("addressable share %.4f is not a share", h.Share)
 	}
 }

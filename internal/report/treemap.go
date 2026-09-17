@@ -5,13 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
-	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/model"
-	"github.com/ctford/tokenamun/internal/whatif"
 )
 
 //go:embed templates/treemap.html
@@ -30,33 +27,12 @@ const dataPlaceholder = "__TOKENAMUN_DATA__"
 type TreemapPayload struct {
 	// Title is set by the caller, so an agent generating this for a
 	// particular repository can say whose session it is.
-	Title         string          `json:"title"`
-	Session       treemapSession  `json:"session"`
-	Interventions []treemapWhatIf `json:"interventions"`
-	Tree          *Node           `json:"tree"`
+	Title   string         `json:"title"`
+	Session treemapSession `json:"session"`
+	Tree    *Node          `json:"tree"`
 	// RampMax is the top of the colour ramp, in round trips. Taken from the
 	// tree, so the scale covers exactly what the viewer can draw.
 	RampMax float64 `json:"rampMax"`
-}
-
-// treemapWhatIf is one intervention's bottom line, for the summary table.
-// A viewer that shows where the tokens went should also say what would have
-// changed it, and the interventions already compute that.
-type treemapWhatIf struct {
-	Name    string `json:"name"`
-	Targets string `json:"targets"`
-	// Addressable, AddressableShare and Reduction decompose the effect into
-	// what the intervention can touch and what it does to it. The two
-	// fractions multiply to Share, which is the whole point of showing them:
-	// a big cut to a small thing against a small cut to a big one.
-	Addressable      string  `json:"addressable"`
-	AddressableShare float64 `json:"addressableShare"`
-	Reduction        float64 `json:"reduction"`
-	Effect           float64 `json:"effect"`
-	Share            float64 `json:"share"`
-	Applicable       bool    `json:"applicable"`
-	Note             string  `json:"note"`
-	Caveat           string  `json:"caveat"`
 }
 
 type treemapSession struct {
@@ -81,7 +57,6 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 			ID: s.Ref.ID, Calls: len(s.Invocations), Origin: string(s.Ref.Origin),
 		},
 	}
-	p.Interventions = interventionTable(s, carry)
 	p.Tree = BuildTree(s, carry)
 	p.RampMax = maxRoundTrips(p.Tree)
 	return p
@@ -105,46 +80,6 @@ func maxRoundTrips(n *Node) float64 {
 		}
 	}
 	return max
-}
-
-// interventionTable runs every intervention and keeps the one number each
-// nominates as its bottom line.
-func interventionTable(s *model.Session, carry analysis.CarryReport) []treemapWhatIf {
-	cache := analysis.Cache(s, analysis.TTL5m)
-	total := carry.PromptCostEIT + cost.For(firstModel(s)).OutputCost(s.Usage())
-	ctx := whatif.Context{
-		Session: s, Cache: cache, Carry: carry,
-		Weights: cost.For(firstModel(s)), CompressionRatio: 0.5, Total: total,
-	}
-
-	var out []treemapWhatIf
-	for _, i := range whatif.All() {
-		r := i.Estimate(ctx)
-		row := treemapWhatIf{
-			Name:       r.Intervention,
-			Targets:    r.Description,
-			Applicable: r.Applicable,
-			Reduction:  r.Reduction,
-			Caveat:     r.Caveat,
-			Note:       r.NotMeasurable,
-		}
-		if r.Addressable != nil {
-			row.Addressable = r.Addressable.Name
-			row.AddressableShare = r.Addressable.Share
-		}
-		if r.Headline != nil && r.Headline.Quantity != nil {
-			row.Effect = r.Headline.Quantity.Value
-			if r.Headline.Quantity.Unit == model.Ratio {
-				row.Share = r.Headline.Quantity.Value
-				row.Effect = 0
-			} else if total > 0 {
-				row.Share = r.Headline.Quantity.Value / total
-			}
-		}
-		out = append(out, row)
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Share < out[j].Share })
-	return out
 }
 
 // RenderTreemap writes the standalone HTML report.

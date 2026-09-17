@@ -16,12 +16,10 @@ import (
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/claudecode"
 	"github.com/ctford/tokenamun/internal/codescan"
-	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/entire"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
 	"github.com/ctford/tokenamun/internal/report"
-	"github.com/ctford/tokenamun/internal/whatif"
 )
 
 // version is overridden at build time with -X main.version.
@@ -42,14 +40,11 @@ Usage:
   tokenamun tree [session]        where the tokens went, one level at a time;
                                   drill in with --at. The HTML viewer as text.
   tokenamun period                every session in --since/--until, summed
-  tokenamun interventions         what what-if can be asked, built-in and installed
-  tokenamun what-if <name> [session]
-                                  would an optimisation have helped, and by how much
-  tokenamun what-if --all [session]
-                                  every intervention's bottom line, ranked
   tokenamun treemap [session]     standalone HTML viewer: drill down from how
                                   content was obtained to the individual files.
                                   --json prints the viewer's own payload.
+  tokenamun optimise [session]    what a hypothetical optimisation of part of
+                                  the tree would have been worth
   tokenamun series <file>...      probe runs from an experiment: median, range, payback
   tokenamun version
 
@@ -57,18 +52,15 @@ Session selector:
   a session-id prefix, or "current" for the session invoking this tool,
   or "latest" (the default) for the most recently active one.
 
-Interventions for what-if:
-  run "tokenamun interventions", which also lists any you have installed.
-  Your own go in ~/.config/tokenamun/interventions or are named with
-  --intervention PATH; see docs/interventions.md for the protocol.
+Hypothetical optimisations:
+  tokenamun optimise --at "cli output" --optimise 0.5 --why "..."
+  Name a part of the tree and what it becomes. The part is measured; the
+  figure is yours, and so is the reason it is plausible.
 
 Flags:
   --json          machine-readable output
   --dir PATH      directory to look in (default: working directory)
   --source SRC    entire | local | any (default: any)
-  --ratio N       assumed surviving fraction for compression (default 0.5)
-  --replay-with C pipe this session's own content through a real compressor
-                  instead of assuming a ratio; C reads stdin, writes stdout
   -o FILE         output file (treemap; default tokenamun-treemap.html)
   --title TEXT    heading for the treemap, e.g. "Hyper Agentic App"
   --since WHEN    only sessions active on or after WHEN: a date (2026-09-16),
@@ -79,21 +71,14 @@ Flags:
                   Names come from the level above; matching is case-insensitive.
   --mode MODE     tree pricing: carry (as billed) | uncached (as if nothing
                   cached). The difference is what prompt caching was worth.
-  --all           what-if: run every intervention and rank them
-  --cut FRACTION  what-if: an ad-hoc intervention, removing this fraction of
-                  --at. Needs --why, and takes --name for the report. Every
-                  intervention that shrinks content is a slice and a
-                  fraction, so you can ask about one without the tool
-                  knowing the vendor:
-                    tokenamun what-if --at "cli output" --cut 0.5 \
-                      --name caveman --why "Vendor figure, not measured here."
-  --why TEXT      caveat for --cut, required, max 64 characters
-  --name TEXT     what to call a --cut intervention in the report
+  --optimise N    what --at becomes: 0.5 halves it, 0 removes it, 1.1 is a
+                  change for the worse. Needs --why.
+  --why TEXT      why that figure is plausible. Required, max 64 characters:
+                  a number without it is what this tool exists to avoid.
+  --name TEXT     what to call the hypothetical in the report
   --cost N        measured intervention cost in EIT, for series payback
   --scan PATH     tree to scan for code metrics (hotspots; default --dir).
                   Point this at a checkout of the branch the session ran on.
-  --intervention PATH
-                  an intervention script to load, repeatable
 
 Code budgets (scan). Given a limit, the scan exits non-zero when it is
 exceeded, which is how it is used as a CI gate:
@@ -122,22 +107,17 @@ func run(args []string) error {
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	dir := fs.String("dir", ".", "directory to look in")
 	source := fs.String("source", "any", "entire | local | any")
-	ratio := fs.Float64("ratio", 0.5, "assumed surviving fraction for compression")
-	replayWith := fs.String("replay-with", "", "command to replay content through")
 	out := fs.String("o", "tokenamun-treemap.html", "output file for the treemap")
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
 	title := fs.String("title", "", "heading for the treemap report")
 	since := fs.String("since", "", "only sessions active on or after this date, time or age (7d)")
 	until := fs.String("until", "", "only sessions active before this date, time or age")
-	var extraInterventions repeatable
-	fs.Var(&extraInterventions, "intervention", "path to an intervention script (repeatable)")
 	at := fs.String("at", "", "drill to a node in the tree, e.g. \"cli output/git\"")
 	mode := fs.String("mode", "carry", "cost mode for the tree: carry | uncached")
-	all := fs.Bool("all", false, "run every intervention and summarise")
-	cut := fs.Float64("cut", 0, "fraction of --at to remove, for an ad-hoc intervention")
-	why := fs.String("why", "", "caveat for an ad-hoc intervention, required with --cut")
-	label := fs.String("name", "", "name for an ad-hoc intervention in the report")
+	optimise := fs.Float64("optimise", 0, "what --at becomes: 0.5 halves it")
+	why := fs.String("why", "", "caveat, required with --optimise")
+	label := fs.String("name", "", "name for the hypothetical in the report")
 	maxFileLines := fs.Int("max-file-lines", 0, "fail the scan on a file longer than this")
 	maxComplexity := fs.Int("max-complexity", 0, "fail the scan on a function above this complexity")
 	maxDuplication := fs.Float64("max-duplication", 0, "fail the scan above this % of duplicated code lines")
@@ -167,22 +147,7 @@ func run(args []string) error {
 		second = positional[1]
 	}
 
-	// Interventions supplied from outside the binary are registered before
-	// anything reads the list, so a script is a first-class row everywhere:
-	// the what-if report, the treemap's table and the JSON output.
-	loaded, errs := whatif.Discover(extraInterventions)
-	for _, i := range loaded {
-		whatif.Register(i)
-	}
-	for _, e := range errs {
-		// Reported, not fatal: one broken script must not stop a report that
-		// has six working interventions in it.
-		fmt.Fprintf(os.Stderr, "tokenamun: ignoring an intervention: %v\n", e)
-	}
-
 	switch cmd {
-	case "interventions":
-		return cmdInterventions(*asJSON)
 	case "doctor":
 		return cmdDoctor(*dir, *asJSON)
 	case "period":
@@ -214,12 +179,10 @@ func run(args []string) error {
 		return cmdTree(*dir, *source, selector, *at, *mode, *asJSON)
 	case "treemap":
 		return cmdTreemap(*dir, *source, selector, *title, *out, *asJSON)
-	case "what-if", "whatif":
-		return dispatchWhatIf(whatIfArgs{
-			dir: *dir, source: *source, selector: selector, name: second,
-			all: *all, at: *at, cut: *cut, why: *why, label: *label,
-			ratio: *ratio, replayWith: *replayWith, asJSON: *asJSON,
-		})
+	case "what-if", "whatif", "optimise":
+		return cmdOptimise(*dir, *source, selector, optimiseArgs{
+			at: *at, becomes: *optimise, why: *why, label: *label,
+		}, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
 		fmt.Println("validated against Entire CLI 0.10.2 and Claude Code 2.1.x transcripts")
@@ -389,144 +352,6 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 // cmdTree serves one level of the drill-down the HTML viewer draws.
 //
 
-// cmdWhatIfAll runs every intervention and prints the summary table, which is
-// the one thing the HTML report showed that no command produced.
-func cmdWhatIfAll(dir, source, selector string, ratio float64, replayWith string, asJSON bool) error {
-	s, ctx, err := whatIfContext(dir, source, selector, ratio, replayWith)
-	if err != nil {
-		return err
-	}
-	out := report.BuildWhatIfAll(s, ctx)
-	if asJSON {
-		return writeJSON(out)
-	}
-	return report.RenderWhatIfAll(os.Stdout, out)
-}
-
-// cmdWhatIf takes the intervention name first, then an optional session.
-func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith string, asJSON bool) error {
-	if name == "" || name == "latest" {
-		var names []string
-		for _, i := range whatif.All() {
-			names = append(names, i.Name())
-		}
-		return fmt.Errorf("what-if needs an intervention: %v", names)
-	}
-	intervention, err := whatif.Find(name)
-	if err != nil {
-		return err
-	}
-	return runIntervention(intervention, dir, source, selector, ratio, replayWith, asJSON)
-}
-
-// whatIfArgs is what the what-if command was asked for. A struct because the
-// command has three forms and passing eleven positional arguments to each of
-// them is how they drift apart.
-type whatIfArgs struct {
-	dir, source, selector, name string
-	all                         bool
-	at                          string
-	cut                         float64
-	why, label                  string
-	ratio                       float64
-	replayWith                  string
-	asJSON                      bool
-}
-
-// dispatchWhatIf picks between the three forms: an ad-hoc slice, the summary
-// of everything, and one named intervention.
-func dispatchWhatIf(a whatIfArgs) error {
-	// An ad-hoc intervention: a slice of the tree and how much of it goes
-	// away. Everything that shrinks content is that shape, so an agent can
-	// ask about one without the tool modelling the vendor.
-	if a.cut > 0 {
-		slice, err := report.ParseSlice(a.at, a.cut, a.label, a.why)
-		if err != nil {
-			return err
-		}
-		whatif.Register(slice)
-		if a.all {
-			return cmdWhatIfAll(a.dir, a.source, a.selector, a.ratio, a.replayWith, a.asJSON)
-		}
-		// Estimated directly rather than looked up by name: an ad-hoc
-		// intervention may borrow a built-in's name, and `--name caveman`
-		// should then report the slice you described rather than the
-		// built-in that happens to share the label.
-		return runIntervention(slice, a.dir, a.source, a.selector, a.ratio, a.replayWith, a.asJSON)
-	}
-	if a.all {
-		return cmdWhatIfAll(a.dir, a.source, a.selector, a.ratio, a.replayWith, a.asJSON)
-	}
-	return cmdWhatIf(a.dir, a.source, a.selector, a.name, a.ratio, a.replayWith, a.asJSON)
-}
-
-// runIntervention estimates one intervention and renders it.
-func runIntervention(i whatif.Intervention, dir, source, selector string,
-	ratio float64, replayWith string, asJSON bool) error {
-	s, ctx, err := whatIfContext(dir, source, selector, ratio, replayWith)
-	if err != nil {
-		return err
-	}
-	out := report.BuildWhatIf(s, i.Estimate(ctx))
-	if asJSON {
-		return writeJSON(out)
-	}
-	return report.RenderWhatIf(os.Stdout, out)
-}
-
-// whatIfContext assembles the evidence every intervention reasons over. One
-// place, so a single intervention and the whole summary cannot be computed
-// against different inputs.
-func whatIfContext(dir, source, selector string, ratio float64, replayWith string) (
-	*model.Session, whatif.Context, error) {
-	if selector == "" {
-		selector = "latest"
-	}
-	refs, err := discover(dir, source)
-	if err != nil {
-		return nil, whatif.Context{}, err
-	}
-	ref, err := selectSession(refs, selector)
-	if err != nil {
-		return nil, whatif.Context{}, err
-	}
-	s, err := ingest.Load(ref)
-	if err != nil {
-		return nil, whatif.Context{}, err
-	}
-
-	cache := analysis.Cache(s, analysis.TTL5m)
-	ctx := whatif.Context{
-		Session:          s,
-		Cache:            cache,
-		Carry:            analysis.Carry(s, cache),
-		Weights:          cost.Default,
-		CompressionRatio: ratio,
-	}
-	if ms := s.Models(); len(ms) > 0 {
-		ctx.Weights = cost.For(ms[0])
-	}
-	ctx.Total = ctx.Carry.PromptCostEIT + ctx.Weights.OutputCost(s.Usage())
-	if replayWith != "" {
-		// Two populations, measured separately: tool output and file content
-		// compress differently, and a ratio is only valid over the set it was
-		// measured on. Either may legitimately be empty for a session, so
-		// neither failure is fatal on its own.
-		toolOutput, toolErr := whatif.Replay(ref, replayWith)
-		files, fileErr := whatif.ReplayFiles(ref, replayWith)
-		if toolErr != nil && fileErr != nil {
-			return nil, whatif.Context{}, fmt.Errorf("replay failed: %w", toolErr)
-		}
-		if toolErr == nil {
-			ctx.Replay = toolOutput
-		}
-		if fileErr == nil {
-			ctx.FileReplay = files
-		}
-	}
-	return s, ctx, nil
-}
-
 // loadSelected resolves a selector and parses the transcript it names.
 func loadSelected(dir, source, selector string) (*model.Session, error) {
 	refs, err := discover(dir, source)
@@ -638,6 +463,7 @@ func cmdDoctor(dir string, asJSON bool) error {
 	return nil
 }
 
+// localState says how many Claude Code transcripts were found.
 func localState(refs []model.SessionRef, err error) string {
 	switch {
 	case err != nil:
@@ -651,44 +477,36 @@ func localState(refs []model.SessionRef, err error) string {
 	}
 }
 
-// cmdInterventions lists what can be asked of `what-if`.
+// optimiseArgs is a hypothetical as the command line describes it.
+type optimiseArgs struct {
+	at      string
+	becomes float64
+	why     string
+	label   string
+}
+
+// cmdOptimise prices a hypothetical optimisation of part of the tree.
 //
-// It exists for the agent case: something driving this tool needs to find out
-// what questions it can ask without a human reading the usage text, and the
-// answer changes when someone installs a script.
-func cmdInterventions(asJSON bool) error {
-	type row struct {
-		Name    string `json:"name"`
-		Targets string `json:"targets"`
-		Source  string `json:"source"`
+// All that is left of what was a table of named interventions. Everything
+// that shrinks content is a part of the session and a change to it, so the
+// tool measures the part and the caller names the change -- and the reason it
+// is plausible, which is what --why is for.
+func cmdOptimise(dir, source, selector string, a optimiseArgs, asJSON bool) error {
+	o, err := report.ParseOptimisation(a.at, a.becomes, a.label, a.why)
+	if err != nil {
+		return err
 	}
-	builtin := map[string]bool{}
-	for _, i := range whatif.Builtin() {
-		builtin[i.Name()] = true
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return err
 	}
-	var rows []row
-	for _, i := range whatif.All() {
-		src := "external"
-		if builtin[i.Name()] {
-			src = "built-in"
-		}
-		if e, ok := i.(*whatif.External); ok {
-			src = e.Path
-		}
-		rows = append(rows, row{Name: i.Name(), Targets: i.Describe(), Source: src})
+	h, err := report.BuildHypothetical(s,
+		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)), o)
+	if err != nil {
+		return err
 	}
 	if asJSON {
-		return writeJSON(rows)
+		return writeJSON(h)
 	}
-	fmt.Println("TOKENAMUN  interventions")
-	fmt.Println()
-	for _, r := range rows {
-		fmt.Printf("  %-22s %s\n", r.Name, r.Targets)
-		fmt.Printf("  %-22s %s\n", "", r.Source)
-	}
-	fmt.Println()
-	fmt.Printf("Scripts are loaded from %s and from --intervention PATH.\n",
-		strings.Join(whatif.SearchPath(), ", "))
-	fmt.Println("See docs/interventions.md for the protocol.")
-	return nil
+	return report.RenderHypothetical(os.Stdout, h)
 }

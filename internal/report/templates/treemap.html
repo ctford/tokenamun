@@ -166,14 +166,9 @@
   #level-table tr.drillable:hover td { background: var(--plane); }
   #level-table td:first-child, #level-table th:first-child { text-align: left; }
   th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
-  #interventions th { white-space: nowrap; }
   /* The prose columns are left-aligned, so their headings have to be too:
      "Applies to" right-aligned over left-aligned text reads as though it
      belongs to the column beside it. */
-  #interventions th:nth-child(1), #interventions th:nth-child(2),
-  #interventions th:last-child { text-align: left; }
-  #interventions td:first-child { white-space: nowrap; }
-  #interventions td:nth-child(2), #interventions td:last-child { font-size: 11px; }
   th:first-child, td:first-child { text-align: left; word-break: break-all; }
   th { color: var(--text-secondary); font-weight: 600; }
   td { font-variant-numeric: tabular-nums; }
@@ -214,17 +209,6 @@
     </div>
   </div>
 
-  <div class="panel" style="overflow:auto">
-    <table id="interventions">
-      <thead><tr>
-        <th>Intervention</th><th>Applies to</th>
-        <th>Addressable</th><th>Optimisation</th><th>Impact</th><th>Caveat</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-    <p class="muted">Optimisation is what the addressable part becomes and impact is
-    what the session becomes: 50% is halved, 100% untouched, over 100% worse.</p>
-  </div>
 </div>
 
 <div id="tip" role="tooltip" aria-hidden="true"></div>
@@ -243,27 +227,6 @@ document.getElementById("sid").textContent = DATA.session.id;
 document.getElementById("calls").textContent = fmt(DATA.session.calls);
 document.getElementById("origin").textContent = DATA.session.origin;
 
-/* The two fractions multiply to the third, which is the judgement the table
-   exists to support: whether a big cut to a small thing beats a small cut to
-   a big one. Showing only the product hides which of those you are looking
-   at, and the product is also the number that moves when you change an
-   assumed ratio -- the addressable share does not. */
-document.querySelector("#interventions tbody").innerHTML = DATA.interventions.map(i => {
-  const dash = `<span class="muted">—</span>`;
-  const cells = i.applicable
-    ? [pct(100 * i.addressableShare), remaining(i.reduction),
-       i.share ? remaining(i.share) : dash]
-    : [dash, dash, `<span class="muted">not measurable</span>`];
-  return `<tr>
-    <td><strong>${esc(i.name)}</strong></td>
-    <td class="muted" style="text-align:left" title="${esc(i.targets)}">${
-      esc(i.addressable || i.targets)}</td>
-    <td>${cells[0]}</td>
-    <td>${cells[1]}</td>
-    <td>${cells[2]}</td>
-    <td class="muted" style="text-align:left">${esc(i.caveat || i.note)}</td>
-  </tr>`;
-}).join("");
 
 const RAMP = ["--seq-100","--seq-200","--seq-300","--seq-400","--seq-500","--seq-600","--seq-700"];
 document.getElementById("ramp").innerHTML =
@@ -356,18 +319,6 @@ function pctOfView(n, parent) {
   const total = value(parent);
   return total > 0 ? (100 * value(n) / total) : 0;
 }
-/* What the thing becomes, rather than a signed change to it: 50% is halved,
-   100% untouched, over 100% worse. Precision follows the size of the change,
-   not the result -- a scale factor clusters near 100%, and a real 0.2% saving
-   printed as "100%" before that. */
-function remaining(change) {
-  const m = Math.abs(change), v = 100 * (1 + change);
-  if (m === 0) return "100%";
-  if (m >= 0.1) return v.toFixed(0) + "%";
-  if (m >= 0.001) return v.toFixed(1) + "%";
-  return v.toFixed(2) + "%";
-}
-
 function pct(x) { const a = Math.abs(x); return (x < 0 ? "-" : "") + (a >= 10 ? a.toFixed(0) : a.toFixed(1)) + "%"; }
 
 /* At 11px the glyphs average ~6px, so a label only earns its place if the

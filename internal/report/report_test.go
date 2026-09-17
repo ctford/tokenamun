@@ -12,10 +12,8 @@ import (
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/codescan"
-	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
-	"github.com/ctford/tokenamun/internal/whatif"
 )
 
 var update = flag.Bool("update", false, "regenerate golden files")
@@ -379,48 +377,43 @@ func jsonKeys(t *testing.T, v any) []string {
 	return keys
 }
 
-func TestWhatIfGoldenOutput(t *testing.T) {
+// The unknown section must always render, because it is the thing that stops
+// a counterfactual being read as a measurement. It survived the deletion of
+// the named interventions: the one hypothetical that is left is held to it.
+func TestAHypotheticalAlwaysRendersItsUnknowns(t *testing.T) {
 	s := carrySession(t)
-	cache := analysis.Cache(s, analysis.TTL5m)
-	ctx := whatif.Context{
-		Session:          s,
-		Cache:            cache,
-		Carry:            analysis.Carry(s, cache),
-		Weights:          cost.Default,
-		CompressionRatio: 0.5,
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	o, err := ParseOptimisation("cli output", 0.5, "proxy", "A guess, not a measurement.")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, i := range whatif.All() {
-		out := BuildWhatIf(s, i.Estimate(ctx))
-		var text bytes.Buffer
-		if err := RenderWhatIf(&text, out); err != nil {
-			t.Fatal(err)
-		}
-		compareGolden(t, "whatif-"+i.Name()+".txt", text.Bytes())
-		walkQuantities(t, "whatif."+i.Name(), mustTree(t, out))
+	h, err := BuildHypothetical(s, carry, o)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
 
-// The unknown section must always render, because it is the thing that stops a
-// counterfactual being read as a measurement.
-func TestWhatIfAlwaysRendersItsUnknowns(t *testing.T) {
-	s := carrySession(t)
-	cache := analysis.Cache(s, analysis.TTL5m)
-	ctx := whatif.Context{
-		Session: s, Cache: cache, Carry: analysis.Carry(s, cache),
-		Weights: cost.Default, CompressionRatio: 0.5,
+	var text bytes.Buffer
+	if err := RenderHypothetical(&text, h); err != nil {
+		t.Fatal(err)
 	}
-	for _, i := range whatif.All() {
-		var text bytes.Buffer
-		if err := RenderWhatIf(&text, BuildWhatIf(s, i.Estimate(ctx))); err != nil {
-			t.Fatal(err)
+	out := text.String()
+	for _, want := range []string{
+		"Unknown",
+		// The figure is the caller's, and the report has to say so where the
+		// number is, not only in the docs.
+		"not a measurement",
+		// And the outcome caveat, which is true of every counterfactual: an
+		// agent that fails the task consumes the fewest tokens of all.
+		"came out right",
+		// The caller's own reason, printed beside their number.
+		"A guess, not a measurement.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the rendered hypothetical is missing %q:\n%s", want, out)
 		}
-		out := text.String()
-		if !strings.Contains(out, "Unknown") {
-			t.Errorf("%s: no Unknown section rendered", i.Name())
-		}
-		if !strings.Contains(out, "task_success") {
-			t.Errorf("%s: the outcome caveat must be visible in the text output", i.Name())
-		}
+	}
+	if len(h.Unknown) == 0 {
+		t.Error("a hypothetical with no unknowns is the claim this tool exists to avoid")
 	}
 }
 

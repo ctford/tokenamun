@@ -6,9 +6,6 @@ import (
 	"testing"
 
 	"github.com/ctford/tokenamun/internal/analysis"
-	"github.com/ctford/tokenamun/internal/cost"
-	"github.com/ctford/tokenamun/internal/model"
-	"github.com/ctford/tokenamun/internal/whatif"
 )
 
 func treeViewFixture(t *testing.T) (view TreeView, carry analysis.CarryReport) {
@@ -238,75 +235,6 @@ func TestCLIAndViewerCannotDiverge(t *testing.T) {
 		}
 	}
 
-	// And the interventions table the viewer draws has a command behind it.
-	all := BuildWhatIfAll(s, whatIfContextFor(s, carry))
-	if len(all.Rows) != len(payload.Interventions) {
-		t.Errorf("the viewer shows %d interventions and the CLI %d",
-			len(payload.Interventions), len(all.Rows))
-	}
-	viewerNames := map[string]bool{}
-	for _, i := range payload.Interventions {
-		viewerNames[i.Name] = true
-	}
-	for _, row := range all.Rows {
-		if !viewerNames[row.Name] {
-			t.Errorf("%s is in the CLI summary but not the viewer's table", row.Name)
-		}
-	}
-}
-
-func TestWhatIfAllRanksBySavingAndPutsUnmeasurableLast(t *testing.T) {
-	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
-	all := BuildWhatIfAll(s, whatIfContextFor(s, carry))
-
-	if len(all.Rows) == 0 {
-		t.Fatal("there are interventions to run")
-	}
-	var seenUnmeasurable bool
-	var prev float64
-	for i, row := range all.Rows {
-		if !row.Applicable {
-			seenUnmeasurable = true
-			// An unmeasurable row is not a zero. Sorting it to zero would put
-			// it above every intervention that costs more than it saves.
-			if row.Effect != nil {
-				t.Errorf("%s is not applicable but reports an effect", row.Name)
-			}
-			if row.NotMeasurable == "" {
-				t.Errorf("%s says nothing can be said but not why", row.Name)
-			}
-			continue
-		}
-		if seenUnmeasurable {
-			t.Errorf("row %d (%s) is measurable but sorted after an unmeasurable one",
-				i, row.Name)
-		}
-		if row.Share != nil {
-			if i > 0 && row.Share.Value < prev {
-				t.Errorf("rows are not in order: %s at %.4f after %.4f",
-					row.Name, row.Share.Value, prev)
-			}
-			prev = row.Share.Value
-		}
-		// Every quoted number arrives with the thing to know before quoting
-		// it. The interventions are validated on this; so is the summary.
-		if row.Effect != nil && row.Caveat == "" {
-			t.Errorf("%s reports an effect with no caveat", row.Name)
-		}
-		if row.Detail == "" {
-			t.Errorf("%s does not say how to see the full result", row.Name)
-		}
-	}
-
-	// It must not read as a shopping list to add up.
-	var warned bool
-	for _, n := range all.Notes {
-		warned = warned || strings.Contains(n, "not additive")
-	}
-	if !warned {
-		t.Error("the summary must say the rows do not add up")
-	}
 }
 
 func TestTreeViewJSONNamesItsFieldsForAnAgent(t *testing.T) {
@@ -373,20 +301,6 @@ func TestPercentagesHandleSavingsWhichAreNegative(t *testing.T) {
 		if got := pctStr(in); got != want {
 			t.Errorf("pctStr(%v) = %q, want %q", in, got, want)
 		}
-	}
-}
-
-// whatIfContextFor is the evidence the interventions reason over, assembled
-// the way the CLI assembles it so the summary under test is the one shipped.
-func whatIfContextFor(s *model.Session, carry analysis.CarryReport) whatif.Context {
-	return whatif.Context{
-		Session: s,
-		Cache:   analysis.Cache(s, analysis.TTL5m),
-		Carry:   carry,
-		Weights: cost.For(firstModel(s)),
-		// The same default as --ratio, so the summary in a test is the summary
-		// a reader gets.
-		CompressionRatio: 0.5,
 	}
 }
 

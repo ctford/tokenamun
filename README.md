@@ -150,9 +150,7 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun tree` | where the tokens went, one level at a time; `--at` drills in |
 | `tokenamun period` | every session in `--since`/`--until`, summed |
 | `tokenamun doctor` | whether either source is set up to record here |
-| `tokenamun interventions` | what `what-if` can be asked, built-in and installed |
-| `tokenamun what-if` | would an optimisation have helped, and by how much |
-| `tokenamun what-if --all` | every intervention's bottom line, ranked |
+| `tokenamun optimise` | what a hypothetical optimisation of part of the tree would be worth |
 | `tokenamun treemap` | standalone HTML viewer, drilling down from channel to file |
 | `tokenamun series` | experiment probe runs: median, range, payback |
 
@@ -193,8 +191,40 @@ because each session has its own context.
 ```
 tokenamun tree --json                          # where did it go?
 tokenamun tree --at "cli output/version control"   # and inside that?
-tokenamun what-if --all                        # what would have helped?
+tokenamun optimise --at "cli output" --optimise 0.5 \
+  --why "Vendor figure, not measured here."    # what would that be worth?
 ```
+
+### One hypothetical, not a catalogue of techniques
+
+There used to be a table of named interventions — cache TTL, Caveman, RTK,
+MCP-to-CLI and the rest. They are gone, and the deletion was the finding.
+
+Everything that shrinks content does the same two things: pick a part of the
+session, and make it smaller. The answer is always the product of that part's
+share and the change — Amdahl's law with a token bill instead of a runtime. So
+a named intervention adds nothing but a vendor's name and a default ratio, and
+it adds one thing it should not: the appearance that this tool knows something
+about that vendor. Caveman's published figures span 8.5% to 65%, an eight-fold
+spread. A row reporting 13% looked like evidence and was an assumption with a
+logo on it.
+
+What the tool does instead is measure the part exactly and let you name the
+change:
+
+```
+Applies to             mcp output
+Its cost                8,829,745   [observed]
+Addressable                  7.1%   [derived]
+Optimisation                  50%   [given]
+Impact                      96.4%   [counterfactual]
+```
+
+`--why` is required, because you are the only one who knows why the figure is
+plausible, and the unknown section always prints. See
+[`docs/interventions.md`](docs/interventions.md) for which published claims are
+checkable at all — that analysis is still worth having, it just is not
+something the tool should pretend to compute.
 
 Every milestone in [`docs/plan.md`](docs/plan.md) is implemented. Activity
 classification is deliberately excluded: it is inferred, and the observed
