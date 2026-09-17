@@ -313,10 +313,11 @@ func collapseLeaves(n *Node) {
 }
 
 // resultKind decides which mechanism returned a payload, and what to open it
-// up by. File content is separated from command output because they are
-// different questions -- which files, versus which commands -- and CLI is
-// separated from MCP because that is the axis the MCP-versus-CLI argument
-// turns on.
+// up by.
+//
+// File content is separated from command output because they are different
+// questions -- which files, versus which commands -- and CLI is separated
+// from MCP because that is the axis the MCP-versus-CLI argument turns on.
 func resultKind(c model.RetrievedContent) (kind, sub string) {
 	switch c.Channel {
 	case model.ChanMCP:
@@ -328,30 +329,47 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 	case model.ChanEdit:
 		return "edit confirmations", ""
 	}
-	if c.Path != "" && isReadingClass(c.CommandClass, c.Channel) {
+
+	// Anything that came back with a file path attached is that file's
+	// contents, whichever tool delivered it. Restricting this to the Read
+	// tool and to cat filed a plan document returned by ExitPlanMode under
+	// "other tool output", where nobody would look for it.
+	if c.Channel != model.ChanShell && c.Path != "" {
 		return "file content", ""
 	}
+
 	if c.Channel == model.ChanShell {
+		// Shell reads are file content too. When the path could not be
+		// recovered from a compound command they are still file content, and
+		// saying so beats inflating CLI output with them: the whole point of
+		// separating CLI output is that git and test runs are not file
+		// reading.
+		if c.CommandClass == "cat / sed / head" {
+			if c.Path != "" {
+				return "file content", ""
+			}
+			return "file content", "path not attributed"
+		}
 		return "CLI output", c.CommandClass
 	}
-	return "other tool output", ""
-}
 
-// isReadingClass reports whether the payload is a file's contents rather than
-// a command's report about files.
-func isReadingClass(class string, ch model.Channel) bool {
-	if ch == model.ChanFileRead {
-		return true
-	}
-	return class == "cat / sed / head"
+	// What is left is the harness's own tools: plan mode, skills, questions,
+	// tool search. Named for what they are, since "other" told a reader
+	// nothing and invited the question of how it differed from CLI output.
+	return "harness tools", c.Tool
 }
 
 func kindDetail(kind string) string {
 	switch kind {
 	case "file content":
-		return "the contents of files, however they were read: the Read tool or cat, sed and head."
+		return "the contents of files, however they arrived: the Read tool, cat and sed, or a " +
+			"tool that returned a document. Reads whose path could not be recovered from a " +
+			"compound command are grouped separately rather than counted as commands."
 	case "CLI output":
 		return "what command-line tools reported: git, test runners, builds, searches, listings."
+	case "harness tools":
+		return "Claude Code's own tools: plan mode, skills, questions, tool search. Not " +
+			"commands you ran."
 	case "MCP output":
 		return "what MCP servers returned. Compare its size with CLI output when weighing " +
 			"whether to put a server behind a CLI."

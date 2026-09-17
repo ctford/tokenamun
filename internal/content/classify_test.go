@@ -292,3 +292,63 @@ func TestUnknownCategoryInConfigIsRejected(t *testing.T) {
 		t.Errorf("the error should list valid categories, got %q", err)
 	}
 }
+
+// Families are matched against the leading command word, not the whole stage.
+// Matching the whole stage picked family names out of quoted strings and filed
+// results under the wrong command: an echo label mentioning "head" put its
+// output in the file-reading tree, inside a git branch.
+func TestFamilyNamesInsideQuotedStringsAreIgnored(t *testing.T) {
+	cases := []struct {
+		name  string
+		cmd   string
+		class string
+		last  string
+	}{
+		{"echo label mentioning a command",
+			`cd /repo && echo "=== head ===" && git log --oneline -5`,
+			"git", "git log"},
+		{"commit message mentioning a command",
+			`git commit -m "run go test before pushing"`,
+			"git", "git commit"},
+		{"echo label mentioning git",
+			`echo "=== git status ===" && go test ./...`,
+			"tests", "go test"},
+		{"cd is not the command",
+			`cd /repo && cat internal/x.go`,
+			"cat / sed / head", "cat"},
+		{"time is a wrapper, not the command",
+			`time mise run check`,
+			"package management", "mise run"},
+	}
+	for _, c := range cases {
+		if got := CommandClass(c.cmd); got != c.class {
+			t.Errorf("%s: class = %q, want %q", c.name, got, c.class)
+		}
+		if got := CommandDetail(c.cmd); got != c.last {
+			t.Errorf("%s: detail = %q, want %q", c.name, got, c.last)
+		}
+	}
+}
+
+// The class and the drill-down path must come from the same stage, or a result
+// lands in one family's branch labelled with another family's command.
+func TestClassAndPathAgreeOnTheSameStage(t *testing.T) {
+	cmd := `cd /repo && echo "=== head ===" && git show HEAD:AGENTS.md`
+	class := CommandClass(cmd)
+	p := CommandPath(cmd)
+	if len(p) == 0 {
+		t.Fatal("expected a command path")
+	}
+	if class != "git" || p[0] != "git" {
+		t.Fatalf("class %q and path %v disagree", class, p)
+	}
+}
+
+func TestUnrecognisedCommandsAreNotForced(t *testing.T) {
+	if got := CommandClass("./scripts/weird-thing --flag"); got != "other shell" {
+		t.Errorf("got %q, want other shell", got)
+	}
+	if got := CommandClass(""); got != "" {
+		t.Errorf("empty command should have no class, got %q", got)
+	}
+}

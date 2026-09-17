@@ -1,6 +1,7 @@
 package content
 
 import (
+	"path"
 	"regexp"
 	"strings"
 
@@ -28,17 +29,58 @@ var commandClasses = []struct {
 	{"scripting", regexp.MustCompile(`\b(python3?|node|ruby|perl|bash -c|sh -c)\b`)},
 }
 
-// CommandDetail names the specific command inside its family: the family says
-// "git", this says "git status". It returns the text the family's own pattern
-// matched, which is already the specific form.
-func CommandDetail(cmd string) string {
-	lower := strings.ToLower(cmd)
-	for _, c := range commandClasses {
-		if m := c.re.FindString(lower); m != "" {
-			return strings.Join(strings.Fields(m), " ")
+// notCommands are stages that never produce content: they label output,
+// change directory or do nothing. Matching them is how `echo "=== head ==="`
+// ended up filed as a file-reading command inside the git tree.
+var notCommands = map[string]bool{
+	"echo": true, "printf": true, "cd": true, "export": true,
+	"true": true, ":": true, "set": true, "source": true,
+}
+
+// wrappers run another command. They are stripped rather than skipped, so
+// `time mise run check` is package management rather than unrecognised.
+var wrappers = map[string]bool{
+	"time": true, "sudo": true, "env": true, "nohup": true,
+	"command": true, "nice": true, "timeout": true, "xargs": true,
+}
+
+// matchStage finds the stage of a compound command that produced its output,
+// and which family it belongs to.
+//
+// The family is matched against the stage's leading command word (and the
+// second word, for two-word forms like `git log` or `go test`) rather than
+// against the whole stage. Matching the whole stage picked up family names
+// inside quoted strings -- an echo label mentioning "head", a commit message
+// mentioning "git" -- and put the result under the wrong command entirely.
+// It also meant the class and the drill-down path could be derived from
+// different stages of the same command, so they disagreed.
+func matchStage(cmd string) (stage, family string, ok bool) {
+	for _, candidate := range splitStages(cmd) {
+		fields := strings.Fields(candidate)
+		for len(fields) > 1 && strings.Contains(fields[0], "=") && !strings.Contains(fields[0], "/") {
+			fields = fields[1:]
+		}
+		if len(fields) == 0 {
+			continue
+		}
+		for len(fields) > 1 && wrappers[path.Base(strings.ToLower(fields[0]))] {
+			fields = fields[1:]
+		}
+		name := path.Base(strings.ToLower(fields[0]))
+		if notCommands[name] {
+			continue
+		}
+		probe := name
+		if len(fields) > 1 {
+			probe += " " + strings.ToLower(fields[1])
+		}
+		for _, cl := range commandClasses {
+			if cl.re.MatchString(probe) {
+				return strings.ToLower(candidate), cl.name, true
+			}
 		}
 	}
-	return ""
+	return "", "", false
 }
 
 // CommandPath returns progressively more specific forms of the command, so a
@@ -54,19 +96,17 @@ func CommandDetail(cmd string) string {
 // which are noise, usually have exactly one child, and would need a real
 // shell parser to fix. The arguments worth seeing are file paths, and those
 // are already recovered separately and attributed as content.
-//
-// Only the stage that matched a known family is used, because a compound
-// command like `cd /repo && git status` belongs under git rather than cd.
 func CommandPath(cmd string) []string {
-	stage, ok := matchingStage(cmd)
+	stage, _, ok := matchStage(cmd)
 	if !ok {
 		return nil
 	}
 	var words []string
 	for _, f := range strings.Fields(stage) {
-		// Flags, assignments, substitutions and quoted fragments are not
-		// levels; they are the reason this used to produce nonsense.
 		if strings.HasPrefix(f, "-") || strings.ContainsAny(f, "'\"$=(){}<>`") {
+			continue
+		}
+		if len(words) == 0 && wrappers[path.Base(strings.ToLower(f))] {
 			continue
 		}
 		words = append(words, f)
@@ -77,29 +117,13 @@ func CommandPath(cmd string) []string {
 	if len(words) == 0 {
 		return nil
 	}
-	out := []string{words[0]}
-	if len(words) > 1 {
-		// A path as the second word is not a subcommand: `cat foo.go` opens
-		// up by file, not by "cat foo.go".
-		if !strings.ContainsAny(words[1], "/.") {
-			out = append(out, words[0]+" "+words[1])
-		}
+	out := []string{path.Base(words[0])}
+	// A path as the second word is not a subcommand: `cat foo.go` opens up by
+	// file, not by "cat foo.go".
+	if len(words) > 1 && !strings.ContainsAny(words[1], "/.") {
+		out = append(out, out[0]+" "+words[1])
 	}
 	return out
-}
-
-// matchingStage finds the part of a compound command that a known family
-// matched.
-func matchingStage(cmd string) (string, bool) {
-	for _, stage := range splitStages(cmd) {
-		lower := strings.ToLower(stage)
-		for _, c := range commandClasses {
-			if c.re.MatchString(lower) {
-				return lower, true
-			}
-		}
-	}
-	return "", false
 }
 
 // splitStages breaks a compound command into independently-executed parts.
@@ -121,16 +145,23 @@ var stageSplitter = regexp.MustCompile(`\|\||&&|[;\n|]`)
 // CommandClass names what a shell command was doing. An unrecognised command
 // is "other shell" rather than being forced into a class it does not fit.
 func CommandClass(cmd string) string {
-	lower := strings.ToLower(cmd)
-	for _, c := range commandClasses {
-		if c.re.MatchString(lower) {
-			return c.name
-		}
+	if _, family, ok := matchStage(cmd); ok {
+		return family
 	}
 	if strings.TrimSpace(cmd) == "" {
 		return ""
 	}
 	return "other shell"
+}
+
+// CommandDetail names the specific command inside its family: the family says
+// "git", this says "git log".
+func CommandDetail(cmd string) string {
+	p := CommandPath(cmd)
+	if len(p) == 0 {
+		return ""
+	}
+	return p[len(p)-1]
 }
 
 // ChannelFor reports how content arrived.
