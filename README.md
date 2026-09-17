@@ -77,8 +77,8 @@ navigate without guessing at names.
 > → `tokenamun optimise --at "cli output" --optimise 0.5 --why "..."`
 
 A session is named by id prefix, or by `current` or `latest`. `tree`, `report`,
-`cache` and `optimise` also take `all`, which sums every session discovered —
-with Entire, that is the whole team. `--since` and `--until` take a date or an
+`profile`, `cache` and `optimise` also take `all`, which sums every session
+discovered — with Entire, that is the whole team. `--since` and `--until` take a date or an
 age, so last week is `--since 7d`.
 
 Interventions are not built in. Everything that shrinks content does the same

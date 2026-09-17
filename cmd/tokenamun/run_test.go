@@ -653,3 +653,70 @@ func TestSessionsAreNotListedTwiceWhenBothSourcesHaveThem(t *testing.T) {
 		t.Errorf("discovery order changed: %v", []string{got[0].ID, got[1].ID, got[2].ID})
 	}
 }
+
+func TestAllIsOfferedOnlyWhereItWorks(t *testing.T) {
+	// The help text offered "all" as a general selector and four commands
+	// answered "no session matches \"all\"", which reads as a typo rather
+	// than as a command that does not take it.
+	repo := localFixture(t, "carry.jsonl")
+
+	// Where a set composes, it works. Cost is additive, so these do.
+	for _, cmd := range []string{"tree", "profile", "cache"} {
+		if _, err := capture(t, cmd, "all", "--dir", repo); err != nil {
+			t.Errorf("%s all: %v", cmd, err)
+		}
+	}
+
+	// Where it does not, the error says what to use instead. These report
+	// per-retrieval or per-file detail whose sequence numbers and joins
+	// mean nothing once two sessions are in one list.
+	for _, cmd := range []string{"retrieval", "carry", "hotspots"} {
+		_, err := capture(t, cmd, "all", "--dir", repo)
+		if err == nil {
+			t.Errorf("%s all should be refused", cmd)
+			continue
+		}
+		if !strings.Contains(err.Error(), "tokenamun tree all") {
+			t.Errorf("%s all must name a command that does take a set: %v", cmd, err)
+		}
+	}
+}
+
+func TestProfileOverASetSumsRatherThanAverages(t *testing.T) {
+	// A merged profile is built from finished per-session profiles, not from
+	// one synthetic session: residency does not compose across sessions, and
+	// a concatenation would look like a single context to everything
+	// downstream. What must hold is that the observed totals add up.
+	repo := localFixture(t, "carry.jsonl")
+	one, err := capture(t, "profile", "latest", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := capture(t, "profile", "all", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var single, merged struct {
+		Usage struct {
+			CacheRead struct{ Value float64 }
+			TotalCost struct{ Value float64 }
+		}
+	}
+	if err := json.Unmarshal([]byte(one), &single); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(all), &merged); err != nil {
+		t.Fatal(err)
+	}
+	// One session in the fixture, so the set equals the session. Anything
+	// else means the merge is dropping or double-counting.
+	if merged.Usage.CacheRead.Value != single.Usage.CacheRead.Value {
+		t.Errorf("cache read over a set of one = %v, want %v",
+			merged.Usage.CacheRead.Value, single.Usage.CacheRead.Value)
+	}
+	if merged.Usage.TotalCost.Value != single.Usage.TotalCost.Value {
+		t.Errorf("total cost over a set of one = %v, want %v",
+			merged.Usage.TotalCost.Value, single.Usage.TotalCost.Value)
+	}
+}

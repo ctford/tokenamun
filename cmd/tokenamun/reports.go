@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/codescan"
@@ -212,11 +213,20 @@ func loadSessions(dir, source string) ([]*model.Session, report.SessionInfo, err
 	}
 
 	var models []string
-	var calls int
+	var calls, prompts int
+	var engaged time.Duration
+	origins := map[model.Origin]bool{}
 	seen := map[string]bool{}
 	mixed := false
 	for _, s := range sessions {
 		calls += s.RealCalls()
+		prompts += s.Prompts
+		// Summed, not spanned. The wall-clock distance from the first
+		// session's start to the last one's end counts the nights in
+		// between; adding each session's own duration counts the time
+		// somebody was working, which is the quantity a reader means.
+		engaged += s.Duration()
+		origins[s.Ref.Origin] = true
 		for _, m := range s.Models() {
 			if m != model.SyntheticModel && !seen[m] {
 				seen[m] = true
@@ -233,11 +243,26 @@ func loadSessions(dir, source string) ([]*model.Session, report.SessionInfo, err
 		ID: fmt.Sprintf("%d sessions, %s", len(sessions), window),
 		// The label above reads well and is not a selector. Commands printed
 		// for an agent to run need this one.
-		Selector:     SelectAll + window.Flags(),
-		Calls:        calls,
+		Selector: SelectAll + window.Flags(),
+		Calls:    calls,
+		Prompts:  prompts,
+		Duration: engaged.Round(time.Second).String(),
+		// Only when the whole set agrees; a mixture is not either of them.
+		Origin:       onlyOrigin(origins),
 		Models:       models,
 		MixedPricing: mixed,
 	}, nil
+}
+
+// onlyOrigin reports the origin when every session shares one.
+func onlyOrigin(origins map[model.Origin]bool) model.Origin {
+	if len(origins) != 1 {
+		return ""
+	}
+	for o := range origins {
+		return o
+	}
+	return ""
 }
 
 // loadTree resolves a selector to a tree, which is "all" or one session.

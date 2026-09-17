@@ -50,7 +50,9 @@ Usage:
 
 Session selector:
   "all"      every session discovered, summed. With Entire this is the
-             whole team's history, which is what Entire is for.
+             whole team's history, which is what Entire is for. Taken by
+             tree, report, profile, cache and optimise; the others report
+             on one session.
   "current"  the session invoking this tool
   "latest"   the most recently active (the default)
   or a session-id prefix.
@@ -307,15 +309,39 @@ func cmdSessions(dir, source string, asJSON bool) error {
 }
 
 func cmdProfile(dir, source, selector string, asJSON bool) error {
-	s, err := loadSelected(dir, source, selector)
+	p, err := profileOf(dir, source, selector)
 	if err != nil {
 		return err
 	}
-	p := report.BuildProfile(s)
 	if asJSON {
 		return writeJSON(p)
 	}
 	return report.RenderText(os.Stdout, p)
+}
+
+// profileOf profiles one session or the whole set.
+//
+// Summed from finished per-session profiles rather than from one synthetic
+// session made by concatenating them: residency does not compose across
+// sessions, and a concatenated session would look like a single context to
+// every analysis downstream. See report.MergeProfiles.
+func profileOf(dir, source, selector string) (report.Profile, error) {
+	if selector != SelectAll {
+		s, err := loadSelected(dir, source, selector)
+		if err != nil {
+			return report.Profile{}, err
+		}
+		return report.BuildProfile(s), nil
+	}
+	sessions, info, err := loadSessions(dir, source)
+	if err != nil {
+		return report.Profile{}, err
+	}
+	profiles := make([]report.Profile, 0, len(sessions))
+	for _, s := range sessions {
+		profiles = append(profiles, report.BuildProfile(s))
+	}
+	return report.MergeProfiles(profiles, info), nil
 }
 
 func cmdRetrieval(dir, source, selector string, asJSON bool) error {
@@ -385,6 +411,17 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 
 // loadSelected resolves a selector and parses the transcript it names.
 func loadSelected(dir, source, selector string) (*model.Session, error) {
+	// "all" is a set, and these commands answer about one session. Said
+	// plainly, with what to use instead: the previous message was "no
+	// session matches \"all\"", which reads as though the selector were a
+	// typo when in fact the help text offers it for every command.
+	if selector == SelectAll {
+		return nil, fmt.Errorf("%q is a set of sessions, and this command reports on one. "+
+			"Over a set: `tokenamun tree all` for where the tokens went, "+
+			"`tokenamun profile all` for what they cost, `tokenamun cache all` for the "+
+			"prompt cache, `tokenamun optimise all` for a hypothetical. Or name one "+
+			"session: `tokenamun sessions` lists them", SelectAll)
+	}
 	refs, err := discover(dir, source)
 	if err != nil {
 		return nil, err

@@ -213,7 +213,12 @@ func RenderText(w io.Writer, p Profile) error {
 		b.WriteString("  (this session, still running)")
 	}
 	b.WriteString("\n")
-	fmt.Fprintf(b, "  Source             %s\n", p.Session.Origin)
+	// Omitted rather than printed blank. A merged set spanning both sources
+	// has no single origin, and a label with nothing after it reads as a
+	// missing value rather than as an inapplicable one.
+	if p.Session.Origin != "" {
+		fmt.Fprintf(b, "  Source             %s\n", p.Session.Origin)
+	}
 	fmt.Fprintf(b, "  Model              %s\n", strings.Join(p.Session.Models, ", "))
 	if p.Session.MixedPricing {
 		b.WriteString("  ! these models are priced differently, so the cost-weighted\n" +
