@@ -107,13 +107,17 @@ func levelDetail(level string) string {
 func kindDetail(kind string) string {
 	switch kind {
 	case "file content":
-		return "the contents of files, however they arrived."
+		// Names the direction, because the confusable box is "tool inputs":
+		// `cat x.py <<EOF` is the model writing and lands there, while what
+		// `cat x.py` printed lands here. Whatever did the reading -- Read, a
+		// shell command, a subagent -- the contents arrive here.
+		return "file contents read into the context, whatever read them."
 	case "web content":
 		return "fetched pages and search results."
 	case "cli output":
 		return "what command-line tools printed back."
 	case "harness output":
-		return "what Claude Code's own tools returned, not commands you ran."
+		return "what Claude Code's own tools returned."
 	case "mcp output":
 		return "what MCP servers returned."
 	default:
@@ -192,40 +196,32 @@ func byteStr(n int) string {
 // unattributedDetail says what the remainder is, and unattributedMore makes
 // the argument.
 //
-// Two lengths, because the tooltip and the terminal are different places. A
-// 547-character paragraph on a box you are hovering over is not read; the
-// same text in `tokenamun tree --at unattributed` is exactly what somebody
-// asking has asked for.
+// unattributedMore lists what ends up here, and prices the two candidates
+// that could be sized.
+//
+// Definitional first, because "unattributed" is the one box whose name does
+// not say what is in it. The two ceilings follow because the alternative is a
+// large share with nothing said about it: both rest on residency the
+// transcript does not confirm, which is why the cost sits in the remainder
+// rather than in a branch of its own.
 func unattributedDetail() string {
 	return "charged, but not attributable to any one piece of content."
 }
 
-// unattributedMore computes what the two largest candidates would come to.
-//
-// Both are ceilings, and both rest on residency the transcript does not
-// confirm -- which is exactly why the cost is in the remainder and not in a
-// branch. Computing them turns "34% we cannot explain" into "34%, of which
-// this much would be one thing we decline to claim".
 func unattributedMore(s *model.Session, carry analysis.CarryReport, rest float64) string {
 	w := cost.For(firstModel(s))
 	var b strings.Builder
-	b.WriteString("Four things end up here. Thinking that was re-read: it is generated " +
-		"and billed, but Claude Code records thinking blocks with empty text, so " +
-		"whether it went round again is not in the transcript. The preamble after a " +
-		"compaction, since what survives one is not observable. The system reminders " +
-		"and per-call message envelope the harness adds, which are in the prompt but " +
-		"in no retrieval. And the error in estimating content tokens from bytes.")
+	b.WriteString("Re-read thinking, the preamble after a compaction, the harness's " +
+		"per-call envelope, and the error in estimating tokens from bytes.")
 
 	if carry.ThinkingTokens > 0 && carry.AssistantRoundTrips > 0 {
 		ceiling := float64(carry.ThinkingTokens) * carry.AssistantRoundTrips * w.CacheRead
-		fmt.Fprintf(&b, " Carrying thinking the way the rest of the model's output is "+
-			"carried would be up to %s, or %s of this remainder.",
+		fmt.Fprintf(&b, " Thinking would be up to %s of this, or %s.",
 			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
 	}
 	if beyond := float64(carry.Calls-1) - carry.PreambleRoundTrips; beyond > 0 {
 		ceiling := float64(carry.Preamble) * beyond * w.CacheRead
-		fmt.Fprintf(&b, " Carrying the preamble past the first context reset would be "+
-			"up to a further %s, or %s.",
+		fmt.Fprintf(&b, " The preamble past the first reset, a further %s, or %s.",
 			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
 	}
 	return b.String()

@@ -147,22 +147,18 @@ func BuildTreeViewFrom(root *Node, info SessionInfo, at []string, mode string) (
 		"Costs are cost-weighted tokens: every token class on one scale where 1 is a " +
 			"full-price input token of this model. Model-relative, so a mixed-model " +
 			"session still adds up.",
-		"share_of_level is of this level; share_of_session is of the whole session. " +
-			"A large share of a small branch is not worth acting on.",
-		"round_trips is how much of the back and forth the content was part of. The " +
-			"model has no memory between calls, so anything still in the context goes " +
-			"again on every call and is billed each time: arriving early and staying is " +
-			"what makes content expensive, and being large is not. Absent where there " +
-			"is no token count to weight by.",
-		"On a leaf round_trips is that retrieval's own residency, observed. On a " +
-			"branch it is an average over the tokens inside, not over the nodes: a " +
-			"large thing carried a long way counts for more than a small one. So a " +
-			"branch can never read higher than the worst leaf in it.",
-		"Caching does not change round_trips. It changes what each trip cost -- a " +
-			"tenth of input price when the prefix was warm, the write rate when it had " +
-			"to be rebuilt -- so --mode moves the cost and never the round trips. What " +
-			"ends a run is a context reset, which is why the most here is fewer than " +
-			"the session's calls.",
+		"share_of_level is of this level; share_of_session is of the whole session.",
+		"round_trips is the number of calls the content was sent on. The model has no " +
+			"memory between calls, so anything still in the context is sent again on " +
+			"every call and billed each time. Absent where there is no token count to " +
+			"weight by.",
+		"On a leaf, round_trips is that retrieval's own residency, observed. On a " +
+			"branch it is a token-weighted average of the leaves inside, so a branch " +
+			"never reads higher than the worst leaf in it.",
+		"Caching does not change round_trips, only what each trip cost: a tenth of " +
+			"input price when the prefix was warm, the write rate when it had to be " +
+			"rebuilt. So --mode moves the cost and never the round trips. A run ends at " +
+			"a context reset, which is why the most here is fewer than the session's calls.",
 		"This is not a picture of the context window at any moment. It is what each " +
 			"token class was billed at, attributed to the content resident when it was sent.",
 	}

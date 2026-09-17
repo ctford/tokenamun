@@ -92,13 +92,15 @@ func TestThinkingIsSplitOutOfOutputButNotCarried(t *testing.T) {
 	if thinking.Tokens != 300 {
 		t.Errorf("thinking tokens = %v, want the observed 300", thinking.Tokens)
 	}
-	// The tooltip says only the writing is priced; why is in the long form,
-	// where there is room for it.
-	if !contains(thinking.Detail, "writing is priced") {
-		t.Errorf("thinking must say only the writing is priced, got %q", thinking.Detail)
+	// Descriptions are definitional and brief: the box says what it holds,
+	// and the long form says where the part that cannot be attributed went.
+	// Asserted on substance rather than on a phrase, since the phrasing is
+	// what keeps changing.
+	if !contains(thinking.Detail, "for itself") {
+		t.Errorf("thinking must say whom it was written for, got %q", thinking.Detail)
 	}
-	if !contains(thinking.DetailMore, "not knowable") {
-		t.Errorf("thinking must say its carry is unknowable, got %q", thinking.DetailMore)
+	if !contains(thinking.DetailMore, "unattributed") {
+		t.Errorf("thinking must say where its carry went, got %q", thinking.DetailMore)
 	}
 	// Prose and tool inputs each combine what they cost to write with what
 	// they cost to keep, since they are the same text.
