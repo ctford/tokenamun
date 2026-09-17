@@ -1,0 +1,29 @@
+name: checks
+
+# Pushes and pull requests run exactly what the pre-commit hook runs, so
+# "it passed locally" and "it passed in CI" mean the same thing. The gates
+# themselves live in scripts/checks.sh, not here: a workflow that duplicates
+# them is a second definition that drifts.
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The dead-code and duplication checks read the repository, and the
+          # code-budget check counts committed lines. Depth 1 is enough; the
+          # checkpoint reader needs refs only when profiling, not when
+          # testing.
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: scripts/checks.sh
+        run: ./scripts/checks.sh
