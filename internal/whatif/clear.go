@@ -73,6 +73,7 @@ func (ClearOnNewTask) Estimate(c Context) Result {
 		return r
 	}
 	r.Applicable = true
+	r.Acts = AxisRoundTrips
 
 	base := attributedCarry(c.Carry)
 	cleared := attributedCarry(analysis.CarryWith(c.Session, c.Cache, boundaries))
@@ -97,6 +98,11 @@ func (ClearOnNewTask) Estimate(c Context) Result {
 				break
 			}
 		}
+	}
+
+	r.Addressable = addressable("everything carried across a boundary", base, c.Total)
+	if base > 0 {
+		r.Reduction = net / base
 	}
 
 	r.Derived = []Finding{

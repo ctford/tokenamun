@@ -65,3 +65,37 @@ func TestIsFileContentPartitionsTheShellCorrectly(t *testing.T) {
 		})
 	}
 }
+
+func TestOutputIsNotAttributedToASilentStage(t *testing.T) {
+	// A compound command's result is the concatenation of every stage's
+	// output. Attributing it to a stage that cannot have written any of it is
+	// the worst available guess -- and it was the one being made: on a real
+	// session `git add X && git commit -m ...` filed 8.7% of the whole bill
+	// under "git add", where the bytes were the commit's.
+	cases := []struct {
+		cmd  string
+		want string
+	}{
+		{"git add CLAUDE.md && git commit -m 'x'", "git commit"},
+		{"mkdir -p build && go test ./...", "go test"},
+		{"cd /repo && git status -sb", "git status"},
+		{"touch a.txt && ls -la", "ls"},
+		// Nothing later to prefer, so the silent command keeps it: the output
+		// is then an error message, and this is as good a guess as any.
+		{"git add -A", "git add"},
+		// A stage that prints comes first and stays first.
+		{"go test ./... && git push", "go test"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cmd, func(t *testing.T) {
+			p := CommandPath(tc.cmd)
+			if len(p) == 0 {
+				t.Fatalf("no command path for %q", tc.cmd)
+			}
+			got := p[len(p)-1]
+			if got != tc.want {
+				t.Errorf("got %q, want %q (path %v)", got, tc.want, p)
+			}
+		})
+	}
+}

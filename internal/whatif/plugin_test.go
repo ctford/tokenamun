@@ -31,7 +31,7 @@ case "$1" in
 describe) printf '{"name":"example","description":"an example"}' ;;
 estimate)
   cat > /dev/null
-  printf '{"applicable":true,'
+  printf '{"applicable":true,"acts_on":"volume",'
   printf '"observed":[{"label":"calls","quantity":{"value":3,"unit":"calls","provenance":"observed"}}],'
   printf '"counterfactual":[{"label":"net","quantity":{"value":-100,"unit":"eit","provenance":"counterfactual"}}],'
   printf '"headline":{"label":"net","quantity":{"value":-100,"unit":"eit","provenance":"counterfactual"}},'
@@ -96,14 +96,14 @@ func TestExternalInterventionIsHeldToTheSameRulesAsABuiltIn(t *testing.T) {
 		name: "no-unknowns",
 		body: `case "$1" in
 describe) printf '{"name":"x","description":"d"}' ;;
-estimate) cat > /dev/null; printf '{"applicable":true,"unknown":[]}' ;;
+estimate) cat > /dev/null; printf '{"applicable":true,"acts_on":"volume","unknown":[]}' ;;
 esac`,
 		wants: "no unknowns",
 	}, {
 		name: "headline-without-caveat",
 		body: `case "$1" in
 describe) printf '{"name":"x","description":"d"}' ;;
-estimate) cat > /dev/null; printf '{"applicable":true,"headline":{"label":"n","quantity":{"value":-1,"unit":"eit","provenance":"counterfactual"}},"unknown":["a"]}' ;;
+estimate) cat > /dev/null; printf '{"applicable":true,"acts_on":"volume","headline":{"label":"n","quantity":{"value":-1,"unit":"eit","provenance":"counterfactual"}},"unknown":["a"]}' ;;
 esac`,
 		wants: "no caveat",
 	}, {
@@ -117,14 +117,14 @@ esac`,
 		name: "counterfactual-labelled-observed",
 		body: `case "$1" in
 describe) printf '{"name":"x","description":"d"}' ;;
-estimate) cat > /dev/null; printf '{"applicable":true,"counterfactual":[{"label":"n","quantity":{"value":-1,"unit":"eit","provenance":"observed"}}],"unknown":["a"]}' ;;
+estimate) cat > /dev/null; printf '{"applicable":true,"acts_on":"volume","counterfactual":[{"label":"n","quantity":{"value":-1,"unit":"eit","provenance":"observed"}}],"unknown":["a"]}' ;;
 esac`,
 		wants: "labelled",
 	}, {
 		name: "renames-itself",
 		body: `case "$1" in
 describe) printf '{"name":"x","description":"d"}' ;;
-estimate) cat > /dev/null; printf '{"intervention":"y","applicable":true,"unknown":["a"]}' ;;
+estimate) cat > /dev/null; printf '{"intervention":"y","applicable":true,"acts_on":"volume","unknown":["a"]}' ;;
 esac`,
 		wants: "named itself",
 	}, {
@@ -290,6 +290,43 @@ func TestSearchPathExcludesTheRepositoryBeingAnalysed(t *testing.T) {
 	for _, dir := range SearchPath() {
 		if strings.HasPrefix(dir, wd) || dir == "." || strings.HasPrefix(dir, ".tokenamun") {
 			t.Errorf("the search path must not include the working tree, found %q", dir)
+		}
+	}
+}
+
+func TestAnInterventionMustSayWhichFactorItMoves(t *testing.T) {
+	// A box's cost is volume x round trips x price. Only a change in volume
+	// reads as a discount on the rectangles the viewer draws; the other two
+	// leave the picture the same shape and change what it cost. A result that
+	// does not say which it is leaves the reader to guess.
+	body := `case "$1" in
+describe) printf '{"name":"x","description":"d"}' ;;
+estimate) cat > /dev/null; printf '{"applicable":true,"unknown":["a"],"caveat":"c."}' ;;
+esac`
+	e, err := LoadExternal(script(t, "x", body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := e.Estimate(testContext(t))
+	if r.Applicable {
+		t.Fatal("a result with no axis must not be reported as a finding")
+	}
+	if !strings.Contains(r.NotMeasurable, "acts_on") {
+		t.Errorf("the failure should name the missing field: %q", r.NotMeasurable)
+	}
+}
+
+func TestEveryBuiltInDeclaresWhatItMoves(t *testing.T) {
+	c := testContext(t)
+	for _, i := range Builtin() {
+		r := i.Estimate(c)
+		if !r.Applicable {
+			continue
+		}
+		switch r.Acts {
+		case AxisVolume, AxisRoundTrips, AxisPrice:
+		default:
+			t.Errorf("%s is applicable but does not say which factor it moves", i.Name())
 		}
 	}
 }

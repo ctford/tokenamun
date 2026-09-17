@@ -109,6 +109,7 @@ func (FileCompression) Estimate(c Context) Result {
 		return r
 	}
 	r.Applicable = true
+	r.Acts = AxisVolume
 
 	ratio, source := c.CompressionRatio, fmt.Sprintf(
 		"assumed surviving fraction of %.0f%%, from --ratio", c.CompressionRatio*100)
@@ -144,6 +145,11 @@ func (FileCompression) Estimate(c Context) Result {
 			fmt.Sprintf("%s read %s; worth this much shrunk to %.0f%%",
 				bytesStr(f.bytes), plural(f.reads, "time"), ratio*100)))
 	}
+
+	// What this can act on, and what it does to it. The two multiply to the
+	// headline's share of the session.
+	r.Addressable = addressable("file content", eligibleCarry, c.Total)
+	r.Reduction = -(1 - ratio)
 
 	saved := eligibleCarry * (1 - ratio)
 	r.Counterfact = []Finding{

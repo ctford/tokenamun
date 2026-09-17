@@ -71,6 +71,7 @@ func (CacheTTL) Estimate(c Context) Result {
 		return r
 	}
 	r.Applicable = true
+	r.Acts = AxisPrice
 
 	r.Derived = []Finding{
 		der("re-creation avoidable under a 1h TTL", float64(avoidable), model.Tokens),
@@ -85,6 +86,14 @@ func (CacheTTL) Estimate(c Context) Result {
 	ordinaryWrites := float64(writes5m - avoidable - remaining)
 	extraOnOrdinary := ordinaryWrites * (c.Weights.CacheWrite1h - c.Weights.CacheWrite5m)
 	net := extraOnRemaining + extraOnOrdinary - saved
+
+	// Everything in the prompt is repriced, so the whole prompt is what this
+	// addresses. That is why it does not read as a discount on any box: it
+	// changes the rate, not the content.
+	r.Addressable = addressable("the whole prompt", c.Cache.TotalCostEIT, c.Total)
+	if c.Cache.TotalCostEIT > 0 {
+		r.Reduction = net / c.Cache.TotalCostEIT
+	}
 
 	pct := 0.0
 	if c.Cache.TotalCostEIT > 0 {
@@ -159,6 +168,7 @@ func (RepeatedRetrieval) Estimate(c Context) Result {
 		obs("redundant share of retrieved bytes", share, model.Ratio),
 	}
 	r.Applicable = redundantBytes > 0
+	r.Acts = AxisVolume
 	if !r.Applicable {
 		r.NotMeasurable = "no content was retrieved twice byte-for-byte in this session"
 		return r
@@ -190,6 +200,9 @@ func (RepeatedRetrieval) Estimate(c Context) Result {
 		der("redundant content, estimated tokens", tokens, model.Tokens),
 		der("carry cost of the redundant copies", carrySaved, model.EIT),
 	}
+	r.Addressable = addressable("content fetched more than once", carrySaved, c.Total)
+	r.Reduction = -1
+
 	r.Counterfact = []Finding{
 		cf("avoidable carry cost", -carrySaved, model.EIT,
 			"the saving is the carry of the later copies; the first fetch still happens"),
@@ -289,6 +302,7 @@ func compressionEstimate(c Context, name, desc string, extraUnknown []string) Re
 		obs("eligible items", float64(eligibleItems), model.Calls),
 	}
 	r.Applicable = eligibleBytes > 0
+	r.Acts = AxisVolume
 	if !r.Applicable {
 		r.NotMeasurable = "no eligible tool output in this session"
 		return r
@@ -314,6 +328,9 @@ func compressionEstimate(c Context, name, desc string, extraUnknown []string) Re
 			eligibleCarry += item.CarryEIT
 		}
 	}
+
+	r.Addressable = addressable("tool output a proxy could intercept", eligibleCarry, c.Total)
+	r.Reduction = -(1 - ratio)
 
 	r.Derived = []Finding{
 		der("compression ratio applied", ratio, model.Ratio, source),

@@ -210,6 +210,15 @@ func Validate(r *Result, m Manifest) error {
 		return fmt.Errorf("%s: caveat is %d characters and the limit is %d. It is a "+
 			"column in a table; put the argument in caveat_detail", r.Intervention, n, CaveatLimit)
 	}
+	switch {
+	case !r.Applicable:
+	case r.Acts == AxisVolume, r.Acts == AxisRoundTrips, r.Acts == AxisPrice:
+	default:
+		return fmt.Errorf("%s must say which factor it moves: acts_on is one of %q, "+
+			"%q or %q. A box's cost is volume x round trips x price, and only the "+
+			"first reads as a discount on what the viewer draws",
+			r.Intervention, AxisVolume, AxisRoundTrips, AxisPrice)
+	}
 	if !r.Applicable && strings.TrimSpace(r.NotMeasurable) == "" {
 		return fmt.Errorf("%s says it is not applicable but does not say why", r.Intervention)
 	}

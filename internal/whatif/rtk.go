@@ -158,6 +158,7 @@ func (RTK) Estimate(c Context) Result {
 	}
 
 	r.Applicable = coveredBytes > 0
+	r.Acts = AxisVolume
 	if !r.Applicable {
 		r.NotMeasurable = "no shell output in this session came from a command RTK has an adapter for"
 		return r
@@ -171,6 +172,11 @@ func (RTK) Estimate(c Context) Result {
 		der("RTK coverage of shell carry cost", coverage, model.Ratio),
 		der("uncovered shell carry cost", shellCarry-coveredCarry, model.EIT,
 			"bespoke shell: heredocs, echo pipelines, inline scripts. RTK has no adapter for these."),
+	}
+
+	r.Addressable = addressable("shell output RTK has an adapter for", coveredCarry, c.Total)
+	if coveredCarry > 0 {
+		r.Reduction = -publishedSaving / coveredCarry
 	}
 
 	r.Counterfact = []Finding{

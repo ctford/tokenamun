@@ -560,3 +560,49 @@ func TestTreemapJSONIsTheViewersOwnPayload(t *testing.T) {
 		t.Error("--json wrote an HTML file as well")
 	}
 }
+
+func TestAdHocInterventionNeedsNoVendorSupport(t *testing.T) {
+	// The generic form: name a slice of the tree and how much of it goes
+	// away. Everything that shrinks content is that shape, so an agent can
+	// ask about a technique this tool has never heard of.
+	repo := localFixture(t, "carry.jsonl")
+	out, err := capture(t, "what-if", "--dir", repo, "--at", "CLI output",
+		"--cut", "0.5", "--name", "some-proxy", "--why", "Vendor figure, not measured.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "some-proxy") {
+		t.Errorf("the caller names the row:\n%s", out)
+	}
+	if !strings.Contains(out, "Vendor figure, not measured.") {
+		t.Error("the caller's caveat must be printed with the number")
+	}
+
+	// It must not be possible to get a number without saying why it is
+	// plausible, or what it applies to.
+	for _, args := range [][]string{
+		{"what-if", "--dir", repo, "--cut", "0.5", "--why", "x."},
+		{"what-if", "--dir", repo, "--at", "CLI output", "--cut", "0.5"},
+		{"what-if", "--dir", repo, "--at", "CLI output", "--cut", "9", "--why", "x."},
+	} {
+		if _, err := capture(t, args...); err == nil {
+			t.Errorf("%v should have been refused", args[3:])
+		}
+	}
+}
+
+func TestAdHocInterventionJoinsTheSummaryTable(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+	out, err := capture(t, "what-if", "--all", "--dir", repo, "--at", "file content",
+		"--cut", "0.3", "--name", "trim-the-docs", "--why", "A guess, not a measurement.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ranked among the built-ins, with no way to tell it apart structurally.
+	if !strings.Contains(out, "trim-the-docs") {
+		t.Errorf("an ad-hoc intervention must rank with the rest:\n%s", out)
+	}
+	if !strings.Contains(out, "ADDRESSABLE") || !strings.Contains(out, "CUT THERE") {
+		t.Error("the summary must show the decomposition, not just the product")
+	}
+}

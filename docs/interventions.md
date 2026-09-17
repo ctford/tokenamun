@@ -102,6 +102,43 @@ this whole document exists to make possible:
    has to happen at the request layer, not the transcript layer. That is a
    different tool, and saying so is more useful than a fabricated percentage.
 
+## Most interventions are a slice and a fraction
+
+Everything that shrinks content does the same two things: pick a part of the
+session, cut it by some amount. The answer is always the product of that
+part's share and the cut — Amdahl's law with a token bill instead of a
+runtime. The vendor, the mechanism and the marketing vary; the arithmetic
+does not.
+
+So you do not need the tool to know about your compressor:
+
+```
+tokenamun what-if --at "CLI output" --cut 0.5   --name caveman --why "Vendor figure, not measured here."
+```
+
+`--at` takes any node `tokenamun tree` can show you, at any depth
+(`"CLI output/git"`). `--why` is required and capped at 64 characters,
+because the agent supplying a fraction is the only thing that knows why the
+fraction is plausible, and a row without that is a number somebody will
+quote. The result ranks in `what-if --all` alongside the built-ins with
+nothing to distinguish it.
+
+What stays in Go is the handful that are *not* a slice and a fraction:
+
+| intervention | why it needs code |
+| --- | --- |
+| `cache-ttl` | acts on price, not volume. The saving comes from repricing rebuilds, and it nets the doubled write cost — it can come out positive. |
+| `clear-on-new-task` | acts on round trips. It removes no content; it stops content being re-sent. |
+| `repeated-retrieval` | identifies its own slice, by content hash. You cannot name byte-identical refetches as a tree node. |
+| `rtk` | carries published per-family figures. Those are evidence about a specific tool, not an assumption you supply. |
+| `file-compression` | can measure its own ratio with `--replay-with`, against this session's real file content. |
+| `mcp-to-cli` | there is no slice: the cost is in tool schemas, which are not in the transcript. |
+
+The distinction is visible in the output. Every result declares `acts_on` as
+`volume`, `round trips` or `price` — a box's cost is the product of the three,
+and only a change in volume reads as a discount on the rectangles the viewer
+draws.
+
 ## Writing your own intervention
 
 An intervention is an executable. Tokenamun ships seven, and none of them can

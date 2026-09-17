@@ -74,6 +74,15 @@ Flags:
   --mode MODE     tree pricing: carry (as billed) | uncached (as if nothing
                   cached). The difference is what prompt caching was worth.
   --all           what-if: run every intervention and rank them
+  --cut FRACTION  what-if: an ad-hoc intervention, removing this fraction of
+                  --at. Needs --why, and takes --name for the report. Every
+                  intervention that shrinks content is a slice and a
+                  fraction, so you can ask about one without the tool
+                  knowing the vendor:
+                    tokenamun what-if --at "CLI output" --cut 0.5 \
+                      --name caveman --why "Vendor figure, not measured here."
+  --why TEXT      caveat for --cut, required, max 64 characters
+  --name TEXT     what to call a --cut intervention in the report
   --cost N        measured intervention cost in EIT, for series payback
   --scan PATH     tree to scan for code metrics (hotspots; default --dir).
                   Point this at a checkout of the branch the session ran on.
@@ -118,6 +127,9 @@ func run(args []string) error {
 	at := fs.String("at", "", "drill to a node in the tree, e.g. \"CLI output/git\"")
 	mode := fs.String("mode", "carry", "cost mode for the tree: carry | uncached")
 	all := fs.Bool("all", false, "run every intervention and summarise")
+	cut := fs.Float64("cut", 0, "fraction of --at to remove, for an ad-hoc intervention")
+	why := fs.String("why", "", "caveat for an ad-hoc intervention, required with --cut")
+	label := fs.String("name", "", "name for an ad-hoc intervention in the report")
 	maxFileLines := fs.Int("max-file-lines", 0, "fail the scan on a file longer than this")
 	maxComplexity := fs.Int("max-complexity", 0, "fail the scan on a function above this complexity")
 	maxDuplication := fs.Float64("max-duplication", 0, "fail the scan above this % of duplicated code lines")
@@ -184,10 +196,11 @@ func run(args []string) error {
 	case "treemap":
 		return cmdTreemap(*dir, *source, selector, *title, *out, *asJSON)
 	case "what-if", "whatif":
-		if *all {
-			return cmdWhatIfAll(*dir, *source, selector, *ratio, *replayWith, *asJSON)
-		}
-		return cmdWhatIf(*dir, *source, selector, second, *ratio, *replayWith, *asJSON)
+		return dispatchWhatIf(whatIfArgs{
+			dir: *dir, source: *source, selector: selector, name: second,
+			all: *all, at: *at, cut: *cut, why: *why, label: *label,
+			ratio: *ratio, replayWith: *replayWith, asJSON: *asJSON,
+		})
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
 		fmt.Println("validated against Entire CLI 0.10.2 and Claude Code 2.1.x transcripts")
@@ -504,12 +517,58 @@ func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith str
 	if err != nil {
 		return err
 	}
+	return runIntervention(intervention, dir, source, selector, ratio, replayWith, asJSON)
+}
+
+// whatIfArgs is what the what-if command was asked for. A struct because the
+// command has three forms and passing eleven positional arguments to each of
+// them is how they drift apart.
+type whatIfArgs struct {
+	dir, source, selector, name string
+	all                         bool
+	at                          string
+	cut                         float64
+	why, label                  string
+	ratio                       float64
+	replayWith                  string
+	asJSON                      bool
+}
+
+// dispatchWhatIf picks between the three forms: an ad-hoc slice, the summary
+// of everything, and one named intervention.
+func dispatchWhatIf(a whatIfArgs) error {
+	// An ad-hoc intervention: a slice of the tree and how much of it goes
+	// away. Everything that shrinks content is that shape, so an agent can
+	// ask about one without the tool modelling the vendor.
+	if a.cut > 0 {
+		slice, err := report.ParseSlice(a.at, a.cut, a.label, a.why)
+		if err != nil {
+			return err
+		}
+		whatif.Register(slice)
+		if a.all {
+			return cmdWhatIfAll(a.dir, a.source, a.selector, a.ratio, a.replayWith, a.asJSON)
+		}
+		// Estimated directly rather than looked up by name: an ad-hoc
+		// intervention may borrow a built-in's name, and `--name caveman`
+		// should then report the slice you described rather than the
+		// built-in that happens to share the label.
+		return runIntervention(slice, a.dir, a.source, a.selector, a.ratio, a.replayWith, a.asJSON)
+	}
+	if a.all {
+		return cmdWhatIfAll(a.dir, a.source, a.selector, a.ratio, a.replayWith, a.asJSON)
+	}
+	return cmdWhatIf(a.dir, a.source, a.selector, a.name, a.ratio, a.replayWith, a.asJSON)
+}
+
+// runIntervention estimates one intervention and renders it.
+func runIntervention(i whatif.Intervention, dir, source, selector string,
+	ratio float64, replayWith string, asJSON bool) error {
 	s, ctx, err := whatIfContext(dir, source, selector, ratio, replayWith)
 	if err != nil {
 		return err
 	}
-
-	out := report.BuildWhatIf(s, intervention.Estimate(ctx))
+	out := report.BuildWhatIf(s, i.Estimate(ctx))
 	if asJSON {
 		return writeJSON(out)
 	}
@@ -548,6 +607,7 @@ func whatIfContext(dir, source, selector string, ratio float64, replayWith strin
 	if ms := s.Models(); len(ms) > 0 {
 		ctx.Weights = cost.For(ms[0])
 	}
+	ctx.Total = ctx.Carry.PromptCostEIT + ctx.Weights.OutputCost(s.Usage())
 	if replayWith != "" {
 		// Two populations, measured separately: tool output and file content
 		// compress differently, and a ratio is only valid over the set it was

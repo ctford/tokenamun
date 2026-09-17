@@ -2,9 +2,11 @@ package report
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/content"
+	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/model"
 )
 
@@ -183,4 +185,51 @@ func byteStr(n int) string {
 	default:
 		return fmt.Sprintf("%d B", n)
 	}
+}
+
+// unattributedDetail says what the remainder is likely to be made of.
+//
+// "What the parts do not account for" is true and useless at 34% of a
+// session. Two of the candidates have computable ceilings, so they are
+// computed: a reader can then see whether the gap is mostly one thing we
+// deliberately decline to claim, or genuinely diffuse. They are ceilings and
+// they are labelled as ceilings -- both rest on residency the transcript does
+// not confirm, which is exactly why the cost is here and not in a branch.
+func unattributedDetail(s *model.Session, carry analysis.CarryReport, rest float64) string {
+	w := cost.For(firstModel(s))
+	var b strings.Builder
+	b.WriteString("what the parts above do not account for: system reminders, the " +
+		"per-call message envelope, thinking re-read if it is re-read at all, the " +
+		"preamble after a compaction, and the error in apportioning output by byte " +
+		"share. Reported rather than distributed.")
+
+	// Thinking is generated and billed, and then it is in the conversation.
+	// Whether it is sent back is not in the transcript -- Claude Code records
+	// thinking blocks with empty text -- so its carry is not claimed anywhere.
+	// If it were carried like the rest of the model's output, it would be:
+	if carry.ThinkingTokens > 0 && carry.AssistantRoundTrips > 0 {
+		ceiling := float64(carry.ThinkingTokens) * carry.AssistantRoundTrips * w.CacheRead
+		fmt.Fprintf(&b, " Carrying thinking the way the rest of the model's output is "+
+			"carried would be up to %s of this, or %s of the remainder.",
+			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
+	}
+
+	// The preamble's residency stops at the first reset, because compaction
+	// can leave a prefix smaller than the first call's prompt and what the
+	// harness put back is not observable.
+	if beyond := float64(carry.Calls-1) - carry.PreambleRoundTrips; beyond > 0 {
+		ceiling := float64(carry.Preamble) * beyond * w.CacheRead
+		fmt.Fprintf(&b, " Carrying the preamble past the first context reset, which is "+
+			"not claimed because what survives a compaction is not observable, would be "+
+			"up to a further %s, or %s.",
+			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
+	}
+	return b.String()
+}
+
+func nonZero(v float64) float64 {
+	if v == 0 {
+		return 1
+	}
+	return v
 }

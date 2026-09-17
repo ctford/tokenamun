@@ -193,8 +193,8 @@
   <div class="panel" style="overflow:auto">
     <table id="interventions">
       <thead><tr>
-        <th>Intervention</th><th>What it targets</th>
-        <th>Effect</th><th>Share of session</th><th>Caveat</th>
+        <th>Intervention</th><th>Addressable</th>
+        <th>Of session</th><th>Cut there</th><th>Overall</th><th>Caveat</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -217,17 +217,24 @@ document.getElementById("sid").textContent = DATA.session.id;
 document.getElementById("calls").textContent = fmt(DATA.session.calls);
 document.getElementById("origin").textContent = DATA.session.origin;
 
+/* The two fractions multiply to the third, which is the judgement the table
+   exists to support: whether a big cut to a small thing beats a small cut to
+   a big one. Showing only the product hides which of those you are looking
+   at, and the product is also the number that moves when you change an
+   assumed ratio -- the addressable share does not. */
 document.querySelector("#interventions tbody").innerHTML = DATA.interventions.map(i => {
-  const effect = i.applicable
-    ? (i.effect ? fmt(i.effect) : "—")
-    : `<span class="muted">not measurable</span>`;
-  const share = i.applicable && i.share
-    ? `${(100 * i.share).toFixed(1)}%` : "—";
+  const dash = `<span class="muted">—</span>`;
+  const cells = i.applicable
+    ? [pct(100 * i.addressableShare), pct(100 * i.reduction),
+       i.share ? pct(100 * i.share) : dash]
+    : [dash, dash, `<span class="muted">not measurable</span>`];
   return `<tr>
     <td><strong>${esc(i.name)}</strong></td>
-    <td class="muted" style="text-align:left">${esc(i.targets)}</td>
-    <td>${effect}</td>
-    <td>${share}</td>
+    <td class="muted" style="text-align:left" title="${esc(i.targets)}">${
+      esc(i.addressable || i.targets)}</td>
+    <td>${cells[0]}</td>
+    <td>${cells[1]}</td>
+    <td>${cells[2]}</td>
     <td class="muted" style="text-align:left">${esc(i.caveat || i.note)}</td>
   </tr>`;
 }).join("");
@@ -323,7 +330,7 @@ function pctOfView(n, parent) {
   const total = value(parent);
   return total > 0 ? (100 * value(n) / total) : 0;
 }
-function pct(x) { return (x >= 10 ? x.toFixed(0) : x.toFixed(1)) + "%"; }
+function pct(x) { const a = Math.abs(x); return (x < 0 ? "-" : "") + (a >= 10 ? a.toFixed(0) : a.toFixed(1)) + "%"; }
 
 /* At 11px the glyphs average ~6px, so a label only earns its place if the
    truncated form still says something. */

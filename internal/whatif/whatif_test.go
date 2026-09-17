@@ -1,6 +1,7 @@
 package whatif
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -436,6 +437,47 @@ func TestEveryBuiltInCaveatFitsInTheTable(t *testing.T) {
 		// And the argument behind it must not be lost, only moved.
 		if r.Applicable && r.Headline != nil && r.CaveatDetail == "" && r.Caveat == "" {
 			t.Errorf("%s: a headline with neither caveat nor detail", i.Name())
+		}
+	}
+}
+
+func TestAddressableTimesReductionIsTheEffect(t *testing.T) {
+	// The identity the summary table is built on: what an intervention can
+	// touch, times what it does to that, is what it does to the session. If
+	// it does not hold, the three columns are three unrelated numbers and
+	// the table invites arithmetic that does not work.
+	c := testContext(t)
+	c.Total = c.Carry.PromptCostEIT + c.Weights.OutputCost(c.Session.Usage())
+	if c.Total <= 0 {
+		t.Fatal("the fixture needs a cost to take shares of")
+	}
+
+	for _, i := range Builtin() {
+		r := i.Estimate(c)
+		if !r.Applicable || r.Headline == nil || r.Headline.Quantity == nil {
+			continue
+		}
+		if r.Headline.Quantity.Unit == model.Ratio {
+			continue // already a share; nothing to decompose
+		}
+		if r.Addressable == nil {
+			t.Errorf("%s has an effect but does not say what it can act on", i.Name())
+			continue
+		}
+		want := r.Headline.Quantity.Value / c.Total
+		got := r.Addressable.Share * r.Reduction
+		if math.Abs(got-want) > 1e-9 {
+			t.Errorf("%s: addressable %.6f x reduction %.6f = %.6f, but the effect is %.6f "+
+				"of the session", i.Name(), r.Addressable.Share, r.Reduction, got, want)
+		}
+		// And the addressable part has to be a real slice of the session.
+		if r.Addressable.Share <= 0 || r.Addressable.Share > 1.0001 {
+			t.Errorf("%s: addressable share %.4f is not a share of anything",
+				i.Name(), r.Addressable.Share)
+		}
+		if r.Addressable.Name == "" {
+			t.Errorf("%s: the addressable part needs a name a reader can go and find",
+				i.Name())
 		}
 	}
 }

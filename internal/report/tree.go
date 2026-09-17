@@ -116,9 +116,7 @@ func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
 		root.Children = append(root.Children, &Node{
 			Name: "unattributed", Kind: "bucket", Unscaled: true,
 			Carry: rest, CarryUncached: restUncached, Items: 1,
-			Detail: "what the parts above do not account for: system reminders, per-call " +
-				"message envelope, thinking re-read if it is re-read at all, and the error " +
-				"in apportioning output by byte share. Reported rather than distributed.",
+			Detail: unattributedDetail(s, carry, rest),
 		})
 		rollUp(root)
 	}

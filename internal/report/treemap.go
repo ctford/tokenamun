@@ -43,13 +43,20 @@ type TreemapPayload struct {
 // A viewer that shows where the tokens went should also say what would have
 // changed it, and the interventions already compute that.
 type treemapWhatIf struct {
-	Name       string  `json:"name"`
-	Targets    string  `json:"targets"`
-	Effect     float64 `json:"effect"`
-	Share      float64 `json:"share"`
-	Applicable bool    `json:"applicable"`
-	Note       string  `json:"note"`
-	Caveat     string  `json:"caveat"`
+	Name    string `json:"name"`
+	Targets string `json:"targets"`
+	// Addressable, AddressableShare and Reduction decompose the effect into
+	// what the intervention can touch and what it does to it. The two
+	// fractions multiply to Share, which is the whole point of showing them:
+	// a big cut to a small thing against a small cut to a big one.
+	Addressable      string  `json:"addressable"`
+	AddressableShare float64 `json:"addressableShare"`
+	Reduction        float64 `json:"reduction"`
+	Effect           float64 `json:"effect"`
+	Share            float64 `json:"share"`
+	Applicable       bool    `json:"applicable"`
+	Note             string  `json:"note"`
+	Caveat           string  `json:"caveat"`
 }
 
 type treemapSession struct {
@@ -104,11 +111,11 @@ func maxRoundTrips(n *Node) float64 {
 // nominates as its bottom line.
 func interventionTable(s *model.Session, carry analysis.CarryReport) []treemapWhatIf {
 	cache := analysis.Cache(s, analysis.TTL5m)
+	total := carry.PromptCostEIT + cost.For(firstModel(s)).OutputCost(s.Usage())
 	ctx := whatif.Context{
 		Session: s, Cache: cache, Carry: carry,
-		Weights: cost.For(firstModel(s)), CompressionRatio: 0.5,
+		Weights: cost.For(firstModel(s)), CompressionRatio: 0.5, Total: total,
 	}
-	total := carry.PromptCostEIT + cost.For(firstModel(s)).OutputCost(s.Usage())
 
 	var out []treemapWhatIf
 	for _, i := range whatif.All() {
@@ -117,8 +124,13 @@ func interventionTable(s *model.Session, carry analysis.CarryReport) []treemapWh
 			Name:       r.Intervention,
 			Targets:    r.Description,
 			Applicable: r.Applicable,
+			Reduction:  r.Reduction,
 			Caveat:     r.Caveat,
 			Note:       r.NotMeasurable,
+		}
+		if r.Addressable != nil {
+			row.Addressable = r.Addressable.Name
+			row.AddressableShare = r.Addressable.Share
 		}
 		if r.Headline != nil && r.Headline.Quantity != nil {
 			row.Effect = r.Headline.Quantity.Value

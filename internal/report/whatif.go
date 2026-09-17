@@ -208,6 +208,14 @@ type WhatIfSummaryRow struct {
 	// Applicable is false when the evidence for this one is not in the data.
 	// Such a row is not a zero: see NotMeasurable for why.
 	Applicable bool `json:"applicable"`
+	// Addressable is what the intervention can act on at all, by name, and
+	// AddressableShare is that as a fraction of the session. Reduction is
+	// what it does to that part. The three read as one sentence: it can
+	// touch <addressable>, which is <share> of the session, and it would cut
+	// that by <reduction> -- so the effect is the product.
+	Addressable      string  `json:"addressable,omitempty"`
+	AddressableShare float64 `json:"addressable_share,omitempty"`
+	Reduction        float64 `json:"reduction,omitempty"`
 	// Effect is the intervention's own nominated bottom line, in EIT.
 	// Negative is a saving.
 	Effect *model.Quantity `json:"effect,omitempty"`
@@ -237,14 +245,21 @@ func BuildWhatIfAll(s *model.Session, ctx whatif.Context) WhatIfAll {
 		},
 	}
 
-	total := ctx.Carry.PromptCostEIT + ctx.Weights.OutputCost(s.Usage())
+	total := ctx.Total
+	if total == 0 {
+		total = ctx.Carry.PromptCostEIT + ctx.Weights.OutputCost(s.Usage())
+	}
 	for _, i := range whatif.All() {
 		r := i.Estimate(ctx)
 		row := WhatIfSummaryRow{
 			Name: r.Intervention, Targets: r.Description,
 			Applicable: r.Applicable, Caveat: r.Caveat, CaveatDetail: r.CaveatDetail,
-			NotMeasurable: r.NotMeasurable,
-			Detail:        fmt.Sprintf("tokenamun what-if %s %s", r.Intervention, s.Ref.ID),
+			NotMeasurable: r.NotMeasurable, Reduction: r.Reduction,
+			Detail: fmt.Sprintf("tokenamun what-if %s %s", r.Intervention, s.Ref.ID),
+		}
+		if r.Addressable != nil {
+			row.Addressable = r.Addressable.Name
+			row.AddressableShare = r.Addressable.Share
 		}
 		if r.Headline != nil && r.Headline.Quantity != nil {
 			q := *r.Headline.Quantity
@@ -287,22 +302,28 @@ func RenderWhatIfAll(w io.Writer, r WhatIfAll) error {
 	b.WriteString("TOKENAMUN  would an optimisation have helped?\n\n")
 	fmt.Fprintf(b, "Session %s, %s API calls\n\n", r.Session.ID, num(r.Session.Calls))
 
-	fmt.Fprintf(b, "%-22s %14s %9s  %s\n", "INTERVENTION", "EFFECT (EIT)", "SESSION", "TARGETS")
+	// Addressable share x reduction = overall. Printed as a product, because
+	// that is the shape of the judgement: whether a big cut to a small thing
+	// beats a small cut to a big one.
+	fmt.Fprintf(b, "%-20s %-34s %7s %10s %9s\n",
+		"INTERVENTION", "ADDRESSABLE", "OF THAT", "CUT THERE", "OVERALL")
 	for _, row := range r.Rows {
-		effect, share := "not measurable", "--"
-		if row.Applicable {
-			effect = "--"
-			if row.Effect != nil {
-				effect = num(int(row.Effect.Value))
-			}
-			if row.Share != nil {
-				share = pctStr(row.Share.Value)
-			}
+		if !row.Applicable {
+			fmt.Fprintf(b, "%-20s %-34s %7s %10s %9s\n",
+				trunc(row.Name, 20), trunc(row.Addressable, 34), "--", "--", "not measurable")
+			continue
 		}
-		fmt.Fprintf(b, "%-22s %14s %9s  %s\n",
-			trunc(row.Name, 22), effect, share, trunc(row.Targets, 60))
+		overall := "--"
+		if row.Share != nil {
+			overall = pctStr(row.Share.Value)
+		}
+		fmt.Fprintf(b, "%-20s %-34s %7s %10s %9s\n",
+			trunc(row.Name, 20), trunc(row.Addressable, 34),
+			pctStr(row.AddressableShare), pctStr(row.Reduction), overall)
 	}
 	b.WriteString("\n")
+	b.WriteString("OF THAT is the addressable part as a share of the session; CUT THERE is\n")
+	b.WriteString("what the intervention does to that part. They multiply to OVERALL.\n\n")
 
 	for _, row := range r.Rows {
 		reason := strings.TrimSpace(row.Caveat + " " + row.CaveatDetail)

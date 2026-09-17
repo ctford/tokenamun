@@ -59,7 +59,35 @@ var wrappers = map[string]bool{
 // mentioning "git" -- and put the result under the wrong command entirely.
 // It also meant the class and the drill-down path could be derived from
 // different stages of the same command, so they disagreed.
+// silentCommands produce no output on success.
+//
+// An identity property of the command, not a role it plays in a project:
+// `git add` prints nothing whether you use it to stage a fix or a feature.
+// That matters because a compound command's result is the concatenation of
+// every stage's output, and attributing it to a stage that cannot have
+// written any of it is the worst available guess. On one reference session
+// `git add X && git commit -m ...` filed 8.7% of the whole bill under
+// "git add", where the bytes were the commit's -- most of them the
+// pre-commit hook's test output.
+var silentCommands = map[string]bool{
+	"git add": true, "git stage": true, "git rm": true, "git mv": true,
+	"mkdir": true, "touch": true, "chmod": true, "chown": true,
+	"ln": true, "mv": true, "cp": true, "rm": true, "export": true,
+	"set": true, "unset": true, "cd": true,
+}
+
 func matchStage(cmd string) (text, family string, piped, ok bool) {
+	// Two passes. A stage that cannot have produced output is skipped while
+	// a later stage might have; if every stage is silent the first one is
+	// used after all, because the output is then an error message and the
+	// first command is as good a guess as any.
+	if t, f, p, found := matchStageSkipping(cmd, true); found {
+		return t, f, p, true
+	}
+	return matchStageSkipping(cmd, false)
+}
+
+func matchStageSkipping(cmd string, skipSilent bool) (text, family string, piped, ok bool) {
 	for _, candidate := range splitStages(cmd) {
 		fields := strings.Fields(candidate.text)
 		for len(fields) > 1 && strings.Contains(fields[0], "=") && !strings.Contains(fields[0], "/") {
@@ -78,6 +106,9 @@ func matchStage(cmd string) (text, family string, piped, ok bool) {
 		probe := name
 		if len(fields) > 1 {
 			probe += " " + strings.ToLower(fields[1])
+		}
+		if skipSilent && (silentCommands[name] || silentCommands[probe]) {
+			continue
 		}
 		for _, cl := range commandClasses {
 			if cl.re.MatchString(probe) {

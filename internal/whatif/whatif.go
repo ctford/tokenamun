@@ -35,14 +35,56 @@ type Finding struct {
 	Note     string          `json:"note,omitempty"`
 }
 
+// Axis is the part of the picture an intervention changes.
+//
+// Three of them, and the distinction matters because only one reads as a
+// discount on the treemap. A box's area is volume times round trips times
+// price; an intervention moves exactly one of those factors, and which one
+// tells you whether you can point at the boxes it would shrink.
+type Axis string
+
+const (
+	// AxisVolume is less content. This is the one that is a discount on a box
+	// or a set of boxes: the same rectangles, smaller.
+	AxisVolume Axis = "volume"
+	// AxisRoundTrips is the same content going round fewer times. It changes
+	// the shade rather than the area, and which content it touches depends on
+	// when that content arrived, which cuts across the hierarchy.
+	AxisRoundTrips Axis = "round trips"
+	// AxisPrice is the same content going round the same number of times at a
+	// different rate. It is not a discount on anything you can point at, and
+	// it is the one that can come out negative: a longer cache TTL reprices
+	// every write upward as well as saving the rebuilds.
+	AxisPrice Axis = "price"
+)
+
 // Result separates what we saw from what we computed from what we guessed.
 type Result struct {
-	Intervention string    `json:"intervention"`
-	Description  string    `json:"description"`
-	Applicable   bool      `json:"applicable"`
-	Observed     []Finding `json:"observed"`
-	Derived      []Finding `json:"derived"`
-	Counterfact  []Finding `json:"counterfactual"`
+	Intervention string `json:"intervention"`
+	Description  string `json:"description"`
+	Applicable   bool   `json:"applicable"`
+	// Acts is which factor of the cost this intervention moves. Required on
+	// an applicable result: without it a reader cannot tell a discount on
+	// visible boxes from a repricing of the whole session.
+	Acts Axis `json:"acts_on,omitempty"`
+	// Addressable is the part of the session this intervention can touch at
+	// all, and Reduction is what it does to that part. The two multiply to
+	// the headline's share of the session, which is the identity that makes
+	// a table of interventions readable:
+	//
+	//	addressable share x reduction there = overall effect
+	//
+	// Separating them is the difference between "this saves 9%" and "this
+	// halves a thing that is 17% of your bill". The second tells you whether
+	// the ceiling is worth chasing at all, and unlike the first it does not
+	// move when you change an assumed ratio.
+	Addressable *Addressable `json:"addressable,omitempty"`
+	// Reduction is the signed change to the addressable part, as a fraction.
+	// Negative is a saving, matching the sign convention on every effect.
+	Reduction   float64   `json:"reduction,omitempty"`
+	Observed    []Finding `json:"observed"`
+	Derived     []Finding `json:"derived"`
+	Counterfact []Finding `json:"counterfactual"`
 	// Headline is the one number the intervention nominates as its bottom
 	// line, so a summary does not have to guess which finding matters. Nil
 	// when there is nothing defensible to report.
@@ -66,6 +108,27 @@ type Result struct {
 	NotMeasurable string `json:"not_measurable,omitempty"`
 }
 
+// Addressable is the slice of the session an intervention can act on.
+//
+// Name is what to look for in the viewer, so a reader can go and see it. The
+// branch names are the vocabulary, which is another reason they have to be
+// honest.
+type Addressable struct {
+	Name    string  `json:"name"`
+	CostEIT float64 `json:"cost_eit"`
+	// Share is CostEIT against the session's whole cost.
+	Share float64 `json:"share_of_session"`
+}
+
+// addressable builds the slice, given its cost and the session total.
+func addressable(name string, costEIT, sessionTotal float64) *Addressable {
+	a := &Addressable{Name: name, CostEIT: costEIT}
+	if sessionTotal > 0 {
+		a.Share = costEIT / sessionTotal
+	}
+	return a
+}
+
 // Context is the evidence an intervention reasons over.
 type Context struct {
 	Session *model.Session
@@ -75,6 +138,10 @@ type Context struct {
 	// CompressionRatio is the assumed surviving fraction of compressed
 	// content. Printed with the result so the reader sees the assumption.
 	CompressionRatio float64
+	// Total is the session's whole cost, prompt plus output, in EIT. The
+	// denominator for an addressable share, computed once so that every
+	// intervention divides by the same thing.
+	Total float64
 	// Replay, when set, measured real compression of this session's tool
 	// output instead of assuming a ratio.
 	Replay *ReplayResult
