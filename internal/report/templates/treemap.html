@@ -30,22 +30,14 @@
     --other-ink: #f4f3ef;
     --other-rule: #37362f;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) {
-      color-scheme: dark;
-      --surface-1: #1a1a19;
-      --plane: #0d0d0d;
-      --text-primary: #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted: #9c9b91;
-      --rule: #37362f;
-      --seq-100: #104281; --seq-200: #184f95; --seq-300: #1c5cab;
-      --seq-400: #256abf; --seq-500: #3987e5; --seq-600: #6da7ec;
-      --seq-700: #9ec5f4;
-      --bar: #3987e5;
-      --de-emphasis: #57564f;
-    }
-  }
+  /* There is no @media (prefers-color-scheme: dark) block. There was, and it
+     was a second definition of dark that drifted: it still held the blue ramp
+     this report used before the oxide palette, and it never gained the
+     --other-* colours the toggle wears. So the scheme you got by starting the
+     page on a dark-mode machine was not the scheme you got by pressing the
+     button, and only one of the two was the colour anybody chose. The
+     preference is resolved into data-theme once, on load, which leaves
+     exactly one rule per scheme. */
   :root[data-theme="dark"] {
     color-scheme: dark;
     --surface-1: #1a1a19;
@@ -214,6 +206,15 @@
 <div id="tip" role="tooltip" aria-hidden="true"></div>
 
 <script>
+/* Resolve the operating system's preference into data-theme once, so that
+   every later read -- the CSS rules, darkMode(), the toggle's label -- agrees
+   about which scheme is in force, and so that each scheme is defined in
+   exactly one place. */
+if (!document.documentElement.hasAttribute("data-theme")) {
+  document.documentElement.setAttribute("data-theme",
+    window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+}
+
 const DATA = __TOKENAMUN_DATA__;
 
 const fmt = n => n.toLocaleString("en-US", {maximumFractionDigits: 0});
@@ -329,11 +330,15 @@ function fitLabel(text, widthPx) {
   return text.length <= room ? text : text.slice(0, room - 1) + "…";
 }
 
-/* The ramp inverts between themes - dark mode's high steps are pale blue - so
-   ink is chosen against the step for the theme actually in force. */
+/* The ramp inverts between themes - dark mode's high steps are the pale end -
+   so ink is chosen against the step for the theme actually in force.
+
+   Read from the attribute rather than by comparing a computed --surface-1
+   against a literal hex. That comparison worked but was a tripwire: changing
+   a surface colour, or a browser normalising the value, would have made every
+   caller believe it was in light mode for ever. */
 function darkMode() {
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue("--surface-1").trim() === "#1a1a19";
+  return document.documentElement.getAttribute("data-theme") === "dark";
 }
 function inkFor(step) {
   const fillIsDark = darkMode() ? step <= 3 : step >= 2;

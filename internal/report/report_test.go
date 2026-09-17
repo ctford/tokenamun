@@ -592,3 +592,47 @@ func TestCallCountExcludesFailedRequests(t *testing.T) {
 		t.Errorf("the report says %d calls, want %d", got, real)
 	}
 }
+
+func TestEachThemeIsDefinedExactlyOnce(t *testing.T) {
+	// A second definition of dark drifted away from the first. The report had
+	// an @media (prefers-color-scheme: dark) block as well as a
+	// [data-theme="dark"] one, and when the palette changed from blue to
+	// oxide only the second was updated -- so the scheme you got by opening
+	// the page on a dark-mode machine was not the scheme you got by pressing
+	// the button, and the toggle's own colours were missing from one of them.
+	//
+	// The fix was to resolve the preference into the attribute on load, and
+	// this asserts the shape that makes the drift impossible rather than the
+	// symptom: one rule per scheme, and every palette variable defined the
+	// same number of times as every other.
+	raw, err := templates.ReadFile("templates/treemap.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Comments stripped: this file explains the bug in prose, and an
+	// assertion that its own explanation satisfies is worth nothing.
+	css := code(string(raw))
+
+	if n := strings.Count(css, "prefers-color-scheme"); n != 1 {
+		t.Errorf("the preference should be read once, in script, not in a CSS "+
+			"rule that duplicates a scheme; found %d mentions", n)
+	}
+	if n := strings.Count(css, `[data-theme="dark"]`); n != 1 {
+		t.Errorf("dark is defined %d times; a second definition is what drifted", n)
+	}
+	// Every role must appear in both schemes, or one scheme inherits the
+	// other's value and looks like neither.
+	for _, role := range []string{
+		"--surface-1:", "--plane:", "--text-primary:", "--rule:",
+		"--seq-100:", "--seq-400:", "--seq-700:", "--bar:", "--de-emphasis:",
+		"--other-surface:", "--other-ink:", "--other-rule:",
+	} {
+		if n := strings.Count(css, role); n != 2 {
+			t.Errorf("%s is defined %d times, want 2 (one per scheme)", role, n)
+		}
+	}
+	if !strings.Contains(css, `getAttribute("data-theme")`) {
+		t.Error("darkMode() must read the attribute; comparing a computed " +
+			"colour to a literal hex breaks silently when a surface changes")
+	}
+}
