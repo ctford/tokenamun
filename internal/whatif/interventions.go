@@ -2,6 +2,7 @@ package whatif
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/model"
@@ -239,23 +240,42 @@ func compressionEstimate(c Context, name, desc string, extraUnknown []string) Re
 		}, extraUnknown...),
 	}
 
-	// Eligible content is tool and MCP output: what a compressor sits in front
-	// of. File contents and patches are excluded, because compressing source
-	// the agent is about to edit is a different and riskier intervention.
-	var eligibleBytes, totalBytes int
+	// Eligibility is by delivery channel, not by content category. A proxy
+	// sits in front of tool output and compresses whatever comes back, so
+	// a decision record delivered by `cat` is eligible even though it
+	// classifies as an ADR. Direct file reads and patches are excluded: those
+	// arrive through a different path and compressing source the agent is
+	// about to edit is a different, riskier intervention.
+	//
+	// The split matters for judging the risk rather than the size: opaque
+	// output is build logs and status noise, where lossy compression is
+	// cheap; identifiable file content is something the agent went looking
+	// for, where losing detail is how a compression saving turns into extra
+	// tool calls.
+	var eligibleBytes, totalBytes, opaqueBytes, contentBytes int
 	var eligibleItems int
 	for _, item := range c.Session.Retrievals {
-		totalBytes += item.Bytes
+		totalBytes += item.ObservedBytes()
+		if !viaTool(item.Tool) {
+			continue
+		}
+		eligibleBytes += item.Bytes
+		eligibleItems++
 		switch item.Category {
 		case model.CatToolOutput, model.CatMCPOutput:
-			eligibleBytes += item.Bytes
-			eligibleItems++
+			opaqueBytes += item.Bytes
+		default:
+			contentBytes += item.Bytes
 		}
 	}
 
 	r.Observed = []Finding{
 		obs("retrieved content", float64(totalBytes), model.Bytes),
-		obs("eligible tool and MCP output", float64(eligibleBytes), model.Bytes),
+		obs("eligible, delivered by a tool", float64(eligibleBytes), model.Bytes),
+		obs("  of which opaque output", float64(opaqueBytes), model.Bytes,
+			"build logs and status noise: the cheap part to compress"),
+		obs("  of which identifiable content", float64(contentBytes), model.Bytes,
+			"files the agent went looking for: compressing these is where a saving turns into extra tool calls"),
 		obs("eligible items", float64(eligibleItems), model.Calls),
 	}
 	r.Applicable = eligibleBytes > 0
@@ -280,8 +300,7 @@ func compressionEstimate(c Context, name, desc string, extraUnknown []string) Re
 	// Eligible carry, so the saving is expressed in what it actually costs.
 	var eligibleCarry float64
 	for _, item := range c.Carry.Items {
-		switch item.Category {
-		case model.CatToolOutput, model.CatMCPOutput:
+		if viaTool(item.Tool) {
 			eligibleCarry += item.CarryEIT
 		}
 	}
@@ -349,6 +368,22 @@ func (MCPToCLI) Estimate(c Context) Result {
 		},
 	}
 	return r
+}
+
+// viaTool reports whether content arrived through a channel a compression
+// proxy sits in front of. Kept in step with the replay eligibility in
+// replay.go: a ratio measured over a different set than the saving is applied
+// to is quietly wrong.
+func viaTool(tool string) bool {
+	if strings.HasPrefix(tool, "mcp__") {
+		return true
+	}
+	switch tool {
+	case "Bash", "BashOutput", "WebFetch", "WebSearch":
+		return true
+	default:
+		return false
+	}
 }
 
 // estimateTokens applies the session's own calibrated estimator.

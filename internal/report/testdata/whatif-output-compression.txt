@@ -5,19 +5,24 @@ Session carry-fixture, 8 API calls
 
 Observed
   retrieved content                                 12.0 KB   [observed]
-  eligible tool and MCP output                       1.1 KB   [observed]
-  eligible items                                          3   [observed]
+  eligible, delivered by a tool                      5.0 KB   [observed]
+    of which opaque output                           1.1 KB   [observed]
+      build logs and status noise: the cheap part to compress
+    of which identifiable content                    3.9 KB   [observed]
+      files the agent went looking for: compressing these is where a
+      saving turns into extra tool calls
+  eligible items                                          4   [observed]
 
 Derived
   compression ratio applied                           50.0%   [derived]
       assumed surviving fraction 0.50, stated rather than measured
-  eligible content, estimated tokens                    179   [derived]
-  carry cost of eligible content                        259   [derived]
+  eligible content, estimated tokens                    842   [derived]
+  carry cost of eligible content                        326   [derived]
 
 Counterfactual
-  compressed size                                     540 B   [counterfactual]
-  bytes removed                                       540 B   [counterfactual]
-  carry cost avoided, before invalidation              -129   [counterfactual]
+  compressed size                                    2.5 KB   [counterfactual]
+  bytes removed                                      2.5 KB   [counterfactual]
+  carry cost avoided, before invalidation              -163   [counterfactual]
       proportional to the content removed; the cache-invalidation cost of
       rewriting context is in unknown, not netted out here
   local reduction of eligible content                 50.0%   [counterfactual]

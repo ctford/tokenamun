@@ -178,7 +178,7 @@ func TestReductionNeverExceedsTheObservedEligibleVolume(t *testing.T) {
 		r := i.Estimate(c)
 		var eligible, removed float64
 		for _, f := range r.Observed {
-			if f.Label == "eligible tool and MCP output" {
+			if f.Label == "eligible, delivered by a tool" {
 				eligible = f.Quantity.Value
 			}
 		}
@@ -191,9 +191,45 @@ func TestReductionNeverExceedsTheObservedEligibleVolume(t *testing.T) {
 			t.Errorf("%s: removed %.0f bytes of %.0f eligible", i.Name(), removed, eligible)
 		}
 		if eligible != 8000 {
-			t.Errorf("%s: eligible = %.0f; source code is not eligible for output compression",
-				i.Name(), eligible)
+			t.Errorf("%s: eligible = %.0f; a direct file Read is not delivered through a "+
+				"channel a compression proxy sits in front of", i.Name(), eligible)
 		}
+	}
+}
+
+// Eligibility follows the delivery channel, not the content category: a proxy
+// compresses whatever comes back from the shell, including a decision record
+// that arrived via `cat`.
+func TestShellDeliveredFileContentIsEligible(t *testing.T) {
+	s := &model.Session{
+		Invocations: []model.ModelInvocation{inv(0, 0, 1, 0, 20_000), inv(1, time.Minute, 1, 20_000, 500)},
+		Retrievals: []model.RetrievedContent{
+			// A decision record read through the shell: classified as an ADR,
+			// still delivered by Bash.
+			{Tool: "Bash", Category: model.CatADR, Path: "docs/decisions/a.md",
+				Bytes: 5000, Tokens: 1400, InvocationSeq: 0},
+			// The same content read directly: a different channel.
+			{Tool: "Read", Category: model.CatADR, Path: "docs/decisions/b.md",
+				Bytes: 5000, Tokens: 1400, InvocationSeq: 1},
+		},
+		Estimator: model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true},
+	}
+	r := (OutputCompression{}).Estimate(ctxFor(s))
+
+	var eligible, content float64
+	for _, f := range r.Observed {
+		switch f.Label {
+		case "eligible, delivered by a tool":
+			eligible = f.Quantity.Value
+		case "  of which identifiable content":
+			content = f.Quantity.Value
+		}
+	}
+	if eligible != 5000 {
+		t.Errorf("eligible = %.0f, want the 5000 bytes that came through the shell", eligible)
+	}
+	if content != 5000 {
+		t.Errorf("identifiable content = %.0f; the split exists to show what is risky to compress", content)
 	}
 }
 
