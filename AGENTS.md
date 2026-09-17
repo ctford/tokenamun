@@ -161,6 +161,6 @@ The spec is explicit about scope, and the temptations are real:
 * No exact context-window reconstruction. We report observed prompt sizes and
   say what we cannot decompose.
 * No developer-level metrics or leaderboards. Tokenamun is a sensor, not a
-  judge — see [`docs/interventions.md`](docs/interventions.md#anti-pattern-to-avoid-building).
+  judge — see [`docs/interventions.md`](docs/interventions.md#the-anti-pattern-to-avoid-building).
 * No fabricated precision. If the evidence isn't in the data, the command says
   `not measurable from this data`. That output is a feature.

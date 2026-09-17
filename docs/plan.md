@@ -530,7 +530,7 @@ skill is actually invoked, so the standing cost is the description line.
 Not an MCP server. An MCP server would load tool schemas into the context of
 every session it was connected to, whether or not anyone profiled anything —
 which is precisely the overhead
-[`interventions.md`](interventions.md#reducing-what-is-loaded-up-front) says we
+[`interventions.md`](interventions.md#trimming-instructions-and-the-preamble) says we
 cannot even measure. Shipping a profiler whose own footprint is invisible to it
 would be a poor joke.
 

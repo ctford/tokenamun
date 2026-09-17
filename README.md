@@ -242,6 +242,6 @@ The research and plan are:
 * [`SPEC.md`](SPEC.md) — what we're building and why
 * [`docs/research-entire.md`](docs/research-entire.md) — what Entire's data actually contains, measured
 * [`docs/plan.md`](docs/plan.md) — architecture and v0.1 implementation plan
-* [`docs/interventions.md`](docs/interventions.md) — which proposed optimisations Tokenamun can produce evidence for
+* [`docs/interventions.md`](docs/interventions.md) — what people try to optimise, which part of a session each acts on, and which can be checked at all
 * [`docs/optimisation-claims.md`](docs/optimisation-claims.md) — survey of what the tools and techniques claim, and how good the evidence is
 * [`docs/experiments.md`](docs/experiments.md) — using it for before/after experiments, and what it can't do for you
