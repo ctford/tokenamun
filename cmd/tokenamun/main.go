@@ -275,6 +275,19 @@ func cmdSessions(dir, source string, asJSON bool) error {
 		fmt.Println("Tokenamun reads transcripts that already exist. It looks for")
 		fmt.Println("Entire recordings in .entire/metadata/ and Claude Code sessions")
 		fmt.Println("in ~/.claude/projects/. Neither was found for this directory.")
+		// "Entire is set up here but has not recorded anything" is a
+		// different problem from "Entire is not set up", and it is the one a
+		// reader is most likely to be surprised by: the directory is there,
+		// the settings are there, and there is still nothing to read.
+		if entire.Configured(dir) {
+			fmt.Println()
+			fmt.Println("Entire is configured in this repository but has recorded nothing")
+			fmt.Println("yet. Recordings appear once a session runs with it enabled; a")
+			fmt.Println("fresh clone does not carry them, because they are not committed.")
+		}
+		fmt.Println()
+		fmt.Println("Claude Code's own transcripts need no setup at all: run this from")
+		fmt.Println("inside a session and `tokenamun profile current` will work.")
 		return nil
 	}
 	fmt.Printf("%-38s %-8s %-20s %s\n", "SESSION", "SOURCE", "LAST ACTIVE", "")

@@ -74,3 +74,31 @@ func Discover(dir string) ([]model.SessionRef, error) {
 	}
 	return out, nil
 }
+
+// Configured reports whether Entire is set up in a repository, whether or not
+// it has recorded anything.
+//
+// The two states need telling apart. "Entire is not installed" is a decision
+// somebody has to make; "Entire is installed and there is nothing here" is a
+// fresh clone, or a repository where nobody has run a session yet, and the
+// recordings are deliberately not committed. A reader looking at a .entire
+// directory and an empty report deserves to be told which one they have.
+// It walks up from dir on its own rather than using FindRepo, which looks
+// for .entire/metadata -- the thing that is missing in exactly the case this
+// function exists to detect.
+func Configured(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(abs, MetadataDir, "settings.json")); err == nil {
+			return true
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return false
+		}
+		abs = parent
+	}
+}
