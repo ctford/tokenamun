@@ -288,3 +288,30 @@ func ChannelFor(tool string, direct bool) model.Channel {
 		return model.ChanOtherTool
 	}
 }
+
+// IsFileContent reports whether a retrieval is the contents of a file,
+// however it arrived.
+//
+// One rule, in one place, because two things need it and they must agree: the
+// viewer's "file content" branch and the file-compression intervention. A
+// saving priced over a different population than the one the viewer shows is
+// a number nobody can check against the picture.
+//
+// Three cases, in order. A path attached to a non-shell result means the file
+// itself came back, whichever tool delivered it -- restricting that to Read
+// and cat filed a plan document from ExitPlanMode under "other tool output",
+// where nobody would look for it. A shell result from a file-printing binary
+// is file content even when the path could not be recovered from a compound
+// command. And a file-printing binary downstream of a pipe is not reading a
+// file at all: `git log | head -20` is a git report, and counting it as file
+// content attributed a third of that bucket to files that were never read.
+func IsFileContent(c model.RetrievedContent) bool {
+	switch c.Channel {
+	case model.ChanMCP, model.ChanWeb, model.ChanSubagent, model.ChanEdit:
+		return false
+	case model.ChanShell:
+		return IsFileReading(c.CommandBinary) && !c.PipelineFilter
+	default:
+		return c.Path != ""
+	}
+}

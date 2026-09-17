@@ -4,7 +4,7 @@ switch the prompt cache from the 5-minute TTL to the 1-hour TTL
 Session carry-fixture, 8 API calls
 
 Observed
-  observed TTL                                           5m   [observed]
+  observed TTL                                 5m
   cache writes at 5m                                 74,900   [observed]
   cache writes at 1h                                      0   [observed]
   prompt cost                                       107,359   [observed]

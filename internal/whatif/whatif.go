@@ -66,8 +66,12 @@ type Context struct {
 	// CompressionRatio is the assumed surviving fraction of compressed
 	// content. Printed with the result so the reader sees the assumption.
 	CompressionRatio float64
-	// Replay, when set, measured real compression instead of assuming a ratio.
+	// Replay, when set, measured real compression of this session's tool
+	// output instead of assuming a ratio.
 	Replay *ReplayResult
+	// FileReplay is the same measurement over file content, which is a
+	// different population and compresses differently.
+	FileReplay *ReplayResult
 }
 
 // Intervention estimates one optimisation.
@@ -85,6 +89,7 @@ func Builtin() []Intervention {
 		RepeatedRetrieval{},
 		ClearOnNewTask{},
 		OutputCompression{},
+		FileCompression{},
 		Caveman{},
 		RTK{},
 		MCPToCLI{},

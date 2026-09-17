@@ -436,11 +436,21 @@ func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith str
 		ctx.Weights = cost.For(ms[0])
 	}
 	if replayWith != "" {
-		replay, err := whatif.Replay(ref, replayWith)
-		if err != nil {
-			return fmt.Errorf("replay failed: %w", err)
+		// Two populations, measured separately: tool output and file content
+		// compress differently, and a ratio is only valid over the set it was
+		// measured on. Either may legitimately be empty for a session, so
+		// neither failure is fatal on its own.
+		toolOutput, toolErr := whatif.Replay(ref, replayWith)
+		files, fileErr := whatif.ReplayFiles(ref, replayWith)
+		if toolErr != nil && fileErr != nil {
+			return fmt.Errorf("replay failed: %w", toolErr)
 		}
-		ctx.Replay = replay
+		if toolErr == nil {
+			ctx.Replay = toolOutput
+		}
+		if fileErr == nil {
+			ctx.FileReplay = files
+		}
 	}
 
 	out := report.BuildWhatIf(s, intervention.Estimate(ctx))

@@ -480,30 +480,22 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 		return "edit confirmations", ""
 	}
 
-	// Anything that came back with a file path attached is that file's
-	// contents, whichever tool delivered it. Restricting this to the Read
-	// tool and to cat filed a plan document returned by ExitPlanMode under
-	// "other tool output", where nobody would look for it.
-	if c.Channel != model.ChanShell && c.Path != "" {
-		return "file content", ""
+	// What counts as file content is one rule, in content.IsFileContent, so
+	// that this branch and the file-compression intervention cannot drift
+	// apart: a saving priced over a different population than the one the
+	// viewer draws is a number nobody can check against the picture.
+	if content.IsFileContent(c) {
+		if c.Path != "" {
+			return "file content", ""
+		}
+		// Read through a compound shell command, so the content is real file
+		// reading with the file unknown. Saying so beats inflating CLI output
+		// with it: the point of separating CLI output is that git and test
+		// runs are not file reading.
+		return "file content", "unidentified files"
 	}
 
 	if c.Channel == model.ChanShell {
-		// Shell reads are file content too. When the path could not be
-		// recovered from a compound command they are still file content, and
-		// saying so beats inflating CLI output with them: the whole point of
-		// separating CLI output is that git and test runs are not file
-		// reading.
-		// A file-printing tool downstream of a pipe is not reading a file: it
-		// is reshaping whatever is upstream. Counting `git log | head -20` as
-		// file content attributed a third of this bucket to files that were
-		// never read.
-		if content.IsFileReading(c.CommandBinary) && !c.PipelineFilter {
-			if c.Path != "" {
-				return "file content", ""
-			}
-			return "file content", "unidentified files"
-		}
 		// Grouped by the tool that ran, not by a purpose category: "which
 		// CLI" is a question about tools.
 		if !content.LooksLikeCommand(c.CommandBinary) {

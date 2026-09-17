@@ -69,7 +69,10 @@ func section(b *strings.Builder, title string, findings []whatif.Finding) {
 	fmt.Fprintf(b, "%s\n", title)
 	for _, f := range findings {
 		if f.Quantity == nil {
-			fmt.Fprintf(b, "%-46s %12s   [%s]\n", "  "+f.Label, f.Text, model.Observed)
+			// A finding with no number carries no provenance to print. It used
+			// to be stamped [observed], which labelled an assumption stated in
+			// the counterfactual section as a measurement.
+			fmt.Fprintf(b, "%-46s %s\n", "  "+f.Label, f.Text)
 			if f.Note != "" {
 				fmt.Fprintf(b, "      %s\n", wrap(f.Note, 68, "      "))
 			}
