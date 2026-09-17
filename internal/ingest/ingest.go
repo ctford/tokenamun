@@ -26,24 +26,45 @@ import (
 // result. Lines above it are reported rather than silently truncated.
 const maxLine = 64 << 20
 
-// Load parses the transcript a ref points at.
+// Options configures ingestion.
+type Options struct {
+	// Classifier decides what retrieved content is. The zero value uses the
+	// built-in naming heuristics.
+	Classifier content.Classifier
+}
+
+// Load parses the transcript a ref points at, using the built-in classifier.
 func Load(ref model.SessionRef) (*model.Session, error) {
+	return LoadWith(ref, Options{})
+}
+
+// LoadWith parses the transcript a ref points at.
+func LoadWith(ref model.SessionRef, opts Options) (*model.Session, error) {
 	f, err := os.Open(ref.Transcript)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return Parse(f, ref)
+	return ParseWith(f, ref, opts)
 }
 
-// Parse reads a transcript from r.
+// Parse reads a transcript from r with the built-in classifier.
+func Parse(r io.Reader, ref model.SessionRef) (*model.Session, error) {
+	return ParseWith(r, ref, Options{})
+}
+
+// ParseWith reads a transcript from r.
 //
 // A transcript that is still being appended to can end in a partial line, so
 // an unparseable final line is tolerated and reported as a warning. An
 // unparseable line anywhere else is also survivable -- one bad line should not
 // cost the whole profile -- but it is counted.
-func Parse(r io.Reader, ref model.SessionRef) (*model.Session, error) {
+func ParseWith(r io.Reader, ref model.SessionRef, opts Options) (*model.Session, error) {
 	s := &model.Session{Ref: ref}
+	s.ClassifierSource = opts.Classifier.Source
+	if s.ClassifierSource == "" {
+		s.ClassifierSource = "built-in heuristics"
+	}
 
 	byRequest := map[string]int{} // request id -> index into s.Invocations
 	toolIndex := map[string]int{} // tool_use id -> index into s.ToolCalls
@@ -65,7 +86,7 @@ func Parse(r io.Reader, ref model.SessionRef) (*model.Session, error) {
 			continue
 		}
 		lastLineBad = false
-		absorb(s, e, byRequest, toolIndex)
+		absorb(s, e, opts.Classifier, byRequest, toolIndex)
 	}
 	if err := sc.Err(); err != nil && !errors.Is(err, bufio.ErrTooLong) {
 		return nil, err
@@ -89,7 +110,7 @@ func Parse(r io.Reader, ref model.SessionRef) (*model.Session, error) {
 }
 
 // absorb folds one transcript entry into the session.
-func absorb(s *model.Session, e claudecode.Entry, byRequest, toolIndex map[string]int) {
+func absorb(s *model.Session, e claudecode.Entry, cl content.Classifier, byRequest, toolIndex map[string]int) {
 	if e.CWD != "" && s.CWD == "" {
 		s.CWD = e.CWD
 	}
@@ -108,7 +129,7 @@ func absorb(s *model.Session, e claudecode.Entry, byRequest, toolIndex map[strin
 		if results := e.Message.ToolResults(); len(results) > 0 {
 			meta := claudecode.ParseResultMeta(e.ToolUseResult)
 			for _, b := range results {
-				absorbResult(s, b, meta, toolIndex)
+				absorbResult(s, b, meta, cl, toolIndex)
 			}
 			return
 		}
@@ -186,7 +207,7 @@ func absorbAssistant(s *model.Session, e claudecode.Entry, byRequest, toolIndex 
 // same thing: on real sessions it disagrees by more than an order of
 // magnitude, because large output is spilled to a file and the model is shown
 // only an excerpt. It is used here for path, line range and truncation only.
-func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMeta, toolIndex map[string]int) {
+func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMeta, cl content.Classifier, toolIndex map[string]int) {
 	bytesIn := b.Content.Len()
 	images, imageBytes := b.Content.Images()
 
@@ -213,14 +234,16 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 	if bytesIn == 0 && images == 0 {
 		return
 	}
-	cat, prov, path := categorise(tc.Name, tc.Command, meta)
+	cat, prov, path, declared, paths := categorise(cl, tc.Name, tc.Command, meta)
 	s.Retrievals = append(s.Retrievals, model.RetrievedContent{
 		Seq:           len(s.Retrievals),
 		ToolID:        tc.ID,
 		Tool:          tc.Name,
 		Category:      cat,
 		CategoryProv:  prov,
+		Declared:      declared,
 		Path:          path,
+		Paths:         paths,
 		Bytes:         bytesIn,
 		Images:        images,
 		ImageBytes:    imageBytes,
@@ -242,21 +265,46 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 // A path parsed out of a shell command line is a guess, so it is inferred.
 // Output that cannot be attributed to a path is tool output rather than a
 // speculative category.
-func categorise(tool, command string, meta claudecode.ResultMeta) (model.Category, model.Provenance, string) {
+func categorise(cl content.Classifier, tool, command string, meta claudecode.ResultMeta) (
+	cat model.Category, prov model.Provenance, path string, declared bool, paths []string) {
 	if meta.Path != "" {
-		if cat, ok := content.Classify(meta.Path); ok {
-			return cat, model.Derived, meta.Path
+		c, ok, dec := cl.Match(meta.Path)
+		if ok {
+			return c, model.Derived, meta.Path, dec, []string{meta.Path}
 		}
-		return model.CatOther, model.Derived, meta.Path
+		return model.CatOther, model.Derived, meta.Path, false, []string{meta.Path}
 	}
+
 	if command != "" {
-		if paths := content.PathsFromCommand(command); len(paths) > 0 {
-			if cat, ok := content.Classify(paths[0]); ok {
-				return cat, model.Inferred, paths[0]
+		found := content.PathsFromCommand(command)
+		cats := map[model.Category]bool{}
+		anyDeclared := false
+		var classified []string
+		for _, p := range found {
+			c, ok, dec := cl.Match(p)
+			if !ok {
+				continue
 			}
+			cats[c] = true
+			anyDeclared = anyDeclared || dec
+			classified = append(classified, p)
+		}
+		switch len(cats) {
+		case 0:
+			// Nothing classifiable; fall through to tool output.
+		case 1:
+			for c := range cats {
+				return c, model.Inferred, classified[0], anyDeclared, classified
+			}
+		default:
+			// A compound command that read a decision record, a source file
+			// and a directory listing in one result is genuinely a mixture.
+			// Splitting the bytes between them would be invented precision,
+			// and picking one would be arbitrary.
+			return model.CatMixed, model.Inferred, "", anyDeclared, classified
 		}
 	}
-	return content.ClassifyTool(tool), model.Observed, ""
+	return content.ClassifyTool(tool), model.Observed, "", false, nil
 }
 
 // withheld reports how much content the harness kept out of context. It is

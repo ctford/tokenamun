@@ -95,6 +95,9 @@ type Session struct {
 	TranscriptLines  int            `json:"transcript_lines"`
 	AssistantEntries int            `json:"assistant_entries"`
 	Estimator        TokenEstimator `json:"token_estimator"`
+	// ClassifierSource says where content categories came from, so a reader
+	// can tell a declared layout from a guess at naming.
+	ClassifierSource string `json:"classifier_source,omitempty"`
 }
 
 // TokenEstimator records how content token counts were arrived at, so the

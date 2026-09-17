@@ -13,6 +13,7 @@ const (
 	CatPlan          Category = "plans"
 	CatDocumentation Category = "documentation"
 	CatInstructions  Category = "instructions"
+	CatMixed         Category = "mixed"
 	CatToolOutput    Category = "tool output"
 	CatMCPOutput     Category = "mcp output"
 	CatOther         Category = "other"
@@ -22,7 +23,7 @@ const (
 func Categories() []Category {
 	return []Category{
 		CatSourceCode, CatTest, CatADR, CatSpecification, CatPlan,
-		CatDocumentation, CatInstructions, CatToolOutput, CatMCPOutput, CatOther,
+		CatDocumentation, CatInstructions, CatMixed, CatToolOutput, CatMCPOutput, CatOther,
 	}
 }
 
@@ -43,7 +44,15 @@ type RetrievedContent struct {
 	// CategoryProv is derived when the path was observed in the tool result,
 	// and inferred when it was parsed out of a shell command line.
 	CategoryProv Provenance `json:"category_provenance"`
-	Path         string     `json:"path,omitempty"`
+	// Declared is true when the category came from a configured subtree rather
+	// than from a guess about directory naming.
+	Declared bool   `json:"declared,omitempty"`
+	Path     string `json:"path,omitempty"`
+	// Paths lists every path the content was attributed to. A compound shell
+	// command can read several files in one result, and pretending otherwise
+	// would either lose content or invent precision about which file it came
+	// from.
+	Paths []string `json:"paths,omitempty"`
 	// Bytes is the observed size of what entered context.
 	Bytes int `json:"bytes"`
 	// Tokens is an estimate unless a real tokenizer was used; Prov says which.

@@ -1,0 +1,9 @@
+{
+  "_comment": "Declare where this repository keeps each kind of content. Declared subtrees are exact; without them Tokenamun falls back to guessing from directory names and says so.",
+  "categories": {
+    "specifications": ["SPEC.md"],
+    "documentation":  ["docs"],
+    "instructions":   ["AGENTS.md", "METHODOLOGY.md", "README.md", ".claude"],
+    "tests":          ["internal/report/testdata", "internal/ingest/testdata"]
+  }
+}
