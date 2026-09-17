@@ -4,7 +4,7 @@ Tokenamun does not model named techniques. It measures a session and lets you
 name a hypothetical:
 
 ```
-tokenamun optimise --at "cli output" --optimise 0.5 --why "Vendor figure, not measured here."
+tokenamun optimise --at "cli output" --optimise 0.5 --why "quieter test runner output"
 ```
 
 This document is the other half of that: a catalogue of the interventions

@@ -524,14 +524,14 @@ func TestOptimiseNeedsAPartAndAReason(t *testing.T) {
 	// and so is the reason it is plausible.
 	repo := localFixture(t, "carry.jsonl")
 	out, err := capture(t, "optimise", "--dir", repo, "--at", "cli output",
-		"--optimise", "0.5", "--name", "some-proxy", "--why", "Vendor figure, not measured.")
+		"--optimise", "0.5", "--name", "some-proxy", "--why", "quieter test runner output")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out, "some-proxy") {
 		t.Errorf("the caller names the hypothetical:\n%s", out)
 	}
-	if !strings.Contains(out, "Vendor figure, not measured.") {
+	if !strings.Contains(out, "quieter test runner output") {
 		t.Error("the caller's reason must be printed with the number")
 	}
 	// Both halves of the answer: what the part is, and what the session
