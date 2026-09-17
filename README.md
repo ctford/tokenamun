@@ -1,4 +1,4 @@
-# Tokenamun
+# 𓂀 Tokenamun
 
 A token profiler for coding agents. It answers **where the tokens went, and
 what they actually cost** — for the Claude Code session you are in, or for a
