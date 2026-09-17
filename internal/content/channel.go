@@ -35,6 +35,11 @@ var commandClasses = []struct {
 var notCommands = map[string]bool{
 	"echo": true, "printf": true, "cd": true, "export": true,
 	"true": true, ":": true, "set": true, "source": true,
+	// Shell control flow: `for f in *; do git show $f; done` should be filed
+	// under git, not under "do".
+	"do": true, "done": true, "then": true, "else": true, "elif": true,
+	"fi": true, "for": true, "while": true, "if": true, "case": true,
+	"esac": true, "in": true,
 }
 
 // wrappers run another command. They are stripped rather than skipped, so
@@ -81,6 +86,34 @@ func matchStage(cmd string) (stage, family string, ok bool) {
 		}
 	}
 	return "", "", false
+}
+
+// fileReadingBinaries print a file's contents. Used to route their output to
+// file content rather than to a command family, since `cat x.go` returns the
+// file while `git show x.go` returns a report about it.
+var fileReadingBinaries = map[string]bool{
+	"cat": true, "head": true, "tail": true, "sed": true, "awk": true,
+	"nl": true, "bat": true, "jq": true, "yq": true, "less": true, "more": true,
+}
+
+// IsFileReading reports whether a binary returns file contents.
+func IsFileReading(binary string) bool { return fileReadingBinaries[binary] }
+
+// CommandBinary is the command that produced the output: git, grep, python3,
+// go. It is what "which CLI" means.
+//
+// The tree groups by this rather than by CommandClass, because the classes
+// mixed two ideas -- purpose for tests and build, tool set for
+// "cat / sed / head" and "scripting" -- and "scripting" in particular put
+// python3, node and ruby in one box when they are entirely different tools.
+// CommandClass survives because interventions need the purpose: RTK publishes
+// a figure for test runs, not for python3.
+func CommandBinary(cmd string) string {
+	p := CommandPath(cmd)
+	if len(p) == 0 {
+		return ""
+	}
+	return p[0]
 }
 
 // CommandPath returns progressively more specific forms of the command, so a

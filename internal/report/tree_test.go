@@ -31,11 +31,11 @@ func treeFixture() *model.Session {
 		ProseBytes:    1200,
 		Retrievals: []model.RetrievedContent{
 			{Seq: 0, ToolID: "t0", Tool: "Bash", Channel: model.ChanShell,
-				CommandClass: "cat / sed / head", CommandDetail: "cat",
+				CommandClass: "cat / sed / head", CommandDetail: "cat", CommandBinary: "cat",
 				Category: model.CatADR, Path: "docs/decisions/a.md",
 				Bytes: 4000, Tokens: 1000, InvocationSeq: 0},
 			{Seq: 1, ToolID: "t1", Tool: "Bash", Channel: model.ChanShell,
-				CommandClass: "git", CommandDetail: "git status",
+				CommandClass: "git", CommandDetail: "git status", CommandBinary: "git",
 				Category: model.CatToolOutput, Bytes: 9000, Tokens: 2500, InvocationSeq: 1},
 			{Seq: 2, ToolID: "t2", Tool: "Read", Channel: model.ChanFileRead,
 				Category: model.CatSourceCode, Path: "internal/pay/charge.go",

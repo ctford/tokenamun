@@ -73,6 +73,9 @@ type RetrievedContent struct {
 	// CommandDetail is the specific command within that class, so git can be
 	// opened up into git status, git diff and the rest.
 	CommandDetail string `json:"command_detail,omitempty"`
+	// CommandBinary is the tool that ran: git, grep, python3. The tree groups
+	// by this, since "which CLI" is a question about tools, not purposes.
+	CommandBinary string `json:"command_binary,omitempty"`
 	// CategoryProv is derived when the path was observed in the tool result,
 	// and inferred when it was parsed out of a shell command line.
 	CategoryProv Provenance `json:"category_provenance"`

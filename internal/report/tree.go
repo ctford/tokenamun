@@ -344,13 +344,18 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 		// saying so beats inflating CLI output with them: the whole point of
 		// separating CLI output is that git and test runs are not file
 		// reading.
-		if c.CommandClass == "cat / sed / head" {
+		if content.IsFileReading(c.CommandBinary) {
 			if c.Path != "" {
 				return "file content", ""
 			}
 			return "file content", "path not attributed"
 		}
-		return "CLI output", c.CommandClass
+		// Grouped by the tool that ran, not by a purpose category: "which
+		// CLI" is a question about tools.
+		if c.CommandBinary != "" {
+			return "CLI output", c.CommandBinary
+		}
+		return "CLI output", "other shell"
 	}
 
 	// What is left is the harness's own tools: plan mode, skills, questions,
