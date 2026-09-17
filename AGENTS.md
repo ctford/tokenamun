@@ -41,10 +41,7 @@ publish:
 * **No credentials.** No API keys, no tokens, no `.env`. `--tokenizer=api` reads
   from the environment and nothing else.
 
-Commit messages are committed content. They were the worst leak this
-repository has had: no transcript was ever committed, and seven messages named
-client repositories and quoted their figures, because every check only ever
-looked at files.
+Commit messages are committed content, and are checked as such.
 
 `.gitignore` blocks the obvious accidents (`.entire/`, `*.jsonl` outside
 `testdata/`, `.env`), but it is a backstop, not the control. Check `git diff
@@ -61,19 +58,16 @@ Two rules about its own construction:
   client project names publishes the list it exists to protect. The built-in
   patterns are generic shapes — a real home directory, a relative path up and
   out into a named sibling checkout — and specific names live in
-  `.private-names`, one extended regex per
-  line, gitignored and local. The guard fails if that file is ever tracked.
+  `.private-names`, one extended regex per line, gitignored and local. The guard fails if that file is ever tracked.
   Without it the generic rules still run.
 * **It never prints what it matched.** A failure names the file, the line and
   the rule. Echoing the offending line would copy the secret into the CI log,
   which is the leak with extra steps.
 
 `scripts/test-leak-guard.sh` runs it against strings it must catch and strings
-it must not. That test is not optional decoration: the guard has shipped
-broken twice — once with Perl syntax BSD `grep` ignores, once splitting its
-rules on `|` in patterns that use `|` — and both times it passed while a
-deliberately leaking file sat in the tree. A guard that matches nothing
-reports success.
+it must not, and runs it under the same shell options the gates use. Keep it
+that way: a guard whose patterns quietly match nothing reports success, so the
+only evidence it works is a case where it fails.
 
 ### Test fixtures must be anonymised
 

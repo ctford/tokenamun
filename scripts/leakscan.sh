@@ -70,9 +70,8 @@ scan_tracked() {
 # private project names publishes the list it was meant to protect, which is
 # why the names are not in this file.
 #
-# Commit messages are included because that is where the leak was worst. No
-# transcript was ever committed, but seven messages named client repositories
-# and quoted their figures, and nothing had ever looked at a commit message.
+# Commit messages are included because they are committed content, and a
+# filename check never sees them.
 # messages_match <regex> -- true when any commit message on any ref matches.
 #
 # Written as a single grep against a here-string, and not as
