@@ -81,6 +81,18 @@ func Diagnose(dir string) []Check {
 			"refs, so they travel with a clone.", ""),
 	})
 
+	// The refs a clone leaves behind. Checked after the local count so the
+	// report reads as "you have N, there are M".
+	if remote := RemoteCheckpoints(root); remote > refs {
+		out = append(out, Check{
+			Name: "checkpoints on origin", OK: false,
+			Found: fmt.Sprintf("%d on origin against %d here", remote, refs),
+			Fix: "Entire's refs are outside the default fetch refspec, so a clone and " +
+				"a pull both leave them behind. Until you fetch them you are profiling " +
+				"your own sessions and calling it the team's:\n    " + FetchCheckpoints,
+		})
+	}
+
 	sessions := sessionDirs(root)
 	out = append(out, Check{
 		Name: "transcripts", OK: sessions > 0,

@@ -203,3 +203,28 @@ func TestCheckpointDiscoveryIsQuietOutsideAGitRepository(t *testing.T) {
 		t.Errorf("expected no sessions, got %d", len(refs))
 	}
 }
+
+func TestFetchCommandIsTheOneThatWorks(t *testing.T) {
+	// The failure this exists to prevent cost more time than any other:
+	// The reference repository had 41 checkpoints locally and 585 on origin, so
+	// every figure measured from it was one person's share of a ten-person
+	// week -- and nothing said so, because 41 checkpoints is not an error.
+	//
+	// Entire's refs sit outside the default fetch refspec, so the command has
+	// to name the refspec explicitly. A plain `git fetch` does not bring
+	// them, and suggesting one would send a reader round the loop again.
+	if !strings.Contains(FetchCheckpoints, "refs/entire/*:refs/entire/*") {
+		t.Errorf("the fix must name the refspec explicitly, got %q", FetchCheckpoints)
+	}
+	if !strings.HasPrefix(FetchCheckpoints, "git fetch origin") {
+		t.Errorf("it should be runnable as printed, got %q", FetchCheckpoints)
+	}
+}
+
+func TestRemoteCheckpointsIsSilentWithoutARemote(t *testing.T) {
+	// Network, so best-effort: a profiler that hangs or errors because a
+	// remote is unreachable is worse than one that omits a hint.
+	if n := RemoteCheckpoints(t.TempDir()); n != 0 {
+		t.Errorf("expected 0 outside a repository, got %d", n)
+	}
+}
