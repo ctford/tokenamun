@@ -484,3 +484,61 @@ func TestToolGroupsAreDisjoint(t *testing.T) {
 		}
 	}
 }
+
+// Paths must come from stages of the family that produced the output. Taking
+// them from any reading stage let a later grep name a file for output that
+// git had produced, so file names appeared as leaves inside the git tree.
+func TestPathsComeFromTheProducingFamilyOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  string
+		want []string
+	}{
+		{"a later grep does not name git's output",
+			`git log --oneline -- docs/plan.md | grep -n internal/x.go`,
+			nil},
+		{"a later filter does not name the reader's file",
+			`cat internal/x.go | grep -n docs/other.md`,
+			[]string{"internal/x.go"}},
+		{"two stages of the same family both count",
+			`cat docs/a.md && cat docs/b.md`,
+			[]string{"docs/a.md", "docs/b.md"}},
+		// A path is only extracted when the output *is* that file's content.
+		// wc prints a count, git log prints history: those are reports about
+		// a file, and attributing the file to them would say the session read
+		// content it never saw.
+		{"a count is not the file",
+			`wc -l docs/plan.md`,
+			nil},
+		{"history is not the file",
+			`git log --oneline -- docs/plan.md`,
+			nil},
+	}
+	for _, c := range cases {
+		got := PathsFromCommand(c.cmd)
+		if len(got) != len(c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+				break
+			}
+		}
+	}
+}
+
+// Wrappers are stripped before a command is identified, so listing one in a
+// tool group would create a membership that can never be reached.
+func TestWrappersAreNotAlsoGroupMembers(t *testing.T) {
+	for wrapper := range wrappers {
+		if g := CommandGroup(wrapper); g != "" {
+			t.Errorf("%q is stripped as a wrapper but also grouped under %q", wrapper, g)
+		}
+	}
+	// And the stripping works: the group is the real command's.
+	if got := CommandGroup(CommandBinary("xargs grep -n foo")); got != "standard tools" {
+		t.Errorf("xargs grep resolved to %q, want standard tools", got)
+	}
+}

@@ -105,32 +105,27 @@ var patternFirst = map[string]bool{"rg": true, "grep": true, "ag": true, "ack": 
 // pipeline stage only the reading command's own arguments count, because a
 // later stage consumes the previous one's output rather than reading files.
 func PathsFromCommand(cmd string) []string {
+	// Paths come only from stages belonging to the family that produced the
+	// output. Taking them from any reading stage let a `grep` later in a
+	// pipeline name a file for output that `git log` had produced, so file
+	// names appeared as leaves inside the git tree. Restricting it to the one
+	// matched stage went too far the other way: `cat a.md && cat b.md`
+	// returns both files, and both are the same family.
+	_, family, _, ok := matchStage(cmd)
+	if !ok {
+		return nil
+	}
 	var out []string
 	seen := map[string]bool{}
-	for _, stage := range stages(cmd) {
-		for _, p := range pathsFromStage(stage) {
+	for _, st := range splitStages(cmd) {
+		if f, ok := familyOfStage(st.text); !ok || f != family {
+			continue
+		}
+		for _, p := range pathsFromStage(st.text) {
 			if !seen[p] {
 				seen[p] = true
 				out = append(out, p)
 			}
-		}
-	}
-	return out
-}
-
-// stageSeparators split a compound command into independently-executed parts.
-var stageSeparators = regexp.MustCompile(`\|\||&&|[;\n|]`)
-
-// stages splits a compound command. Redirections are cut rather than split on,
-// since what follows is a destination, not a command.
-func stages(cmd string) []string {
-	var out []string
-	for _, part := range stageSeparators.Split(cmd, -1) {
-		if i := strings.IndexAny(part, ">"); i >= 0 {
-			part = part[:i]
-		}
-		if part = strings.TrimSpace(part); part != "" {
-			out = append(out, part)
 		}
 	}
 	return out

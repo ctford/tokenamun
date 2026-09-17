@@ -56,9 +56,9 @@ type Node struct {
 //	├─ preamble                     the harness put it there
 //	├─ your prompts                 you did
 //	├─ model output                 the model wrote it, then re-read it
-//	│  ├─ prose
-//	│  ├─ tool arguments            → by tool
-//	│  └─ thinking                  observed; its carry is not knowable
+//	│  ├─ replies to you            what it said to you
+//	│  ├─ tool arguments            what it said to tools → by tool
+//	│  └─ thinking                  what it said to itself; carry not knowable
 //	├─ file content                 the environment answered → by file
 //	├─ CLI output                   → by command family → by subcommand
 //	├─ MCP output                   → by tool
@@ -149,6 +149,8 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 	thinking := carry.ThinkingTokens
 	prose, args := apportion(s, s.Usage().Output-thinking)
 
+	// The model writes three kinds of thing: what it says to you, what it
+	// says to tools, and what it says to itself.
 	n := &Node{Name: "model output", Kind: "bucket",
 		Detail: "what the model wrote, priced twice: at the output rate when written, " +
 			"then at the input rate on every later call that re-reads it."}
@@ -164,9 +166,10 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		gen := prose * w.Output
 		held := carry.AssistantCarryEIT * proseShare
 		n.Children = append(n.Children, &Node{
-			Name: "prose", Kind: "source", Unscaled: true,
+			Name: "replies to you", Kind: "source", Unscaled: true,
 			Tokens: prose, Carry: gen + held, CarryUncached: gen + held, Items: 1,
-			Detail: fmt.Sprintf("assistant text: %s to write, %s to keep re-reading",
+			Detail: fmt.Sprintf("the text it wrote for you to read, as opposed to its "+
+				"thinking or its tool calls: %s to write, %s to keep re-reading",
 				num(int(gen)), num(int(held))),
 		})
 	}
@@ -174,8 +177,10 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		gen := args * w.Output
 		held := carry.AssistantCarryEIT * (1 - proseShare)
 		argNode := &Node{Name: "tool arguments", Kind: "source", Unscaled: true,
-			Detail: fmt.Sprintf("what the model wrote to invoke tools: %s to write, "+
-				"%s to keep re-reading", num(int(gen)), num(int(held)))}
+			Detail: fmt.Sprintf("what it wrote to invoke tools - the command strings, "+
+				"file paths and patch text. The other side of the same calls is CLI "+
+				"output, which is what the tools printed back: %s to write, %s to keep "+
+				"re-reading", num(int(gen)), num(int(held)))}
 		argNode.Children = byToolArguments(s, gen+held, args)
 		n.Children = append(n.Children, argNode)
 	}
@@ -184,9 +189,10 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		n.Children = append(n.Children, &Node{
 			Name: "thinking", Kind: "source", Unscaled: true,
 			Tokens: float64(thinking), Carry: gen, CarryUncached: gen, Items: 1,
-			Detail: "observed, and priced at the output rate for writing it. Whether it is " +
-				"re-read as input afterwards is not knowable from a transcript: Claude Code " +
-				"records thinking blocks with empty text.",
+			Detail: "what it wrote for itself, not shown to you. Observed, and priced at " +
+				"the output rate for writing it. Whether it is re-read as input afterwards " +
+				"is not knowable from a transcript: Claude Code records thinking blocks " +
+				"with empty text.",
 		})
 	}
 	return n
@@ -279,19 +285,7 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 			}
 		}
 
-		leafName := c.Path
-		if leafName == "" {
-			// Inside the unidentified-files branch the only thing known
-			// about a payload is the command that produced it, so the label
-			// has to say that is what it is naming.
-			if kind == "file content" && c.CommandBinary != "" {
-				leafName = "read via " + c.CommandBinary
-			} else if c.CommandDetail != "" {
-				leafName = c.CommandDetail
-			} else {
-				leafName = "(unattributed " + c.Tool + " output)"
-			}
-		}
+		leafName := leafNameFor(kind, c)
 		leaf := &Node{
 			Name: leafName, Kind: "item",
 			Tokens: c.Tokens, Carry: it.CarryEIT, CarryUncached: it.CarryUncachedEIT,
@@ -437,6 +431,35 @@ func collapseSingleChildDirs(n *Node) {
 		}
 		n.Children[i] = c
 	}
+}
+
+// leafNameFor names a payload for the branch it sits in.
+//
+// Under file content the name is the file, because that is what the payload
+// is. Under CLI output it must be the command: naming a command's report
+// after the file it was about -- `git log` of a plan, `wc` of a document --
+// made a report look like the document's contents.
+func leafNameFor(kind string, c model.RetrievedContent) string {
+	if kind == "file content" {
+		if c.Path != "" {
+			return c.Path
+		}
+		if c.CommandBinary != "" {
+			// Here the only thing known about the payload is the command, so
+			// the label says that is what it is naming.
+			return "read via " + c.CommandBinary
+		}
+	}
+	if c.CommandDetail != "" {
+		if c.Path != "" {
+			return c.CommandDetail + " — " + c.Path
+		}
+		return c.CommandDetail
+	}
+	if c.Path != "" {
+		return c.Path
+	}
+	return "(unattributed " + c.Tool + " output)"
 }
 
 // resultKind decides which mechanism returned a payload, and what to open it

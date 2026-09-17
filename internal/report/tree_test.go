@@ -99,7 +99,7 @@ func TestThinkingIsSplitOutOfOutputButNotCarried(t *testing.T) {
 	}
 	// Prose and tool arguments each combine what they cost to write with what
 	// they cost to keep, since they are the same text.
-	child(t, out, "prose")
+	child(t, out, "replies to you")
 	child(t, out, "tool arguments")
 }
 

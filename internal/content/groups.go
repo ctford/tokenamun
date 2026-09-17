@@ -18,6 +18,10 @@ import "strings"
 //
 // A tool that is not listed stays at the top level of CLI output rather than
 // being swept into a catch-all, so an unrecognised tool is visible as itself.
+//
+// Wrappers such as env and xargs are deliberately absent: they are stripped
+// before a command is identified, since `xargs grep foo` is a grep, so any
+// group membership for them would be unreachable.
 var commandGroups = map[string]string{}
 
 // groupMembers is the source of truth; commandGroups is its inverse, built
@@ -29,8 +33,8 @@ var groupMembers = map[string][]string{
 	"standard tools": {
 		// POSIX and near-POSIX text, file and search utilities.
 		"grep", "rg", "ag", "ack", "find", "fd", "ls", "tree", "du", "df",
-		"wc", "sort", "uniq", "cut", "tr", "xargs", "stat", "file", "diff",
-		"basename", "dirname", "readlink", "realpath", "which", "env",
+		"wc", "sort", "uniq", "cut", "tr", "stat", "file", "diff",
+		"basename", "dirname", "readlink", "realpath", "which",
 		// These print file contents, so their output is routed to file
 		// content when they actually read a file. Group membership is a
 		// separate question: they are POSIX text tools either way, and when

@@ -88,6 +88,35 @@ func matchStage(cmd string) (text, family string, piped, ok bool) {
 	return "", "", false, false
 }
 
+// familyOfStage is the command family of a single stage, or false when the
+// stage is not a command we recognise.
+func familyOfStage(text string) (string, bool) {
+	fields := strings.Fields(text)
+	for len(fields) > 1 && strings.Contains(fields[0], "=") && !strings.Contains(fields[0], "/") {
+		fields = fields[1:]
+	}
+	for len(fields) > 1 && wrappers[path.Base(strings.ToLower(fields[0]))] {
+		fields = fields[1:]
+	}
+	if len(fields) == 0 {
+		return "", false
+	}
+	name := path.Base(strings.ToLower(fields[0]))
+	if notCommands[name] {
+		return "", false
+	}
+	probe := name
+	if len(fields) > 1 {
+		probe += " " + strings.ToLower(fields[1])
+	}
+	for _, cl := range commandClasses {
+		if cl.re.MatchString(probe) {
+			return cl.name, true
+		}
+	}
+	return "", false
+}
+
 // IsPipelineFilter reports whether the command that produced this output was
 // downstream of a pipe, and so was filtering another command's output rather
 // than reading a file.

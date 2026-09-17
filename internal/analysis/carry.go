@@ -45,11 +45,6 @@ type CarryReport struct {
 	// generated, then carried as input on every later call; this is the second
 	// part, which is invisible if you only look at output tokens.
 	AssistantCarryEIT float64 `json:"assistant_carry_eit"`
-	// ToolInputCarryEIT is what re-sending the tool calls the model wrote
-	// cost. On real sessions the model writes nearly as many bytes into tool
-	// calls as it reads back out of them.
-	ToolInputCarryEIT float64 `json:"tool_input_carry_eit"`
-
 	// Items ranks retrievals by what carrying them cost.
 	Items []CarriedItem `json:"items"`
 	// Unattributed is the share of observed growth the content could not
@@ -177,23 +172,11 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
 	}
 
-	// So are the tool calls it wrote, which are not free: the arguments sit in
-	// the conversation exactly like the results do.
-	ratio := ratioOf(s)
-	for _, tc := range s.ToolCalls {
-		if tc.InvocationSeq < 0 || tc.InputBytes == 0 {
-			continue
-		}
-		warm, coldN := residency(tc.InvocationSeq+1, len(s.Invocations), cold, r.Resets)
-		switch {
-		case warm > 0:
-			warm--
-		case coldN > 0:
-			coldN--
-		}
-		r.ToolInputCarryEIT += (float64(tc.InputBytes) / ratio) *
-			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
-	}
+	// The arguments the model wrote into tool calls are carried too, but they
+	// are part of its output rather than a separate quantity: they are
+	// apportioned out of AssistantCarryEIT by byte share where the report
+	// needs them. Computing them separately from byte counts as well gave two
+	// competing answers for one thing, and the second was never read.
 
 	for _, c := range s.Retrievals {
 		entered := c.InvocationSeq
