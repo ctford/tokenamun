@@ -65,6 +65,7 @@ Flags:
   --replay-with C pipe this session's own content through a real compressor
                   instead of assuming a ratio; C reads stdin, writes stdout
   -o FILE         output file (treemap; default tokenamun-treemap.html)
+  --title TEXT    heading for the treemap, e.g. "Hyper Agentic App"
   --cost N        measured intervention cost in EIT, for series payback
   --scan PATH     tree to scan for code metrics (hotspots; default --dir).
                   Point this at a checkout of the branch the session ran on.
@@ -97,6 +98,7 @@ func run(args []string) error {
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
 	configPath := fs.String("config", "", "classification config (default: .tokenamun.json, found upwards)")
+	title := fs.String("title", "", "heading for the treemap report")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
 	// For a CLI agents invoke, silently dropping a flag is the worst failure
@@ -134,7 +136,7 @@ func run(args []string) error {
 	case "series":
 		return cmdSeries(positional, *interventionCost, *asJSON)
 	case "treemap":
-		return cmdTreemap(*dir, *source, selector, *out)
+		return cmdTreemap(*dir, *source, selector, *configPath, *title, *out)
 	case "what-if", "whatif":
 		return cmdWhatIf(*dir, *source, selector, second, *ratio, *replayWith, *asJSON)
 	case "version":
@@ -337,12 +339,13 @@ func cmdSeries(files []string, interventionCost float64, asJSON bool) error {
 	return report.RenderSeries(os.Stdout, out)
 }
 
-func cmdTreemap(dir, source, selector, outPath string) error {
-	s, err := loadSelected(dir, source, selector)
+func cmdTreemap(dir, source, selector, configPath, title, outPath string) error {
+	s, err := loadSelectedWith(dir, source, selector, configPath)
 	if err != nil {
 		return err
 	}
-	payload := report.BuildTreemap(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	payload := report.BuildTreemapTitled(s,
+		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)), title)
 
 	f, err := os.Create(outPath)
 	if err != nil {

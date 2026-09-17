@@ -45,9 +45,10 @@ func child(t *testing.T, n *Node, name string) *Node {
 // reader can act on. What it turned out to be is one level down.
 func TestTopLevelIsAcquisitionChannel(t *testing.T) {
 	tree := BuildTree(treeFixture(), analysis.CarryReport{})
+	retrieved := child(t, tree, "retrieved content")
 
-	shell := child(t, tree, "shell output")
-	if _ = child(t, tree, "file reading"); shell.Tokens != 4500 {
+	shell := child(t, retrieved, "shell output")
+	if _ = child(t, retrieved, "file reading"); shell.Tokens != 4500 {
 		t.Errorf("shell output tokens = %v, want 4500", shell.Tokens)
 	}
 	// Shell output splits by what the command was doing; "shell output" with
@@ -58,14 +59,14 @@ func TestTopLevelIsAcquisitionChannel(t *testing.T) {
 		t.Errorf("file reading tokens = %v, want 2000", reading.Tokens)
 	}
 	// Other channels split by content category.
-	direct := child(t, tree, "file reading")
+	direct := child(t, retrieved, "file reading")
 	child(t, direct, string(model.CatSourceCode))
 }
 
 func TestRepeatedFilesCollapseIntoOneRectangle(t *testing.T) {
 	// A treemap of forty identical slivers hides the thing worth seeing.
 	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	reading := child(t, child(t, tree, "shell output"), "file reading")
+	reading := child(t, child(t, child(t, tree, "retrieved content"), "shell output"), "file reading")
 
 	if len(reading.Children) != 1 {
 		t.Fatalf("expected the two reads of one file to collapse, got %d rectangles",
@@ -85,7 +86,7 @@ func TestRepeatedFilesCollapseIntoOneRectangle(t *testing.T) {
 
 func TestUnattributedOutputIsNamedAsABucket(t *testing.T) {
 	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	tests := child(t, child(t, tree, "shell output"), "tests")
+	tests := child(t, child(t, child(t, tree, "retrieved content"), "shell output"), "tests")
 	name := tests.Children[0].Name
 	if !contains(name, "unattributed") {
 		t.Errorf("name = %q; a merged bucket must not look like one result", name)
@@ -94,18 +95,54 @@ func TestUnattributedOutputIsNamedAsABucket(t *testing.T) {
 
 func TestTotalsRollUpAndMatchTheRetrievals(t *testing.T) {
 	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	if tree.Items != 4 {
-		t.Errorf("root items = %d, want 4", tree.Items)
+	retrieved := child(t, tree, "retrieved content")
+	if retrieved.Items != 4 {
+		t.Errorf("retrieved items = %d, want 4", retrieved.Items)
 	}
-	if tree.Tokens != 6100 {
-		t.Errorf("root tokens = %v, want 6100", tree.Tokens)
+	if retrieved.Tokens != 6100 {
+		t.Errorf("retrieved tokens = %v, want 6100", retrieved.Tokens)
 	}
 	var sum float64
-	for _, ch := range tree.Children {
+	for _, ch := range retrieved.Children {
 		sum += ch.Tokens
 	}
-	if sum != tree.Tokens {
-		t.Errorf("children sum to %v but root says %v", sum, tree.Tokens)
+	if sum != retrieved.Tokens {
+		t.Errorf("children sum to %v but the branch says %v", sum, retrieved.Tokens)
+	}
+}
+
+// A viewer of retrieved content alone answers a narrower question than "where
+// did the tokens go". The parts that cannot be decomposed have to be present,
+// or every percentage in the view is inflated.
+func TestTreeAccountsForTheWholePromptCost(t *testing.T) {
+	carry := analysis.CarryReport{
+		PromptCostEIT:    1000,
+		PreambleCarryEIT: 200,
+		Items: []analysis.CarriedItem{
+			{RetrievalSeq: 0, CarryEIT: 100},
+			{RetrievalSeq: 3, CarryEIT: 50},
+		},
+	}
+	tree := BuildTree(treeFixture(), carry)
+
+	child(t, tree, "session preamble")
+	rest := child(t, tree, "conversation and overhead")
+	// 1000 total - 150 retrieval - 200 preamble = 650 left over.
+	if rest.Carry != 650 {
+		t.Errorf("remainder = %v, want 650", rest.Carry)
+	}
+	// The undecomposable blocks must say why they cannot be broken down,
+	// rather than looking like an omission.
+	for _, name := range []string{"session preamble", "conversation and overhead"} {
+		if d := child(t, tree, name).Detail; d == "" || !contains(d, "decomposable") {
+			t.Errorf("%s: detail = %q, want an explanation", name, d)
+		}
+	}
+	if got := child(t, tree, "retrieved content").Carry; got != 150 {
+		t.Errorf("retrieval carry = %v, want 150", got)
+	}
+	if tree.Carry != 1000 {
+		t.Errorf("root carry = %v; the tree should account for the whole prompt cost", tree.Carry)
 	}
 }
 
@@ -131,8 +168,8 @@ func TestCarryJoinsOntoLeaves(t *testing.T) {
 		{RetrievalSeq: 3, CarryEIT: 90, ResidentFor: 1},
 	}}
 	tree := BuildTree(treeFixture(), carry)
-	if tree.Carry != 590 {
-		t.Errorf("root carry = %v, want 590", tree.Carry)
+	if got := child(t, tree, "retrieved content").Carry; got != 590 {
+		t.Errorf("retrieval carry = %v, want 590", got)
 	}
 	// The ramp needs a per-token rate on every node it colours.
 	if tree.CarryPerToken <= 0 {

@@ -26,6 +26,9 @@ const dataPlaceholder = "__TOKENAMUN_DATA__"
 // the reader switches mode. It is deliberately NOT a picture of the context
 // window, and the report says so in its own footer rather than only here.
 type TreemapPayload struct {
+	// Title is set by the caller, so an agent generating this for a
+	// particular repository can say whose session it is.
+	Title            string         `json:"title"`
 	Session          treemapSession `json:"session"`
 	Tiles            []treemapTile  `json:"tiles"`
 	Categories       []treemapCat   `json:"categories"`
@@ -70,9 +73,18 @@ type treemapItem struct {
 
 // BuildTreemap assembles the payload from a session and its carry analysis.
 func BuildTreemap(s *model.Session, carry analysis.CarryReport) TreemapPayload {
+	return BuildTreemapTitled(s, carry, "")
+}
+
+// BuildTreemapTitled assembles the payload with a caller-supplied title.
+func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title string) TreemapPayload {
 	retrieval := BuildRetrieval(s)
 
+	if title == "" {
+		title = "Tokenamun"
+	}
 	p := TreemapPayload{
+		Title: title,
 		Session: treemapSession{
 			ID: s.Ref.ID, Calls: len(s.Invocations), Origin: string(s.Ref.Origin),
 		},
@@ -87,7 +99,7 @@ func BuildTreemap(s *model.Session, carry analysis.CarryReport) TreemapPayload {
 	p.Tiles = []treemapTile{
 		{"Retrieved content", bytesStr(retrieval.Total.Bytes.Value), "observed"},
 		{"Estimated tokens", num(int(retrieval.Total.Tokens.Value)), "derived-approx"},
-		{"Prompt cost", num(int(carry.PromptCostEIT)) + " EIT", "derived"},
+		{"Prompt cost", num(int(carry.PromptCostEIT)) + " cwt", "derived"},
 		{"Retrieved again", bytesStr(retrieval.Total.Redundant.Value), "derived"},
 	}
 	if retrieval.Total.Withheld.Value > 0 {

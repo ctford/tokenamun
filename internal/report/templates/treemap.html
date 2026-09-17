@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tokenamun — retrieved content</title>
+<title>Tokenamun</title>
 <style>
   /* Roles, not raw hex, so light and dark swap in one place. */
 :root {
@@ -142,19 +142,28 @@
 </head>
 <body>
 <div class="viz-root">
-  <h1>Tokenamun — retrieved content</h1>
+  <h1 id="title">Tokenamun</h1>
   <p class="sub">Session <strong id="sid"></strong> · <span id="calls"></span> API calls · <span id="origin"></span></p>
 
   <div class="tiles" id="tiles"></div>
 
   <div class="controls">
     <span class="muted">Rectangle area:</span>
-    <button id="mode-tokens" aria-pressed="true">Retrieved tokens (observed size)</button>
-    <button id="mode-carry" aria-pressed="false">Cost of carry (derived)</button>
+    <button id="mode-carry" aria-pressed="true">Token cost, as billed</button>
+    <button id="mode-uncached" aria-pressed="false">Token cost, if nothing cached</button>
+    <button id="mode-tokens" aria-pressed="false">Volume entering context</button>
     <span style="flex:1"></span>
     <button id="toggle-table" aria-pressed="false">Table view</button>
     <button id="toggle-theme">Dark / light</button>
   </div>
+
+  <p class="muted" id="unit-note">
+    <strong>Cost-weighted tokens (cwt)</strong> put every token class on one scale: one cwt is
+    one full-price input token of this model. A cache read counts 0.1, a 5-minute cache write
+    1.25, a 1-hour write 2.0, a generated token 5.0 — the published Claude multipliers. It is
+    model-relative, so a mixed-model session still adds up; convert to money with that model's
+    input price.
+  </p>
 
   <h2 id="tm-title"></h2>
   <p class="muted" id="tm-sub"></p>
@@ -170,7 +179,9 @@
   </div>
 
   <h2>Retrieved content by category</h2>
-  <p class="muted">Observed bytes. Ten categories all carry meaning, so the numbers are in the table too.</p>
+  <p class="muted">A cross-cut, not a repeat of the treemap: the hierarchy above groups by
+  how content was obtained, so a category like ADRs is split across several channels and its
+  total is not readable from it. Observed bytes.</p>
   <div class="panel"><div class="bars" id="bars"></div></div>
 
   <div id="table-view" hidden>
@@ -207,6 +218,8 @@ const fmt = n => n.toLocaleString("en-US", {maximumFractionDigits: 0});
 const bytes = n => n >= 1048576 ? (n/1048576).toFixed(1)+" MB"
   : n >= 1024 ? (n/1024).toFixed(1)+" KB" : fmt(n)+" B";
 
+document.title = DATA.title + " — Tokenamun";
+document.getElementById("title").textContent = DATA.title;
 document.getElementById("sid").textContent = DATA.session.id;
 document.getElementById("calls").textContent = fmt(DATA.session.calls);
 document.getElementById("origin").textContent = DATA.session.origin;
@@ -289,7 +302,7 @@ const svg = document.getElementById("treemap");
 const tip = document.getElementById("tip");
 const crumbs = document.getElementById("crumbs");
 const W = 1000, H = 560, HEADER = 18;
-let mode = "tokens";
+let mode = "carry";
 
 /* The drill-down path, as indices into successive children arrays. */
 let path = [];
@@ -300,7 +313,31 @@ function nodeAt(p) {
   return n;
 }
 
-function value(n) { return mode === "tokens" ? (n.tokens || 0) : (n.carry || 0); }
+function value(n) {
+  if (mode === "tokens") return n.tokens || 0;
+  if (mode === "uncached") return n.carryUncached || 0;
+  return n.carry || 0;
+}
+
+/* What prompt caching was worth on a node: the same content, the same number
+   of re-sends, priced with and without the cache. */
+function cacheSaving(n) {
+  const billed = n.carry || 0, uncached = n.carryUncached || 0;
+  return uncached > 0 ? (1 - billed / uncached) : 0;
+}
+
+/* Two denominators, because they answer different questions: share of the
+   session says how much of the bill this is, share of the current view says
+   how this rectangle compares with its siblings. */
+function pctOfSession(n) {
+  const total = value(DATA.tree);
+  return total > 0 ? (100 * value(n) / total) : 0;
+}
+function pctOfView(n, parent) {
+  const total = value(parent);
+  return total > 0 ? (100 * value(n) / total) : 0;
+}
+function pct(x) { return (x >= 10 ? x.toFixed(0) : x.toFixed(1)) + "%"; }
 
 /* At 11px the glyphs average ~6px, so a label only earns its place if the
    truncated form still says something. */
@@ -395,31 +432,41 @@ function render() {
   for (const p of placed) {
     const n = p.node;
     const leaf = !n.children || n.children.length === 0;
-    const heading = fitLabel(`${n.name} · ${fmt(value(n))}`, p.w);
 
-    parts.push(`<g class="cell${leaf ? " leaf" : ""}" data-index="${p.index}">`);
     // A branch gets a neutral fill and a header strip: colouring it the same
     // way as its contents made the nesting invisible. The ramp carries meaning
     // only on the smallest rectangles, which is what it is measuring.
     const fill = leaf ? `var(${RAMP[stepFor(n)]})` : "var(--plane)";
+    parts.push(`<g class="cell${leaf ? " leaf" : ""}" data-path="${p.index}">`);
     parts.push(`<rect x="${p.x}" y="${p.y}" width="${Math.max(0, p.w)}" height="${
       Math.max(0, p.h)}" fill="${fill}" rx="2" stroke="var(--rule)"></rect>`);
 
     if (!leaf && p.h > HEADER + 6 && p.w > 60) {
       const inner = squarify(
-        n.children.filter(k => value(k) > 0).map(k => ({node: k, value: value(k)})),
+        n.children.map((k, j) => ({node: k, index: j, value: value(k)}))
+          .filter(k => k.value > 0),
         p.x + 1, p.y + HEADER, p.w - 2, p.h - HEADER - 1);
       for (const q of inner) {
+        // Each mini rectangle is its own target, so clicking one zooms into
+        // that rectangle rather than into its parent.
+        const isLeaf = !q.node.children || q.node.children.length === 0;
+        parts.push(`<g class="cell mini${isLeaf ? " leaf" : ""}" data-path="${
+          p.index}.${q.index}">`);
         parts.push(`<rect x="${q.x}" y="${q.y}" width="${Math.max(0, q.w)}" height="${
           Math.max(0, q.h)}" fill="var(${RAMP[stepFor(q.node)]})" rx="1"
           stroke="var(--surface-1)" stroke-width="1.5"></rect>`);
-        const lbl = q.h > 18 ? fitLabel(shortName(q.node.name), q.w) : "";
+        const share = pct(pctOfView(q.node, n));
+        const lbl = q.h > 18 ? fitLabel(`${shortName(q.node.name)} · ${share}`, q.w) : "";
         if (lbl) {
           parts.push(`<text class="inner" x="${q.x + 4}" y="${q.y + 13}" fill="${
             inkFor(stepFor(q.node))}">${esc(lbl)}</text>`);
         }
+        parts.push(`</g>`);
       }
     }
+
+    const heading = fitLabel(
+      `${n.name} · ${pct(pctOfView(n, here))} · ${fmt(value(n))}`, p.w);
     if (heading) {
       const ink = leaf ? inkFor(stepFor(n)) : "var(--text-primary)";
       parts.push(`<text class="group-label" x="${p.x + 4}" y="${p.y + 13}" fill="${
@@ -430,24 +477,44 @@ function render() {
   svg.innerHTML = parts.join("");
   renderCrumbs();
 
-  const unit = mode === "tokens" ? "estimated tokens" : "EIT of carry cost";
-  document.getElementById("tm-title").textContent = mode === "tokens"
-    ? "Area = retrieved tokens (observed size of what entered the context)"
-    : "Area = cost of carry in EIT (derived: what keeping it cost)";
+  const unit = mode === "tokens" ? "estimated tokens" : "cost-weighted tokens";
+  const titles = {
+    carry: "Area = cost-weighted tokens as billed: cache reads at a tenth of input price, rebuilt prefixes at the write rate",
+    uncached: "Area = cost-weighted tokens with no caching: the same content re-sent the same number of times, at full input price",
+    tokens: "Area = volume entering the context: what was fetched, once",
+  };
+  document.getElementById("tm-title").textContent = titles[mode];
 
   const heavyEnd = darkMode() ? "brighter" : "darker";
   const lightEnd = darkMode() ? "deeper" : "paler";
   document.getElementById("ramp-caption").textContent =
     `— ${lightEnd} is bulky but cheap to keep; ${heavyEnd} was carried for many calls`;
+
+  let scope;
+  if (mode === "tokens") {
+    scope = "Volume is not cost: content is priced once and carried on every later call, so this "
+      + "view covers only retrieved content and its percentages are shares of that, not of the bill.";
+  } else if (mode === "uncached") {
+    scope = `Prompt caching saved ${pct(100 * cacheSaving(nodeAt([])))} of this session overall. `
+      + "Compare with 'as billed' to see what caching is worth on any rectangle. "
+      + "The undecomposable blocks are shown unchanged, since their cache split is not attributable.";
+  } else {
+    scope = path.length === 0
+      ? "Percentages are shares of the session's whole token cost. Click to zoom in."
+      : `${pct(pctOfSession(here))} of the session's token cost. Percentages below are shares of this view.`;
+  }
   document.getElementById("tm-sub").textContent =
-    `${here.name}: ${fmt(value(here))} ${unit} across ${fmt(here.items)} retrievals.` +
-    (path.length === 0
-      ? " The top level is how the content was obtained. Click to drill in."
-      : " Click a rectangle to go deeper, or use the trail above to come back. Esc goes up.");
+    `${here.name}: ${fmt(value(here))} ${unit} across ${fmt(here.items)} retrievals. ${scope}`;
 }
 
 function renderCrumbs() {
-  const parts = [`<button data-depth="0">all retrieved content</button>`];
+  const parts = [];
+  // A visible way up. Esc and the trail both work, but neither is
+  // discoverable, and a viewer you have to be told how to leave is broken.
+  parts.push(`<button id="up" ${path.length ? "" : "disabled"} title="Up one level (Esc)"
+    style="${path.length ? "" : "opacity:.4;cursor:default"}">&#8593; up</button>`);
+  parts.push(`<span class="sep">|</span>`);
+  parts.push(`<button data-depth="0">all retrieved content</button>`);
   let n = DATA.tree;
   path.forEach((idx, depth) => {
     n = n.children[idx];
@@ -459,35 +526,70 @@ function renderCrumbs() {
     }
   });
   crumbs.innerHTML = parts.join("");
-  crumbs.querySelectorAll("button").forEach(b => {
-    b.onclick = () => { path = path.slice(0, Number(b.dataset.depth)); render(); };
+  crumbs.querySelectorAll("button[data-depth]").forEach(b => {
+    b.onclick = () => goTo(path.slice(0, Number(b.dataset.depth)));
   });
+  const up = document.getElementById("up");
+  if (up && path.length) up.onclick = () => goTo(path.slice(0, -1));
+}
+
+/* Navigation goes through one place, so the browser's own back button works
+   as "up" too - which is what a reader of a standalone HTML file will reach
+   for first. */
+function goTo(next, replace) {
+  path = next;
+  try {
+    if (replace) history.replaceState({tokenamunPath: next}, "");
+    else history.pushState({tokenamunPath: next}, "");
+  } catch (e) {
+    // file:// in some browsers refuses history entries; navigation still works.
+  }
+  tip.style.opacity = 0;
+  render();
+}
+
+addEventListener("popstate", e => {
+  path = (e.state && e.state.tokenamunPath) || [];
+  render();
+});
+
+// A rectangle's data-path is relative to the current node, and a mini
+// rectangle carries two levels, so clicking one zooms straight to it.
+function relPath(cell) {
+  return cell.dataset.path.split(".").map(Number);
 }
 
 svg.addEventListener("click", e => {
   const cell = e.target.closest(".cell");
-  if (!cell || cell.classList.contains("leaf")) return;
-  path = [...path, Number(cell.dataset.index)];
-  tip.style.opacity = 0;
-  render();
+  if (!cell) return;
+  const rel = relPath(cell);
+  const target = nodeAt([...path, ...rel]);
+  if (!target.children || target.children.length === 0) return; // a leaf
+  goTo([...path, ...rel]);
 });
 
 /* Hover layer: a tooltip per mark, with hit targets the size of the rect. */
 svg.addEventListener("mousemove", e => {
   const cell = e.target.closest(".cell");
   if (!cell) { tip.style.opacity = 0; tip.setAttribute("aria-hidden", "true"); return; }
-  const n = nodeAt([...path, Number(cell.dataset.index)]);
+  const rel = relPath(cell);
+  const n = nodeAt([...path, ...rel]);
+  const parent = nodeAt([...path, ...rel.slice(0, -1)]);
   const leaf = !n.children || n.children.length === 0;
   tip.innerHTML = `<div class="t">${esc(n.name)}</div>
     <dl>
       <dt>tokens</dt><dd>${fmt(n.tokens)}</dd>
-      <dt>carry</dt><dd>${fmt(n.carry)} EIT</dd>
+      <dt>share of session</dt><dd>${pct(pctOfSession(n))}</dd>
+      <dt>share of ${esc(shortName(parent.name))}</dt><dd>${pct(pctOfView(n, parent))}</dd>
+      <dt>cost as billed</dt><dd>${fmt(n.carry)} cwt</dd>
+      <dt>if nothing cached</dt><dd>${fmt(n.carryUncached)} cwt</dd>
+      <dt>caching saved</dt><dd>${pct(100 * cacheSaving(n))}</dd>
       <dt>bytes</dt><dd>${bytes(n.bytes)}</dd>
       <dt>retrievals</dt><dd>${fmt(n.items)}</dd>
       ${leaf ? "" : `<dt>contains</dt><dd>${fmt(n.children.length)}</dd>`}
     </dl>
     ${n.detail ? `<div class="muted" style="margin-top:4px">${esc(n.detail)}</div>` : ""}
-    ${leaf ? "" : `<div class="muted" style="margin-top:4px">click to drill in</div>`}`;
+    ${leaf ? "" : `<div class="muted" style="margin-top:4px">click to zoom in</div>`}`;
   tip.style.opacity = 1;
   tip.setAttribute("aria-hidden", "false");
   const pad = 14;
@@ -504,23 +606,26 @@ svg.addEventListener("mouseleave", () => {
 });
 
 addEventListener("keydown", e => {
-  if (e.key === "Escape" && path.length) { path = path.slice(0, -1); render(); }
+  if ((e.key === "Escape" || e.key === "Backspace") && path.length) {
+    e.preventDefault();
+    goTo(path.slice(0, -1));
+  }
 });
 
-const byTokens = document.getElementById("mode-tokens");
-const byCarry = document.getElementById("mode-carry");
-byTokens.onclick = () => {
-  mode = "tokens";
-  byTokens.setAttribute("aria-pressed", "true");
-  byCarry.setAttribute("aria-pressed", "false");
-  render();
+const modeButtons = {
+  carry: document.getElementById("mode-carry"),
+  uncached: document.getElementById("mode-uncached"),
+  tokens: document.getElementById("mode-tokens"),
 };
-byCarry.onclick = () => {
-  mode = "carry";
-  byCarry.setAttribute("aria-pressed", "true");
-  byTokens.setAttribute("aria-pressed", "false");
-  render();
-};
+for (const [name, button] of Object.entries(modeButtons)) {
+  button.onclick = () => {
+    mode = name;
+    for (const [other, b] of Object.entries(modeButtons)) {
+      b.setAttribute("aria-pressed", String(other === name));
+    }
+    render();
+  };
+}
 
 const tableBtn = document.getElementById("toggle-table");
 tableBtn.onclick = () => {
@@ -536,7 +641,7 @@ document.getElementById("toggle-theme").onclick = () => {
 };
 
 document.getElementById("foot-est").textContent = DATA.estimatorNote;
-render();
+goTo([], true);
 </script>
 </body>
 </html>

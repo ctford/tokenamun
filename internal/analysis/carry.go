@@ -57,9 +57,13 @@ type CarriedItem struct {
 	// WarmCalls read it from cache; ColdCalls rebuilt it at the write rate.
 	WarmCalls int `json:"warm_calls"`
 	ColdCalls int `json:"cold_calls"`
-	// CarryEIT is the cost of the re-sends, which is usually far larger than
-	// the cost of the original fetch.
+	// CarryEIT is the cost of the re-sends as actually billed: cache reads at
+	// a tenth of input price, rebuilt prefixes at the write rate.
 	CarryEIT float64 `json:"carry_eit"`
+	// CarryUncachedEIT is the same residency priced as though nothing cached.
+	// The gap between the two is what prompt caching was worth on this
+	// content, which is not visible from either number alone.
+	CarryUncachedEIT float64 `json:"carry_uncached_eit"`
 }
 
 // Carry computes residency costs for a session.
@@ -126,6 +130,9 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 			WarmCalls:   warm,
 			ColdCalls:   coldN,
 			CarryEIT:    c.Tokens * (float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m),
+			// Every re-send at full input price: the counterfactual of no
+			// caching at all, on the same trajectory.
+			CarryUncachedEIT: c.Tokens * float64(warm+coldN) * w.Input,
 		})
 	}
 	sort.SliceStable(r.Items, func(i, j int) bool { return r.Items[i].CarryEIT > r.Items[j].CarryEIT })
