@@ -32,17 +32,17 @@ go install github.com/ctford/tokenamun/cmd/tokenamun@latest
 
 That lands in `$(go env GOPATH)/bin`, which is often not on your `PATH`.
 
-With Homebrew, from a clone:
+Or with Homebrew:
 
 ```sh
-brew tap-new ctford/tap --no-git                     # once
-cp packaging/homebrew/tokenamun.rb \
-   "$(brew --repository ctford/tap)/Formula/"
 brew install --HEAD ctford/tap/tokenamun
 ```
 
-The formula builds from `main` and has no stable version, because the CLI and
-the JSON still change and a version number would say otherwise.
+`--HEAD` is required and there are no tagged versions: the
+[formula](https://github.com/ctford/homebrew-tap) builds from `main`, because
+the CLI and the JSON still change and a version number would say otherwise.
+`brew upgrade --fetch-HEAD tokenamun` picks up new commits. Either route needs
+Go, since the formula builds from source too.
 
 Either way it is worth having on the `PATH` rather than built per-repository:
 the thing you usually want to profile is whichever repository you are standing
