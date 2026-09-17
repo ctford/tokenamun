@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ctford/tokenamun/internal/claudecode"
 	"github.com/ctford/tokenamun/internal/model"
 )
 
@@ -76,5 +77,70 @@ func TestReplayRequiresACommand(t *testing.T) {
 func TestReplayOnAMissingTranscriptFails(t *testing.T) {
 	if _, err := Replay(model.SessionRef{Transcript: "/nonexistent/full.jsonl"}, "cat"); err == nil {
 		t.Fatal("a missing transcript should be an error")
+	}
+}
+
+func TestReplayScopesDoNotOverlap(t *testing.T) {
+	// The two eligibility rules partition the content between them. An
+	// overlap would let a saving be measured twice, once per intervention.
+	cases := []struct {
+		name, command string
+		meta          claudecode.ResultMeta
+	}{
+		{name: "Read"},
+		{name: "Bash", command: "cat internal/thing.go"},
+		{name: "Bash", command: "go test ./..."},
+		{name: "Bash", command: "git log --oneline"},
+		{name: "WebFetch"},
+		{name: "mcp__linear__issues"},
+		{name: "Bash", command: "ls", meta: claudecode.ResultMeta{Path: "a.go"}},
+		{name: "ExitPlanMode", meta: claudecode.ResultMeta{Path: "docs/plan.md"}},
+		{name: "TodoWrite"},
+	}
+	for _, tc := range cases {
+		output := eligible(tc.name, tc.command, tc.meta)
+		file := eligibleFile(tc.name, tc.command, tc.meta)
+		if output && file {
+			t.Errorf("%s %q is eligible for both scopes", tc.name, tc.command)
+		}
+	}
+}
+
+func TestReplayFilesMeasuresFileContentSeparately(t *testing.T) {
+	// The two populations compress differently -- one is repetitive machine
+	// chatter, the other is source somebody wrote -- so a single ratio for
+	// both would be wrong for each.
+	ref := replayFixture(t)
+	files, fileErr := ReplayFiles(ref, "cat")
+	output, outErr := Replay(ref, "cat")
+
+	if fileErr == nil {
+		if files.Scope != "file content" {
+			t.Errorf("a result must say which population it measured, got %q", files.Scope)
+		}
+		if files.Ratio() != 1 {
+			t.Errorf("cat is the identity, so the ratio is 1, got %.3f", files.Ratio())
+		}
+	}
+	if outErr == nil && fileErr == nil {
+		if files.InputBytes == 0 && output.InputBytes == 0 {
+			t.Fatal("the fixture should have content in at least one scope")
+		}
+		// Disjoint populations: the same payload must not be in both totals.
+		if files.Items > 0 && output.Items > 0 && files.InputBytes == output.InputBytes {
+			t.Error("the two scopes measured the same bytes, so they are not disjoint")
+		}
+	}
+	if fileErr != nil && outErr != nil {
+		t.Skip("the fixture has no replayable content in either scope")
+	}
+}
+
+func TestReplayRefusesAnEmptyCommand(t *testing.T) {
+	if _, err := Replay(model.SessionRef{}, "  "); err == nil {
+		t.Error("an empty replay command must be an error, not a silent no-op")
+	}
+	if _, err := ReplayFiles(model.SessionRef{}, ""); err == nil {
+		t.Error("an empty replay command must be an error, not a silent no-op")
 	}
 }

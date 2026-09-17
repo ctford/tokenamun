@@ -87,12 +87,21 @@ accounting, you change that document in the same commit.
 
 * **Go only.** Single static binary, no runtime dependencies. No Node, no
   Python in the shipped tool (`tools/` helpers may be Go too — keep them Go
-  unless there's a reason).
+  unless there's a reason). `go.mod` may carry `tool` dependencies for the
+  checks — they are pinned so an analyser release cannot change what a check
+  says about an unchanged commit, and nothing in the shipped binary imports
+  them. `examples/` is outside the tool and may be in any language.
 * **The adapters are a quarantine.** Only `internal/entire` and
   `internal/claudecode` may know a field name from someone else's format.
   Everything downstream consumes `internal/model` types. New format knowledge
   goes in `assumptions.go` with a note on how we detect it breaking.
 * **Stream, don't slurp.** Transcripts reach 9 MB. Nothing loads a whole one.
+* **The checks are gates, not reports.** `scripts/checks.sh` enforces a
+  coverage floor (80%), a file-length, function-complexity and duplication
+  budget measured by the tool's own scanner, and a dead-code check. The
+  budgets are ratchets set just above where the codebase is. Raise one only
+  with the reason in the commit message; the failure mode of a budget nobody
+  defends is a budget that only ever goes up.
 * **Tests before green.** Table-driven unit tests per package; golden-file
   integration tests over `testdata/` that exercise the whole pipeline without
   Entire, git-over-network, or an API key. `-update` regenerates goldens —

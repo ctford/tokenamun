@@ -31,9 +31,6 @@ func slug(dir string) string {
 // invoking it.
 func CurrentSessionID() string { return os.Getenv("CLAUDE_CODE_SESSION_ID") }
 
-// RunningInsideClaudeCode reports whether we were invoked by an agent session.
-func RunningInsideClaudeCode() bool { return os.Getenv("CLAUDECODE") != "" }
-
 // DiscoverLocal lists Claude Code sessions recorded for dir.
 //
 // The slugified directory name is tried first. If that misses -- Claude Code's

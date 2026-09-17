@@ -133,26 +133,6 @@ func BuildRetrieval(s *model.Session) Retrieval {
 	return r
 }
 
-// weakest returns the less confident of two provenances, so a category built
-// partly from guesses is not presented as if it were observed.
-func weakest(a, b model.Provenance) model.Provenance {
-	rank := map[model.Provenance]int{
-		model.Observed: 0, model.Derived: 1, model.DerivedApprox: 2,
-		model.Inferred: 3, model.Counterfactual: 4,
-	}
-	if rank[b] > rank[a] {
-		return b
-	}
-	return a
-}
-
-func estimatorProv(s *model.Session) model.Provenance {
-	if s.Estimator.Calibrated {
-		return model.DerivedApprox
-	}
-	return model.DerivedApprox
-}
-
 func rangeOf(c model.RetrievedContent) string {
 	if c.Lines == 0 || c.TotalLines == 0 {
 		return ""

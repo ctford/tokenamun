@@ -73,8 +73,3 @@ func (w Weights) PromptCost(u model.TokenUsage) float64 {
 func (w Weights) OutputCost(u model.TokenUsage) float64 {
 	return float64(u.Output) * w.Output
 }
-
-// TotalCost returns the full cost of an API call, in EIT.
-func (w Weights) TotalCost(u model.TokenUsage) float64 {
-	return w.PromptCost(u) + w.OutputCost(u)
-}

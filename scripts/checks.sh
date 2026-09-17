@@ -10,6 +10,10 @@ cd "$(dirname "$0")/.."
 mode="${1:-full}"
 fail=0
 
+# The coverage floor. Stated here rather than buried in the step, because it is
+# the one number in this file that is a policy rather than a measurement.
+COVERAGE_MIN=80
+
 step() { printf '\033[1m==> %s\033[0m\n' "$1"; }
 bad()  { printf '\033[31mFAIL\033[0m %s\n' "$1"; fail=1; }
 
@@ -53,6 +57,57 @@ while IFS= read -r f; do
     bad "transcript-shaped file outside testdata/: $f"
   fi
 done < <(git ls-files '*.jsonl')
+
+# Dead code. Pinned as a tool dependency rather than fetched at @latest, so a
+# new release of the analyser cannot change what this check says about an
+# unchanged commit. It is a tool dependency, not a runtime one: nothing in the
+# shipped binary imports it.
+# Note the limit: deadcode reports unreachable *functions*. An unused method
+# can still be reported as reachable, because a method may be called through
+# any interface it satisfies. The coverage step below is what catches those --
+# an unused method has no test exercising it either.
+step "dead code"
+if [[ "$mode" != "fast" ]]; then
+  dead="$(go tool deadcode -test ./... || true)"
+  if [[ -n "$dead" ]]; then
+    bad "unreachable code (delete it, or reach it from a test):"$'\n'"$dead"
+  fi
+else
+  echo "skipped in fast mode"
+fi
+
+# Oversized files, over-complex functions and duplication, measured by the
+# tool's own scanner. The budgets are ratchets set just above where the
+# codebase is: tight enough that adding to the worst file fails, loose enough
+# that the current state passes. Raise one only with a reason in the commit.
+#
+# Test files are excluded from the duplication measure. Table-driven tests
+# repeat their own shape by design, and counting that trains people to ignore
+# the number.
+step "code budgets"
+go run ./cmd/tokenamun scan . \
+  --max-file-lines 800 \
+  --max-complexity 25 \
+  --max-duplication 3 \
+  --skip-duplicates-in _test.go \
+  >/dev/null || bad "code budgets exceeded"
+
+# Coverage, measured across the whole module rather than per package: the
+# adapters in internal/claudecode are exercised through internal/ingest, and a
+# per-package figure would report them as untested and be wrong.
+step "coverage"
+if [[ "$mode" != "fast" ]]; then
+  profile="$(mktemp)"
+  trap 'rm -f "$profile"' EXIT
+  go test -coverpkg=./... -coverprofile="$profile" ./... >/dev/null || bad "tests failed under coverage"
+  total="$(go tool cover -func="$profile" | awk '$1=="total:" {gsub(/%/,"",$3); print $3}')"
+  echo "total coverage: ${total}%"
+  if awk -v t="$total" -v min="$COVERAGE_MIN" 'BEGIN {exit !(t < min)}'; then
+    bad "coverage ${total}% is below the ${COVERAGE_MIN}% floor"
+  fi
+else
+  echo "skipped in fast mode"
+fi
 
 step "golangci-lint"
 if command -v golangci-lint >/dev/null 2>&1; then

@@ -69,6 +69,14 @@ Flags:
                   Point this at a checkout of the branch the session ran on.
   --intervention PATH
                   an intervention script to load, repeatable
+
+Code budgets (scan). Given a limit, the scan exits non-zero when it is
+exceeded, which is how it is used as a CI gate:
+  --max-file-lines N        fail on a file longer than N lines
+  --max-complexity N        fail on a function above complexity N
+  --max-duplication PCT     fail above PCT% of duplicated code lines
+  --skip-duplicates-in S    exclude paths containing S from the duplication
+                            measure, repeatable
 `
 
 func main() {
@@ -97,6 +105,11 @@ func run(args []string) error {
 	title := fs.String("title", "", "heading for the treemap report")
 	var extraInterventions repeatable
 	fs.Var(&extraInterventions, "intervention", "path to an intervention script (repeatable)")
+	maxFileLines := fs.Int("max-file-lines", 0, "fail the scan on a file longer than this")
+	maxComplexity := fs.Int("max-complexity", 0, "fail the scan on a function above this complexity")
+	maxDuplication := fs.Float64("max-duplication", 0, "fail the scan above this % of duplicated code lines")
+	var skipDuplicatesIn repeatable
+	fs.Var(&skipDuplicatesIn, "skip-duplicates-in", "exclude paths containing this from the duplication measure (repeatable)")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
 	// For a CLI agents invoke, silently dropping a flag is the worst failure
@@ -141,7 +154,12 @@ func run(args []string) error {
 	case "cache":
 		return cmdCache(*dir, *source, selector, *asJSON)
 	case "scan":
-		return cmdScan(*dir, selector, *asJSON)
+		return cmdScan(*dir, selector, codescan.Budget{
+			MaxFileLines:          *maxFileLines,
+			MaxFunctionComplexity: *maxComplexity,
+			MaxDuplicationPercent: *maxDuplication,
+			SkipDuplicatesIn:      skipDuplicatesIn,
+		}, *asJSON)
 	case "hotspots":
 		return cmdHotspots(*dir, *scanDir, *source, selector, *asJSON)
 	case "compare":
@@ -289,7 +307,7 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 }
 
 // cmdScan measures code properties without reference to any session.
-func cmdScan(dir, selector string, asJSON bool) error {
+func cmdScan(dir, selector string, budget codescan.Budget, asJSON bool) error {
 	root := dir
 	// scan takes a path rather than a session, so a positional argument here
 	// is a directory.
@@ -302,9 +320,23 @@ func cmdScan(dir, selector string, asJSON bool) error {
 	}
 	out := report.BuildScan(r)
 	if asJSON {
-		return writeJSON(out)
+		if err := writeJSON(out); err != nil {
+			return err
+		}
+	} else if err := report.RenderScan(os.Stdout, out); err != nil {
+		return err
 	}
-	return report.RenderScan(os.Stdout, out)
+
+	// Budgets turn the report into a check. Printed to stderr and returned as
+	// an error, so this works as a CI gate with or without --json.
+	breaches := codescan.Check(r, budget)
+	if len(breaches) == 0 {
+		return nil
+	}
+	for _, b := range breaches {
+		fmt.Fprintf(os.Stderr, "over budget: %s\n", b)
+	}
+	return fmt.Errorf("%d code budgets exceeded", len(breaches))
 }
 
 // cmdHotspots joins code metrics onto session cost.

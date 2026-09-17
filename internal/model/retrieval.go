@@ -16,14 +16,6 @@ const (
 	ChanUserPrompt Channel = "prompts"
 )
 
-// Channels lists every channel in report order.
-func Channels() []Channel {
-	return []Channel{
-		ChanFileRead, ChanShell, ChanWeb, ChanSubagent,
-		ChanEdit, ChanMCP, ChanOtherTool, ChanUserPrompt,
-	}
-}
-
 // RetrievedContent is one payload that entered the model's context as the
 // result of a tool call.
 //
