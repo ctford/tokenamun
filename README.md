@@ -26,9 +26,25 @@ transfers to another provider.
   Entire's checkpoint commits. The second is how you profile a *team* — a
   clone carries everybody's checkpoints.
 
+## Installing
+
 ```sh
-go build ./cmd/tokenamun            # or: brew install ctford/tap/tokenamun, once released
+go install github.com/ctford/tokenamun/cmd/tokenamun@latest
 ```
+
+That puts `tokenamun` in `$(go env GOPATH)/bin`, which is often not on your
+`PATH`. Either add it, or link it somewhere that is:
+
+```sh
+ln -s "$(go env GOPATH)/bin/tokenamun" ~/.local/bin/tokenamun
+```
+
+It is worth having on the `PATH` rather than built per-repo: the thing you
+usually want to profile is whichever repository you are standing in, and
+`--dir` points it at any other one.
+
+To work on it instead, `go build ./cmd/tokenamun` and run
+`./scripts/checks.sh` — the same script the pre-commit hook and CI run.
 
 ## Start here
 
