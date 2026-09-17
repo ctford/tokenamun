@@ -30,18 +30,13 @@ const dataPlaceholder = "__TOKENAMUN_DATA__"
 type TreemapPayload struct {
 	// Title is set by the caller, so an agent generating this for a
 	// particular repository can say whose session it is.
-	Title   string         `json:"title"`
-	Session treemapSession `json:"session"`
-	// Completeness records what the view does not account for. These used to
-	// be headline tiles, which put byte counts beside a cost-weighted
-	// treemap, duplicated the interventions table, and pushed the chart below
-	// the fold. They are caveats, so they now read as caveats.
-	Completeness     []string        `json:"completeness"`
-	Interventions    []treemapWhatIf `json:"interventions"`
-	Items            []treemapItem   `json:"items"`
-	Tree             *Node           `json:"tree"`
-	MaxCarryPerToken float64         `json:"maxCarryPerToken"`
-	EstimatorNote    string          `json:"estimatorNote"`
+	Title         string          `json:"title"`
+	Session       treemapSession  `json:"session"`
+	Interventions []treemapWhatIf `json:"interventions"`
+	Tree          *Node           `json:"tree"`
+	// MaxCarryPerToken is the top of the colour ramp. Taken from the tree, so
+	// the scale covers exactly what the viewer can draw.
+	MaxCarryPerToken float64 `json:"maxCarryPerToken"`
 }
 
 // treemapWhatIf is one intervention's bottom line, for the summary table.
@@ -63,20 +58,6 @@ type treemapSession struct {
 	Origin string `json:"origin"`
 }
 
-type treemapItem struct {
-	ID            int     `json:"id"`
-	Label         string  `json:"label"`
-	ShortLabel    string  `json:"shortLabel"`
-	Tool          string  `json:"tool"`
-	Bytes         int     `json:"bytes"`
-	Tokens        float64 `json:"tokens"`
-	Carry         float64 `json:"carry"`
-	CarryPerToken float64 `json:"carryPerToken"`
-	EnteredAt     int     `json:"enteredAt"`
-	ResidentFor   int     `json:"residentFor"`
-	Range         string  `json:"range,omitempty"`
-}
-
 // BuildTreemap assembles the payload from a session and its carry analysis.
 func BuildTreemap(s *model.Session, carry analysis.CarryReport) TreemapPayload {
 	return BuildTreemapTitled(s, carry, "")
@@ -84,8 +65,6 @@ func BuildTreemap(s *model.Session, carry analysis.CarryReport) TreemapPayload {
 
 // BuildTreemapTitled assembles the payload with a caller-supplied title.
 func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title string) TreemapPayload {
-	retrieval := BuildRetrieval(s)
-
 	if title == "" {
 		title = "Tokenamun"
 	}
@@ -94,88 +73,31 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 		Session: treemapSession{
 			ID: s.Ref.ID, Calls: len(s.Invocations), Origin: string(s.Ref.Origin),
 		},
-		EstimatorNote: estimatorNote(s),
 	}
-
-	p.Completeness = completenessNotes(s, retrieval)
-
 	p.Interventions = interventionTable(s, carry)
-
-	// Carry is keyed by the retrieval's position, so index it to join.
-	carryBySeq := map[string]analysis.CarriedItem{}
-	for _, it := range carry.Items {
-		carryBySeq[carryItemKey(it.Path, it.Tool, it.EnteredAt)] = it
-	}
-
-	for _, c := range s.Retrievals {
-		label := c.Path
-		if label == "" {
-			label = "(" + c.Tool + " output)"
-		}
-		item := treemapItem{
-			ID:         c.Seq,
-			Label:      label,
-			ShortLabel: shortLabel(label),
-			Tool:       c.Tool,
-			Bytes:      c.Bytes,
-			Tokens:     c.Tokens,
-			EnteredAt:  c.InvocationSeq,
-			Range:      rangeOf(c),
-		}
-		if it, ok := carryBySeq[carryItemKey(c.Path, c.Tool, c.InvocationSeq)]; ok {
-			item.Carry = it.CarryEIT
-			item.ResidentFor = it.ResidentFor
-			if c.Tokens > 0 {
-				item.CarryPerToken = it.CarryEIT / c.Tokens
-			}
-		}
-		if item.CarryPerToken > p.MaxCarryPerToken {
-			p.MaxCarryPerToken = item.CarryPerToken
-		}
-		p.Items = append(p.Items, item)
-	}
-
 	p.Tree = BuildTree(s, carry)
-
-	// Largest first, so the table reads in the same order the eye scans the
-	// treemap.
-	sort.SliceStable(p.Items, func(i, j int) bool { return p.Items[i].Tokens > p.Items[j].Tokens })
+	p.MaxCarryPerToken = maxCarryPerToken(p.Tree)
 	return p
 }
 
-// estimatorNote says in one line how content tokens were counted, since every
-// area in the view depends on it.
-func estimatorNote(s *model.Session) string {
-	if !s.Estimator.Calibrated {
-		return "Content token counts are estimated: " + s.Estimator.Method + "."
+// maxCarryPerToken is the top of the colour ramp. It comes from the tree
+// rather than from the flat retrieval list, so the scale covers exactly the
+// nodes the viewer can draw and no others: a ramp topped out by something
+// off-screen would make every visible rectangle look pale.
+func maxCarryPerToken(n *Node) float64 {
+	if n == nil {
+		return 0
 	}
-	return fmt.Sprintf(
-		"Content token counts are estimated at %.2f bytes per token, calibrated against this "+
-			"session's own observed prompt growth. Token-class costs are observed.",
-		s.Estimator.BytesPerToken)
-}
-
-// completenessNotes says what the view leaves out, which a total cannot.
-func completenessNotes(s *model.Session, retrieval Retrieval) []string {
-	var out []string
-	if v := retrieval.Total.Withheld.Value; v > 0 {
-		out = append(out, fmt.Sprintf(
-			"%s of tool output was too large to send, so Claude Code spilled it to a file "+
-				"and showed the model an excerpt. You were not billed for the rest, and it "+
-				"is not in this view.", bytesStr(v)))
+	max := 0.0
+	if !n.Unscaled {
+		max = n.CarryPerToken
 	}
-	if n := retrieval.Total.Images.Value; n > 0 {
-		out = append(out, fmt.Sprintf(
-			"%d image results are counted but their tokens are not: an image is priced by "+
-				"its dimensions, so a byte ratio would overstate a screenshot by more than "+
-				"an order of magnitude.", int(n)))
+	for _, c := range n.Children {
+		if m := maxCarryPerToken(c); m > max {
+			max = m
+		}
 	}
-	if r := retrieval.Total.Redundant.Value; r > 0 {
-		out = append(out, fmt.Sprintf(
-			"%s of what was fetched had already been fetched, byte for byte. The "+
-				"repeated-retrieval row below prices it.", bytesStr(r)))
-	}
-	return out
+	return max
 }
 
 // interventionTable runs every intervention and keeps the one number each
@@ -211,23 +133,6 @@ func interventionTable(s *model.Session, carry analysis.CarryReport) []treemapWh
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Share < out[j].Share })
 	return out
-}
-
-// carryItemKey identifies a carried item well enough to join it back to the
-// retrieval it came from.
-func carryItemKey(path, tool string, enteredAt int) string {
-	return fmt.Sprintf("%s|%s|%d", path, tool, enteredAt)
-}
-
-// shortLabel trims a path to something that fits in a rectangle.
-func shortLabel(label string) string {
-	if i := strings.LastIndex(label, "/"); i >= 0 && i+1 < len(label) {
-		label = label[i+1:]
-	}
-	if len(label) > 28 {
-		return label[:27] + "…"
-	}
-	return label
 }
 
 // RenderTreemap writes the standalone HTML report.

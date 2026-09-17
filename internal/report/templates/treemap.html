@@ -144,10 +144,6 @@
   td { font-variant-numeric: tabular-nums; }
   [hidden] { display: none !important; }
 
-  footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--rule); }
-  footer p { color: var(--text-muted); font-size: 12px; margin: 0 0 6px; max-width: 70ch; }
-  footer ul { margin: 6px 0 0; padding-left: 18px; max-width: 70ch; }
-  footer li { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -186,26 +182,15 @@
   </div>
 
   <h2>Would an optimisation have helped?</h2>
-  <p class="muted">Each row is computed against this session, not quoted from a vendor.
-  Negative is a saving. These are counterfactuals: they assume the agent would have behaved
-  identically, and none of them can see whether the work still came out right.</p>
   <div class="panel" style="overflow:auto">
     <table id="interventions">
       <thead><tr>
         <th>Intervention</th><th>What it targets</th>
-        <th>Effect</th><th>Share of session</th><th>Read this first</th>
+        <th>Effect</th><th>Share of session</th><th>Caveat</th>
       </tr></thead>
       <tbody></tbody>
     </table>
   </div>
-
-  <footer>
-    <p><strong>What this is not.</strong> It does not reconstruct the context window
-    at any moment. Costs are what each token class was billed at, attributed to the
-    content resident when it was sent.</p>
-    <p id="foot-est" class="muted"></p>
-    <ul id="completeness" class="muted"></ul>
-  </footer>
 </div>
 
 <div id="tip" role="tooltip" aria-hidden="true"></div>
@@ -653,13 +638,6 @@ document.getElementById("toggle-theme").onclick = () => {
 };
 
 applyViewMode();
-document.getElementById("completeness").innerHTML =
-  (DATA.completeness || []).map(c => `<li>${esc(c)}</li>`).join("");
-document.getElementById("foot-est").textContent = DATA.estimatorNote +
-  (DATA.tree.reconciliation
-    ? ` The parts above come to ${pct(100 * -DATA.tree.reconciliation / DATA.tree.carry)} more `
-      + "than the measured prompt cost; that gap is the estimation error, not a finding."
-    : "");
 goTo([], true);
 </script>
 </body>

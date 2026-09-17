@@ -350,7 +350,7 @@ func cmdTreemap(dir, source, selector, title, outPath string) error {
 	if err := report.RenderTreemap(f, payload); err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s (%d retrievals)\n", outPath, len(payload.Items))
+	fmt.Printf("wrote %s (%d retrievals)\n", outPath, len(s.Retrievals))
 	fmt.Println("Area is cost-weighted tokens. It is not a picture of the context window.")
 	return nil
 }

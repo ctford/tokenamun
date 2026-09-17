@@ -477,16 +477,6 @@ func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 		t.Error("the data placeholder was not substituted")
 	}
 
-	// The disclaimer is the point: the view does not reconstruct the context
-	// window. Asserted on the claim rather than the exact wording.
-	if !strings.Contains(html, "reconstruct the context window") {
-		t.Error("the report must state that it does not reconstruct the context window")
-	}
-	// And it must say how content tokens were counted, since every area
-	// depends on that estimate.
-	if !strings.Contains(html, "estimated") {
-		t.Error("the report must state how content tokens were counted")
-	}
 	// Every area also has to be readable as a number, for a screen reader and
 	// for anyone who wants the exact figure. The table is the same level as the
 	// boxes rather than a separate listing, so it must navigate too.
@@ -504,36 +494,43 @@ func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 	}
 }
 
-func TestTreemapPayloadJoinsCarryOntoRetrievals(t *testing.T) {
+func TestTreemapRampScalesToWhatTheViewerCanDraw(t *testing.T) {
 	s := carrySession(t)
-	p := BuildTreemap(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	p := BuildTreemap(s, carry)
 
-	if len(p.Items) == 0 {
-		t.Fatal("the fixture has retrievals")
-	}
-	var withCarry int
-	for _, i := range p.Items {
-		if i.Carry > 0 {
-			withCarry++
-			if i.ResidentFor == 0 {
-				t.Errorf("%s has carry cost but no residency", i.Label)
-			}
-			if i.CarryPerToken <= 0 {
-				t.Errorf("%s has carry cost but no per-token rate for the colour ramp", i.Label)
-			}
-		}
-	}
-	if withCarry == 0 {
-		t.Error("carry should have joined onto at least one retrieval")
-	}
 	if p.MaxCarryPerToken <= 0 {
-		t.Error("the colour ramp needs a maximum to scale against")
+		t.Fatal("the colour ramp needs a maximum to scale against")
 	}
-	// Items are ordered largest-first so the table reads in scan order.
-	for i := 1; i < len(p.Items); i++ {
-		if p.Items[i-1].Tokens < p.Items[i].Tokens {
-			t.Fatal("items should be ordered largest first")
+	// The ramp is topped out by a node the viewer draws, not by something off
+	// the tree: a maximum from elsewhere would wash every rectangle pale.
+	var found bool
+	var walk func(*Node)
+	walk = func(n *Node) {
+		if !n.Unscaled && n.CarryPerToken == p.MaxCarryPerToken {
+			found = true
 		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(p.Tree)
+	if !found {
+		t.Error("the ramp maximum must belong to a node in the tree")
+	}
+	// And no drawable node may exceed it, or it would clamp off the top.
+	var over int
+	walk = func(n *Node) {
+		if !n.Unscaled && n.CarryPerToken > p.MaxCarryPerToken {
+			over++
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(p.Tree)
+	if over > 0 {
+		t.Errorf("%d nodes are above the top of the ramp", over)
 	}
 }
 
