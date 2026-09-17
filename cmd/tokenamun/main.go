@@ -38,6 +38,7 @@ Usage:
   tokenamun scan [path]           code properties: size, complexity, duplication
   tokenamun hotspots [session]    code properties joined against session cost
   tokenamun compare <a> <b>       two sessions side by side
+  tokenamun interventions         what what-if can be asked, built-in and installed
   tokenamun what-if <name> [session]
                                   would an optimisation have helped, and by how much
   tokenamun treemap [session]     standalone HTML viewer: drill down from how
@@ -50,11 +51,9 @@ Session selector:
   or "latest" (the default) for the most recently active one.
 
 Interventions for what-if:
-  cache-ttl            5-minute prompt cache to 1-hour
-  repeated-retrieval   fetch byte-identical content once
-  output-compression   compress tool output before it enters context
-  caveman              Caveman-style compression
-  mcp-to-cli           put an MCP server behind a CLI
+  run "tokenamun interventions", which also lists any you have installed.
+  Your own go in ~/.config/tokenamun/interventions or are named with
+  --intervention PATH; see docs/interventions.md for the protocol.
 
 Flags:
   --json          machine-readable output
@@ -68,6 +67,8 @@ Flags:
   --cost N        measured intervention cost in EIT, for series payback
   --scan PATH     tree to scan for code metrics (hotspots; default --dir).
                   Point this at a checkout of the branch the session ran on.
+  --intervention PATH
+                  an intervention script to load, repeatable
 `
 
 func main() {
@@ -94,6 +95,8 @@ func run(args []string) error {
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
 	title := fs.String("title", "", "heading for the treemap report")
+	var extraInterventions repeatable
+	fs.Var(&extraInterventions, "intervention", "path to an intervention script (repeatable)")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
 	// For a CLI agents invoke, silently dropping a flag is the worst failure
@@ -111,7 +114,22 @@ func run(args []string) error {
 		second = positional[1]
 	}
 
+	// Interventions supplied from outside the binary are registered before
+	// anything reads the list, so a script is a first-class row everywhere:
+	// the what-if report, the treemap's table and the JSON output.
+	loaded, errs := whatif.Discover(extraInterventions)
+	for _, i := range loaded {
+		whatif.Register(i)
+	}
+	for _, e := range errs {
+		// Reported, not fatal: one broken script must not stop a report that
+		// has six working interventions in it.
+		fmt.Fprintf(os.Stderr, "tokenamun: ignoring an intervention: %v\n", e)
+	}
+
 	switch cmd {
+	case "interventions":
+		return cmdInterventions(*asJSON)
 	case "sessions":
 		return cmdSessions(*dir, *source, *asJSON)
 	case "profile":
@@ -484,4 +502,58 @@ func writeJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// repeatable is a flag that may be given more than once, collecting each
+// value. Go's flag package has no such type, and an intervention path is
+// exactly the kind of thing you want several of.
+type repeatable []string
+
+func (r *repeatable) String() string { return strings.Join(*r, ",") }
+
+func (r *repeatable) Set(v string) error {
+	*r = append(*r, v)
+	return nil
+}
+
+// cmdInterventions lists what can be asked of `what-if`.
+//
+// It exists for the agent case: something driving this tool needs to find out
+// what questions it can ask without a human reading the usage text, and the
+// answer changes when someone installs a script.
+func cmdInterventions(asJSON bool) error {
+	type row struct {
+		Name    string `json:"name"`
+		Targets string `json:"targets"`
+		Source  string `json:"source"`
+	}
+	builtin := map[string]bool{}
+	for _, i := range whatif.Builtin() {
+		builtin[i.Name()] = true
+	}
+	var rows []row
+	for _, i := range whatif.All() {
+		src := "external"
+		if builtin[i.Name()] {
+			src = "built-in"
+		}
+		if e, ok := i.(*whatif.External); ok {
+			src = e.Path
+		}
+		rows = append(rows, row{Name: i.Name(), Targets: i.Describe(), Source: src})
+	}
+	if asJSON {
+		return writeJSON(rows)
+	}
+	fmt.Println("TOKENAMUN  interventions")
+	fmt.Println()
+	for _, r := range rows {
+		fmt.Printf("  %-22s %s\n", r.Name, r.Targets)
+		fmt.Printf("  %-22s %s\n", "", r.Source)
+	}
+	fmt.Println()
+	fmt.Printf("Scripts are loaded from %s and from --intervention PATH.\n",
+		strings.Join(whatif.SearchPath(), ", "))
+	fmt.Println("See docs/interventions.md for the protocol.")
+	return nil
 }

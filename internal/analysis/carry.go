@@ -3,6 +3,7 @@ package analysis
 import (
 	"sort"
 
+	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/model"
 )
 
@@ -97,6 +98,18 @@ type CarriedItem struct {
 // prefix-based and retrievals sit in the prefix, so this follows the mechanism
 // rather than guessing.
 func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
+	return CarryWith(s, cacheReport, nil)
+}
+
+// CarryWith prices residency as though the context had also been cleared at
+// each of extraResets.
+//
+// It exists so that "what if the context were cleared at each new task" is
+// answered by the same arithmetic as the real session rather than by a
+// separate model of it. A clear and a compaction do the same thing to carry
+// cost -- they truncate every open residency span -- so the counterfactual is
+// the observed session with more resets in it.
+func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) CarryReport {
 	w := weightsFor(s)
 	cold := ColdCalls(cacheReport)
 
@@ -128,8 +141,18 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 	}
 
 	// The preamble is resident for every call, so it is carried by all of
-	// them. Priced the same way as any other resident content.
+	// them. Priced the same way as any other resident content -- including
+	// stopping at a reset, because the measured preamble is the first call's
+	// whole prompt and compaction can leave a prefix smaller than that. What
+	// the harness put back afterwards is not in the transcript, so it is not
+	// claimed here. This is also why the counterfactual resets below do not
+	// apply to it: a clear certainly rebuilds the preamble rather than losing
+	// it, and an intervention that clears must price that write itself.
 	r.PreambleCarryEIT = residencyCost(float64(r.Preamble), 1, len(s.Invocations), cold, r.Resets, w)
+
+	// Everything else is priced against the resets that a counterfactual adds
+	// as well as the ones that happened. r.Resets itself stays observed.
+	resets := mergeResets(r.Resets, extraResets)
 	if r.PromptCostEIT > 0 {
 		r.PreambleShare = r.PreambleCarryEIT / r.PromptCostEIT
 	}
@@ -139,7 +162,7 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 		if pe.Bytes == 0 || pe.InvocationSeq < 0 {
 			continue
 		}
-		warm, coldN := residency(pe.InvocationSeq+1, len(s.Invocations), cold, r.Resets)
+		warm, coldN := residency(pe.InvocationSeq+1, len(s.Invocations), cold, resets)
 		switch {
 		case warm > 0:
 			warm--
@@ -160,7 +183,7 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 		if !inv.IsRealCall() || carried <= 0 {
 			continue
 		}
-		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, r.Resets)
+		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, resets)
 		switch {
 		case warm > 0:
 			warm--
@@ -182,7 +205,7 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 		if entered < 0 {
 			continue
 		}
-		warm, coldN := residency(entered+1, len(s.Invocations), cold, r.Resets)
+		warm, coldN := residency(entered+1, len(s.Invocations), cold, resets)
 		// The call that first carries the content in writes it to cache; the
 		// rest read it. Content that arrives on the final call is still sent
 		// once, so it keeps the write and has no reads.
@@ -240,9 +263,27 @@ func residency(from, end int, cold map[int]bool, resets []int) (warm, coldN int)
 	return warm, coldN
 }
 
-func residencyCost(tokens float64, from, end int, cold map[int]bool, resets []int, w interface {
-	PromptCost(model.TokenUsage) float64
-}) float64 {
+// mergeResets combines detected resets with counterfactual ones, sorted and
+// deduplicated so residency sees each boundary once.
+func mergeResets(detected, extra []int) []int {
+	if len(extra) == 0 {
+		return detected
+	}
+	seen := map[int]bool{}
+	var out []int
+	for _, xs := range [][]int{detected, extra} {
+		for _, k := range xs {
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, k)
+			}
+		}
+	}
+	sort.Ints(out)
+	return out
+}
+
+func residencyCost(tokens float64, from, end int, cold map[int]bool, resets []int, w cost.Weights) float64 {
 	warm, coldN := residency(from, end, cold, resets)
 	// Priced through the same weights as everything else by constructing the
 	// equivalent usage, so there is one place that knows the rates.

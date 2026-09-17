@@ -88,23 +88,27 @@ type Warning struct {
 }
 
 // Session is a parsed transcript in normalized form.
+// Session is also a published wire format: it is most of the evidence
+// document an external intervention reads on stdin, so the collection fields
+// are serialised even when empty. A script that indexes into
+// evidence.session.retrievals should find an empty list, not a missing key.
 type Session struct {
 	Ref         SessionRef         `json:"ref"`
 	Invocations []ModelInvocation  `json:"invocations"`
 	ToolCalls   []ToolCall         `json:"tool_calls"`
-	Retrievals  []RetrievedContent `json:"retrievals,omitempty"`
-	Repeats     []Repeat           `json:"repeats,omitempty"`
+	Retrievals  []RetrievedContent `json:"retrievals"`
+	Repeats     []Repeat           `json:"repeats"`
 	Prompts     int                `json:"user_prompts"`
 	// PromptEntries record each user prompt's size and where it entered, so
 	// what you typed can be carried like anything else.
-	PromptEntries []PromptEntry `json:"prompt_entries,omitempty"`
+	PromptEntries []PromptEntry `json:"prompt_entries"`
 	// ProseBytes is assistant text, excluding thinking and tool arguments.
 	// Output tokens are observed in total but not broken down, so the split
 	// between prose and tool arguments is apportioned by these byte counts.
 	ProseBytes int       `json:"prose_bytes"`
 	Branch     string    `json:"branch,omitempty"`
 	CWD        string    `json:"cwd,omitempty"`
-	Warnings   []Warning `json:"warnings,omitempty"`
+	Warnings   []Warning `json:"warnings"`
 	// TranscriptLines and AssistantEntries support the dedup diagnostic.
 	TranscriptLines  int            `json:"transcript_lines"`
 	AssistantEntries int            `json:"assistant_entries"`

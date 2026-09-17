@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""An example tokenamun intervention, in about sixty lines.
+
+What it asks: what would this session have cost if thinking tokens had not
+been generated at all -- effort turned down, or extended thinking off?
+
+Why it is an example worth reading: thinking is billed as output at five
+times the input rate, it is observed rather than estimated, and tokenamun
+deliberately refuses to price its *carry* because Claude Code records
+thinking blocks with empty text. So this script can make one honest claim
+and has to leave a bigger one alone, which is the shape of most real
+interventions.
+
+The protocol, in full:
+
+    script describe            -> {"name": ..., "description": ...} on stdout
+    script estimate < evidence -> a result document on stdout
+
+Evidence arrives on stdin as JSON. It is exactly what a built-in
+intervention sees: the parsed session, the cache report, the carry report
+and the model's token-class weights. Run
+
+    tokenamun what-if cache-ttl --json
+
+to see the result shape, and docs/interventions.md for the contract.
+"""
+
+import json
+import sys
+
+NAME = "thinking-carry"
+
+
+def describe():
+    return {
+        "name": NAME,
+        "description": "generate no thinking tokens: lower effort, or extended thinking off",
+    }
+
+
+def estimate(evidence):
+    weights = evidence["weights"]
+    carry = evidence["carry"]
+    invocations = evidence["session"]["invocations"]
+
+    thinking = sum(inv["usage"]["thinking"] for inv in invocations)
+    output = sum(inv["usage"]["output"] for inv in invocations)
+    # Cost-weighted tokens: the same scale the rest of the tool uses, so this
+    # number is comparable with every other row.
+    saved = thinking * weights["output"]
+    total = carry["prompt_cost_eit"] + output * weights["output"]
+    share = -saved / total if total else 0.0
+
+    headline = {
+        "label": "net change",
+        "quantity": {"value": -saved, "unit": "eit", "provenance": "counterfactual"},
+        "note": "negative is a saving",
+    }
+
+    return {
+        "intervention": NAME,
+        "description": describe()["description"],
+        "applicable": thinking > 0,
+        "not_measurable": "" if thinking > 0 else "this session generated no thinking tokens",
+        "observed": [
+            {"label": "thinking tokens",
+             "quantity": {"value": thinking, "unit": "tokens", "provenance": "observed"}},
+            {"label": "output tokens in total",
+             "quantity": {"value": output, "unit": "tokens", "provenance": "observed"}},
+        ],
+        "derived": [
+            {"label": "thinking, as a share of output",
+             "quantity": {"value": thinking / output if output else 0.0,
+                          "unit": "ratio", "provenance": "derived"}},
+        ],
+        "counterfactual": [
+            headline,
+            {"label": "net change, share of session cost",
+             "quantity": {"value": share, "unit": "ratio", "provenance": "counterfactual"}},
+        ],
+        "headline": headline,
+        "caveat": "Prices only the generation. Thinking is also carried as input on later "
+                  "calls, and tokenamun cannot see whether it was, so the real saving is "
+                  "larger by an amount nobody can quote.",
+        "unknown": [
+            "thinking_carry: Claude Code records thinking blocks with empty text, so "
+            "whether they were re-sent on later calls is not in the transcript.",
+            "reasoning_quality: the thinking is what produced the answer. Removing it "
+            "changes the answer, and this says nothing about how.",
+            "task_success: not observable from this data. An agent that fails the task "
+            "consumes the fewest tokens of all, so a reduction is not an improvement.",
+        ],
+    }
+
+
+def main():
+    phase = sys.argv[1] if len(sys.argv) > 1 else ""
+    if phase == "describe":
+        json.dump(describe(), sys.stdout)
+        return 0
+    if phase == "estimate":
+        evidence = json.load(sys.stdin)
+        if evidence.get("schema_version") != 1:
+            print(f"unsupported evidence version {evidence.get('schema_version')}",
+                  file=sys.stderr)
+            return 1
+        json.dump(estimate(evidence), sys.stdout)
+        return 0
+    print(f"usage: {sys.argv[0]} describe|estimate", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

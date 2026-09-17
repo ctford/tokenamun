@@ -100,3 +100,73 @@ this whole document exists to make possible:
    **unmeasurable from this data**. If you want evidence here, the measurement
    has to happen at the request layer, not the transcript layer. That is a
    different tool, and saying so is more useful than a fabricated percentage.
+
+## Writing your own intervention
+
+An intervention is an executable. Tokenamun ships seven, and none of them can
+do anything an extension cannot: they see the same evidence, they are held to
+the same rules, and they appear in the same table. If you want to ask a
+question this tool does not ask, that is a fifty-line script, not a fork.
+
+Put it in `~/.config/tokenamun/interventions/` (or name it with
+`--intervention PATH`, or list directories in `TOKENAMUN_INTERVENTIONS`), make
+it executable, and `tokenamun interventions` will list it.
+
+Deliberately *not* searched: the repository being analysed. Tokenamun is
+routinely pointed at a checkout you did not write — that is most of what it is
+for — and a tool that executes scripts it finds in the subject of its analysis
+runs a stranger's code because you asked a question about their tokens.
+
+### The protocol
+
+Two invocations of the same program, JSON on stdout both times:
+
+```
+script describe              → {"name": "...", "description": "..."}
+script estimate < evidence   → a result document
+```
+
+Anything on stderr goes to the terminal, so you can log freely. A non-zero
+exit, unparseable output or a rule violation becomes a row saying the
+intervention failed — it does not take down the rest of the report.
+
+### The evidence document
+
+Exactly what a built-in sees, which is the point of the interface:
+
+| field | what it is |
+| --- | --- |
+| `schema_version` | `1`. Refuse a version you do not know rather than guess at a moved field. |
+| `session` | the parsed transcript: `invocations` (one per API call, with `usage`), `retrievals`, `repeats`, `prompt_entries`, `token_estimator` |
+| `cache` | why each prefix rebuild happened, attributed to a cause, and what it cost |
+| `carry` | what it cost to *keep* content rather than fetch it: `prompt_cost_eit`, `preamble_tokens`, `items` |
+| `weights` | this model's token-class multipliers. Use these rather than hardcoding prices, so your row is comparable with the others. |
+| `compression_ratio` | the assumed surviving fraction, from `--ratio`. If you assume a ratio, assume this one. |
+| `replay` | present when `--replay-with` measured real compression. Prefer it over the assumption. |
+
+`tokenamun what-if cache-ttl --json` prints a result in the shape yours must
+take. `examples/interventions/thinking-carry` is a complete, commented one in
+about sixty lines of Python.
+
+### The rules, which are enforced
+
+The three rules at the top of `internal/whatif/whatif.go` are checked on what
+your script returns, and a result that breaks one is rejected rather than
+printed:
+
+- **`unknown` may not be empty.** Every counterfactual must say what it cannot
+  know, starting with whether the task still succeeded. An agent that fails
+  consumes the fewest tokens of all, so a reduction is not an improvement.
+- **A headline needs a caveat.** If you nominate a number as your bottom line,
+  `caveat` is the sentence printed beside it. An unqualified percentage is
+  precisely how the published claims went wrong.
+- **`applicable: false` needs `not_measurable`.** Saying nothing can be said is
+  a legitimate result; saying it without saying why is not.
+- **Provenance must be honest.** Every quantity carries `observed`, `derived`,
+  `derived-approx`, `inferred` or `counterfactual`, and anything in the
+  `counterfactual` section must be labelled as one. This is what stops a guess
+  being laundered into a measurement.
+
+Units are `tokens`, `eit`, `bytes`, `calls` or `ratio`. `eit` is a
+cost-weighted token: every token class on one scale where 1 is a full-price
+input token of this model.

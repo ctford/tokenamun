@@ -77,16 +77,36 @@ type Intervention interface {
 	Estimate(Context) Result
 }
 
-// All returns every intervention, in the order they are worth considering.
-func All() []Intervention {
+// Builtin returns the interventions that ship with the tool, in the order they
+// are worth considering.
+func Builtin() []Intervention {
 	return []Intervention{
 		CacheTTL{},
 		RepeatedRetrieval{},
+		ClearOnNewTask{},
 		OutputCompression{},
 		Caveman{},
 		RTK{},
 		MCPToCLI{},
 	}
+}
+
+// registered holds interventions supplied from outside the binary. The CLI
+// fills it once at startup, before anything reads All().
+var registered []Intervention
+
+// Register adds an externally supplied intervention.
+//
+// A built-in and an extension are the same thing to everything downstream:
+// the report table, the JSON output and the treemap all iterate All() and
+// cannot tell which is which. That is deliberate. An extension that could
+// only produce a second-class row would be a demo rather than an interface.
+func Register(i Intervention) { registered = append(registered, i) }
+
+// All returns every intervention, built-in ones first so a report's leading
+// rows do not move when someone installs a script.
+func All() []Intervention {
+	return append(Builtin(), registered...)
 }
 
 // Find returns the named intervention.
