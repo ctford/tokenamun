@@ -43,6 +43,13 @@ type Result struct {
 	Observed     []Finding `json:"observed"`
 	Derived      []Finding `json:"derived"`
 	Counterfact  []Finding `json:"counterfactual"`
+	// Headline is the one number the intervention nominates as its bottom
+	// line, so a summary does not have to guess which finding matters. Nil
+	// when there is nothing defensible to report.
+	Headline *Finding `json:"headline,omitempty"`
+	// Caveat is the single most important thing to know before quoting the
+	// headline.
+	Caveat string `json:"caveat,omitempty"`
 	// Unknown lists what cannot be known retrospectively. It is never empty;
 	// an intervention that returns none fails a test.
 	Unknown []string `json:"unknown"`

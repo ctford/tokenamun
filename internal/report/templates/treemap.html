@@ -132,6 +132,9 @@
 
   table { border-collapse: collapse; width: 100%; font-size: 12px; }
   th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
+  #interventions th { white-space: nowrap; }
+  #interventions td:first-child { white-space: nowrap; }
+  #interventions td:nth-child(2), #interventions td:last-child { font-size: 11px; }
   th:first-child, td:first-child { text-align: left; word-break: break-all; }
   th { color: var(--text-secondary); font-weight: 600; }
   td { font-variant-numeric: tabular-nums; }
@@ -180,11 +183,19 @@
     </div>
   </div>
 
-  <h2>Retrieved content by category</h2>
-  <p class="muted">A cross-cut, not a repeat of the treemap: the hierarchy above groups by
-  how content was obtained, so a category like ADRs is split across several channels and its
-  total is not readable from it. Observed bytes.</p>
-  <div class="panel"><div class="bars" id="bars"></div></div>
+  <h2>Would an optimisation have helped?</h2>
+  <p class="muted">Each row is computed against this session, not quoted from a vendor.
+  Negative is a saving. These are counterfactuals: they assume the agent would have behaved
+  identically, and none of them can see whether the work still came out right.</p>
+  <div class="panel" style="overflow:auto">
+    <table id="interventions">
+      <thead><tr>
+        <th>Intervention</th><th>What it targets</th>
+        <th>Effect</th><th>Share of session</th><th>Read this first</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
   <div id="table-view" hidden>
     <h2>All retrievals</h2>
@@ -231,11 +242,20 @@ document.getElementById("tiles").innerHTML = DATA.tiles.map(t => `
   </div>`).join("");
 
 /* Category bars: single hue, magnitude only, with the values shown. */
-const maxCat = Math.max(...DATA.categories.map(c => c.bytes), 1);
-document.getElementById("bars").innerHTML = DATA.categories.map(c => `
-  <div class="name">${c.name}</div>
-  <div class="track"><div class="fill" style="width:${Math.max(1, 100*c.bytes/maxCat)}%"></div></div>
-  <div class="val">${bytes(c.bytes)} · ${(100*c.share).toFixed(1)}%</div>`).join("");
+document.querySelector("#interventions tbody").innerHTML = DATA.interventions.map(i => {
+  const effect = i.applicable
+    ? (i.effect ? fmt(i.effect) : "—")
+    : `<span class="muted">not measurable</span>`;
+  const share = i.applicable && i.share
+    ? `${(100 * i.share).toFixed(1)}%` : "—";
+  return `<tr>
+    <td><strong>${esc(i.name)}</strong></td>
+    <td class="muted" style="text-align:left">${esc(i.targets)}</td>
+    <td>${effect}</td>
+    <td>${share}</td>
+    <td class="muted" style="text-align:left">${esc(i.caveat || i.note)}</td>
+  </tr>`;
+}).join("");
 
 document.getElementById("rows").innerHTML = DATA.items.map(i => `
   <tr><td>${i.label}</td><td>${i.category}</td><td>${fmt(i.tokens)}</td>

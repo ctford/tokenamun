@@ -100,6 +100,10 @@ func (CacheTTL) Estimate(c Context) Result {
 				"five minutes comes out positive, which is the point of computing it"),
 		cf("net change, share of prompt cost", pct, model.Ratio),
 	}
+	r.Headline = &r.Counterfact[3]
+	r.Caveat = "A real setting: promptCacheTtl, Claude Code v2.1.242+. Comes out positive " +
+		"on sessions of short bursts, where the doubled write price buys a lifetime you " +
+		"never use."
 	return r
 }
 
@@ -189,6 +193,9 @@ func (RepeatedRetrieval) Estimate(c Context) Result {
 		cf("avoidable carry cost", -carrySaved, model.EIT,
 			"the saving is the carry of the later copies; the first fetch still happens"),
 	}
+	r.Headline = &r.Counterfact[0]
+	r.Caveat = "The agent re-read this content for a reason, even if the reason was " +
+		"forgetting it had it."
 	return r
 }
 
@@ -322,6 +329,14 @@ func compressionEstimate(c Context, name, desc string, extraUnknown []string) Re
 			1-ratio, model.Ratio,
 			"a local reduction is not a session saving and is not presented as one"))
 	}
+	r.Headline = &r.Counterfact[2]
+	if c.Replay != nil {
+		r.Caveat = "Ratio measured by replaying this session's own content through " +
+			c.Replay.Command + "."
+	} else {
+		r.Caveat = fmt.Sprintf("Assumes %.0f%% of eligible content survives; that ratio is "+
+			"stated, not measured here. Use --replay-with to measure it.", ratio*100)
+	}
 	return r
 }
 
@@ -360,6 +375,8 @@ func (MCPToCLI) Estimate(c Context) Result {
 			obs("session preamble, a ceiling on the category", float64(c.Carry.Preamble), model.Tokens),
 			obs("cost of carrying the preamble", c.Carry.PreambleCarryEIT, model.EIT),
 		},
+		Caveat: "Measure it with an A/B instead: same opening prompt, server connected and " +
+			"disconnected, and compare the first call's prompt size.",
 		Unknown: []string{
 			"schema_tokens: not observable from a transcript at all.",
 			"tools_available: only tools that were used appear; the ones that merely " +

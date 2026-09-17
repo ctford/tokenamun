@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
+	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/model"
+	"github.com/ctford/tokenamun/internal/whatif"
 )
 
 //go:embed templates/treemap.html
@@ -28,14 +30,14 @@ const dataPlaceholder = "__TOKENAMUN_DATA__"
 type TreemapPayload struct {
 	// Title is set by the caller, so an agent generating this for a
 	// particular repository can say whose session it is.
-	Title            string         `json:"title"`
-	Session          treemapSession `json:"session"`
-	Tiles            []treemapTile  `json:"tiles"`
-	Categories       []treemapCat   `json:"categories"`
-	Items            []treemapItem  `json:"items"`
-	Tree             *Node          `json:"tree"`
-	MaxCarryPerToken float64        `json:"maxCarryPerToken"`
-	EstimatorNote    string         `json:"estimatorNote"`
+	Title            string          `json:"title"`
+	Session          treemapSession  `json:"session"`
+	Tiles            []treemapTile   `json:"tiles"`
+	Interventions    []treemapWhatIf `json:"interventions"`
+	Items            []treemapItem   `json:"items"`
+	Tree             *Node           `json:"tree"`
+	MaxCarryPerToken float64         `json:"maxCarryPerToken"`
+	EstimatorNote    string          `json:"estimatorNote"`
 }
 
 type treemapSession struct {
@@ -50,10 +52,17 @@ type treemapTile struct {
 	Provenance string `json:"provenance"`
 }
 
-type treemapCat struct {
-	Name  string  `json:"name"`
-	Bytes int     `json:"bytes"`
-	Share float64 `json:"share"`
+// treemapWhatIf is one intervention's bottom line, for the summary table.
+// A viewer that shows where the tokens went should also say what would have
+// changed it, and the interventions already compute that.
+type treemapWhatIf struct {
+	Name       string  `json:"name"`
+	Targets    string  `json:"targets"`
+	Effect     float64 `json:"effect"`
+	Share      float64 `json:"share"`
+	Applicable bool    `json:"applicable"`
+	Note       string  `json:"note"`
+	Caveat     string  `json:"caveat"`
 }
 
 type treemapItem struct {
@@ -102,13 +111,7 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 			"Withheld by harness", bytesStr(retrieval.Total.Withheld.Value), "observed"})
 	}
 
-	for _, c := range retrieval.ByCategory {
-		p.Categories = append(p.Categories, treemapCat{
-			Name:  string(c.Category),
-			Bytes: int(c.Bytes.Value),
-			Share: c.Share.Value,
-		})
-	}
+	p.Interventions = interventionTable(s, carry)
 
 	// Carry is keyed by the retrieval's position, so index it to join.
 	carryBySeq := map[string]analysis.CarriedItem{}
@@ -163,6 +166,41 @@ func estimatorNote(s *model.Session) string {
 		"Content token counts are estimated at %.2f bytes per token, calibrated against this "+
 			"session's own observed prompt growth. Token-class costs are observed.",
 		s.Estimator.BytesPerToken)
+}
+
+// interventionTable runs every intervention and keeps the one number each
+// nominates as its bottom line.
+func interventionTable(s *model.Session, carry analysis.CarryReport) []treemapWhatIf {
+	cache := analysis.Cache(s, analysis.TTL5m)
+	ctx := whatif.Context{
+		Session: s, Cache: cache, Carry: carry,
+		Weights: cost.For(firstModel(s)), CompressionRatio: 0.5,
+	}
+	total := carry.PromptCostEIT + cost.For(firstModel(s)).OutputCost(s.Usage())
+
+	var out []treemapWhatIf
+	for _, i := range whatif.All() {
+		r := i.Estimate(ctx)
+		row := treemapWhatIf{
+			Name:       r.Intervention,
+			Targets:    r.Description,
+			Applicable: r.Applicable,
+			Caveat:     r.Caveat,
+			Note:       r.NotMeasurable,
+		}
+		if r.Headline != nil && r.Headline.Quantity != nil {
+			row.Effect = r.Headline.Quantity.Value
+			if r.Headline.Quantity.Unit == model.Ratio {
+				row.Share = r.Headline.Quantity.Value
+				row.Effect = 0
+			} else if total > 0 {
+				row.Share = r.Headline.Quantity.Value / total
+			}
+		}
+		out = append(out, row)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Share < out[j].Share })
+	return out
 }
 
 // carryItemKey identifies a carried item well enough to join it back to the

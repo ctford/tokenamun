@@ -73,8 +73,11 @@ func child(t *testing.T, n *Node, name string) *Node {
 // model, or with the environment.
 func TestTopLevelIsWhoPutTheTokensThere(t *testing.T) {
 	tree := built(t)
+	// File reading is the first thing anyone looks for, so it is top-level
+	// rather than nested under an authorship parent.
 	for _, name := range []string{
-		"preamble", "your prompts", "writing output", "output carried", "tool results",
+		"preamble", "your prompts", "model output",
+		"file content", "CLI output",
 	} {
 		child(t, tree, name)
 	}
@@ -85,8 +88,8 @@ func TestTopLevelIsWhoPutTheTokensThere(t *testing.T) {
 // the tree must not imply otherwise.
 func TestThinkingIsSplitOutOfOutputButNotCarried(t *testing.T) {
 	tree := built(t)
-	writing := child(t, tree, "writing output")
-	thinking := child(t, writing, "thinking")
+	out := child(t, tree, "model output")
+	thinking := child(t, out, "thinking")
 
 	if thinking.Tokens != 300 {
 		t.Errorf("thinking tokens = %v, want the observed 300", thinking.Tokens)
@@ -94,19 +97,16 @@ func TestThinkingIsSplitOutOfOutputButNotCarried(t *testing.T) {
 	if thinking.Detail == "" || !contains(thinking.Detail, "not knowable") {
 		t.Errorf("thinking must say its carry is unknowable, got %q", thinking.Detail)
 	}
-	// The carried side excludes it: 1500 output - 300 thinking = 1200 carried.
-	carried := child(t, tree, "output carried")
-	child(t, carried, "prose")
-	child(t, carried, "tool arguments")
-	if carried.Carry >= writing.Carry*6 {
-		t.Error("carried output should not include the thinking tokens")
-	}
+	// Prose and tool arguments each combine what they cost to write with what
+	// they cost to keep, since they are the same text.
+	child(t, out, "prose")
+	child(t, out, "tool arguments")
 }
 
 // "In tool calls, I expected to see which tools."
 func TestToolArgumentsBreakDownByTool(t *testing.T) {
 	tree := built(t)
-	args := child(t, child(t, tree, "output carried"), "tool arguments")
+	args := child(t, child(t, tree, "model output"), "tool arguments")
 
 	bash := child(t, args, "Bash")
 	child(t, args, "Read")
@@ -123,7 +123,7 @@ func TestToolArgumentsBreakDownByTool(t *testing.T) {
 // "In file reading, I expected to see which files."
 func TestFileContentBreaksDownByFile(t *testing.T) {
 	tree := built(t)
-	files := child(t, child(t, tree, "tool results"), "file content")
+	files := child(t, tree, "file content")
 
 	// However it was read: the Read tool and cat both land here.
 	child(t, files, "docs/decisions/a.md")
@@ -134,11 +134,9 @@ func TestFileContentBreaksDownByFile(t *testing.T) {
 // because that is the axis the MCP-versus-CLI argument turns on.
 func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 	tree := built(t)
-	results := child(t, tree, "tool results")
-
-	cli := child(t, results, "CLI output")
+	cli := child(t, tree, "CLI output")
 	child(t, cli, "git")
-	child(t, results, "MCP output")
+	child(t, tree, "MCP output")
 
 	// File content must not be filed under CLI output.
 	for _, c := range cli.Children {
@@ -151,7 +149,7 @@ func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 // "If it's possible to drill down from git to git status, that'd be great."
 func TestCLIOutputOpensUpBySubcommand(t *testing.T) {
 	tree := built(t)
-	git := child(t, child(t, child(t, tree, "tool results"), "CLI output"), "git")
+	git := child(t, child(t, tree, "CLI output"), "git")
 
 	// The compound command was `cd /repo && git status -sb`, so the level is
 	// the git subcommand, not cd and not the flag.
@@ -195,7 +193,7 @@ func TestBlocksThatCannotBeScaledAreMarked(t *testing.T) {
 	if !child(t, tree, "preamble").Unscaled {
 		t.Error("the preamble has no per-token rate and must be off the ramp")
 	}
-	if child(t, child(t, tree, "tool results"), "file content").Unscaled {
+	if child(t, tree, "file content").Unscaled {
 		t.Error("file content has a real per-token rate and belongs on the ramp")
 	}
 }

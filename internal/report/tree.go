@@ -54,19 +54,15 @@ type Node struct {
 //	session
 //	├─ preamble                     the harness put it there
 //	├─ your prompts                 you did
-//	├─ writing output               the model did, at the output rate
-//	│  ├─ thinking                  observed
+//	├─ model output                 the model wrote it, then re-read it
 //	│  ├─ prose
-//	│  └─ tool arguments            → by tool
-//	├─ output carried               the same words, re-read as input
-//	│  ├─ prose
-//	│  └─ tool arguments            → by tool
-//	└─ tool results                 the environment answered
-//	   ├─ file content              → by file
-//	   ├─ CLI output                → by command family → by command
-//	   ├─ MCP output                → by tool
-//	   ├─ web                       → by tool
-//	   └─ subagent reports
+//	│  ├─ tool arguments            → by tool
+//	│  └─ thinking                  observed; its carry is not knowable
+//	├─ file content                 the environment answered → by file
+//	├─ CLI output                   → by command family → by subcommand
+//	├─ MCP output                   → by tool
+//	├─ web                          → by tool
+//	└─ subagent reports
 //
 // Splitting CLI from MCP is deliberate: it is the axis the whole
 // MCP-versus-CLI argument turns on, and it is observable.
@@ -75,19 +71,37 @@ func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
 	root.Children = append(root.Children,
 		preambleNode(carry),
 		promptNode(s, carry),
-		writingNode(s, carry),
-		carriedNode(s, carry),
-		resultsNode(s, carry),
+		modelOutputNode(s, carry),
 	)
+	// The mechanisms the environment answered through sit at the top level
+	// rather than under a "tool results" parent. Grouping them by authorship
+	// was tidier, but it buried file reading two clicks down, and file
+	// reading is the first thing anyone looks for.
+	root.Children = append(root.Children, resultsNodes(s, carry)...)
 	root.Children = compact(root.Children)
 	rollUp(root)
+
+	// Whatever the parts do not account for has to be present. Without it
+	// every percentage in the view is a share of the part we can itemise
+	// rather than of the session, which is the bug this block exists to
+	// prevent -- and merging the output blocks reintroduced it once already.
+	measured := carry.PromptCostEIT + outputCost(s)
+	if rest := measured - root.Carry; rest > 0 {
+		root.Children = append(root.Children, &Node{
+			Name: "unattributed", Kind: "bucket", Unscaled: true,
+			Carry: rest, CarryUncached: rest, Items: 1,
+			Detail: "what the parts above do not account for: system reminders, per-call " +
+				"message envelope, thinking re-read if it is re-read at all, and the error " +
+				"in apportioning output by byte share. Reported rather than distributed.",
+		})
+		rollUp(root)
+	}
 	sortTree(root)
 
 	// The parts are estimated where output is apportioned by byte share, so
 	// they can overshoot the measured cost. Report the gap rather than
 	// clamping: a decomposition that reconciles itself silently looks more
 	// certain than it is.
-	measured := carry.PromptCostEIT + outputCost(s)
 	if measured > 0 && root.Carry > measured {
 		root.Reconciliation = measured - root.Carry
 	}
@@ -118,64 +132,61 @@ func promptNode(s *model.Session, carry analysis.CarryReport) *Node {
 	}
 }
 
-// writingNode is the output-rate charge for generating tokens. Output totals
-// are observed and thinking is observed within them; the remainder is
-// apportioned between prose and tool arguments by byte share, which is the
-// only split available since the API reports one output number per call.
-func writingNode(s *model.Session, carry analysis.CarryReport) *Node {
+// modelOutputNode is everything the model's own words cost.
+//
+// Each word is paid for twice: once at the output rate when written, and again
+// at the input rate on every later call that re-reads it. Shown as two
+// sibling blocks those read as duplication, because it is the same text. So
+// there is one block per kind of output, with the split in its detail.
+//
+// Output totals are observed and thinking is observed within them; the
+// remainder is apportioned between prose and tool arguments by byte share,
+// which is the only split available since the API reports one output number
+// per call.
+func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 	w := cost.For(firstModel(s))
-	usage := s.Usage()
 	thinking := carry.ThinkingTokens
-	rest := usage.Output - thinking
+	prose, args := apportion(s, s.Usage().Output-thinking)
 
-	n := &Node{Name: "writing output", Kind: "bucket",
-		Detail: "the output-rate charge for generating tokens, five times the input rate. " +
-			"Carrying them afterwards is counted separately."}
-	if thinking > 0 {
-		n.Children = append(n.Children, &Node{
-			Name: "thinking", Kind: "source", Unscaled: true,
-			Tokens: float64(thinking),
-			Carry:  float64(thinking) * w.Output, CarryUncached: float64(thinking) * w.Output,
-			Items: 1,
-			Detail: "observed. Whether it is re-read as input afterwards is not knowable " +
-				"from a transcript: Claude Code records thinking blocks with empty text.",
-		})
+	n := &Node{Name: "model output", Kind: "bucket",
+		Detail: "what the model wrote, priced twice: at the output rate when written, " +
+			"then at the input rate on every later call that re-reads it."}
+
+	// The carried figure covers prose and tool arguments together, so it is
+	// apportioned the same way the generation is.
+	proseShare := 0.0
+	if prose+args > 0 {
+		proseShare = prose / (prose + args)
 	}
-	prose, args := apportion(s, rest)
+
 	if prose > 0 {
+		gen := prose * w.Output
+		held := carry.AssistantCarryEIT * proseShare
 		n.Children = append(n.Children, &Node{
 			Name: "prose", Kind: "source", Unscaled: true,
-			Tokens: prose, Carry: prose * w.Output, CarryUncached: prose * w.Output, Items: 1,
-			Detail: "assistant text. Apportioned from the observed output total by byte share.",
+			Tokens: prose, Carry: gen + held, CarryUncached: gen + held, Items: 1,
+			Detail: fmt.Sprintf("assistant text: %s to write, %s to keep re-reading",
+				num(int(gen)), num(int(held))),
 		})
 	}
 	if args > 0 {
+		gen := args * w.Output
+		held := carry.AssistantCarryEIT * (1 - proseShare)
 		argNode := &Node{Name: "tool arguments", Kind: "source", Unscaled: true,
-			Detail: "what the model wrote to invoke tools, apportioned by byte share."}
-		argNode.Children = byToolArguments(s, args*w.Output, args)
+			Detail: fmt.Sprintf("what the model wrote to invoke tools: %s to write, "+
+				"%s to keep re-reading", num(int(gen)), num(int(held)))}
+		argNode.Children = byToolArguments(s, gen+held, args)
 		n.Children = append(n.Children, argNode)
 	}
-	return n
-}
-
-// carriedNode is the input-side cost of the model's own words.
-func carriedNode(s *model.Session, carry analysis.CarryReport) *Node {
-	n := &Node{Name: "output carried", Kind: "bucket",
-		Detail: "the model re-reading its own words on every later call. Thinking is " +
-			"excluded, since whether it is re-sent cannot be established here."}
-	if carry.AssistantCarryEIT > 0 {
+	if thinking > 0 {
+		gen := float64(thinking) * w.Output
 		n.Children = append(n.Children, &Node{
-			Name: "prose", Kind: "source", Unscaled: true,
-			Tokens: 0,
-			Carry:  carry.AssistantCarryEIT, CarryUncached: carry.AssistantCarryEIT, Items: 1,
-			Detail: "assistant text, re-sent as input for the rest of the session.",
+			Name: "thinking", Kind: "source", Unscaled: true,
+			Tokens: float64(thinking), Carry: gen, CarryUncached: gen, Items: 1,
+			Detail: "observed, and priced at the output rate for writing it. Whether it is " +
+				"re-read as input afterwards is not knowable from a transcript: Claude Code " +
+				"records thinking blocks with empty text.",
 		})
-	}
-	if carry.ToolInputCarryEIT > 0 {
-		argNode := &Node{Name: "tool arguments", Kind: "source", Unscaled: true,
-			Detail: "the arguments of every tool call, re-sent exactly as the results are."}
-		argNode.Children = byToolArguments(s, carry.ToolInputCarryEIT, 0)
-		n.Children = append(n.Children, argNode)
 	}
 	return n
 }
@@ -211,16 +222,14 @@ func byToolArguments(s *model.Session, totalCost, totalTokens float64) []*Node {
 	return out
 }
 
-// resultsNode is what the environment sent back, split by mechanism.
-func resultsNode(s *model.Session, carry analysis.CarryReport) *Node {
+// resultsNodes is what the environment sent back, one node per mechanism.
+func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 	carryBySeq := map[int]analysis.CarriedItem{}
 	for _, it := range carry.Items {
 		carryBySeq[it.RetrievalSeq] = it
 	}
 
-	root := &Node{Name: "tool results", Kind: "bucket",
-		Detail: "content the environment returned, which is what the retrieval " +
-			"optimisations all target."}
+	var order []*Node
 	commands := map[string]string{}
 	for _, tc := range s.ToolCalls {
 		if tc.Command != "" {
@@ -239,7 +248,7 @@ func resultsNode(s *model.Session, carry analysis.CarryReport) *Node {
 		if g == nil {
 			g = &Node{Name: kind, Kind: "mechanism", Detail: kindDetail(kind)}
 			groups[kind] = g
-			root.Children = append(root.Children, g)
+			order = append(order, g)
 		}
 		parent := g
 		if sub != "" {
@@ -283,8 +292,10 @@ func resultsNode(s *model.Session, carry analysis.CarryReport) *Node {
 		parent.Children = append(parent.Children, leaf)
 	}
 
-	collapseLeaves(root)
-	return root
+	for _, g := range order {
+		collapseLeaves(g)
+	}
+	return order
 }
 
 // collapseLeaves merges repeated names wherever leaves sit, at any depth.
