@@ -160,7 +160,7 @@ func (RTK) Estimate(c Context) Result {
 	r.Applicable = coveredBytes > 0
 	r.Acts = AxisVolume
 	if !r.Applicable {
-		r.NotMeasurable = "no shell output in this session came from a command RTK has an adapter for"
+		r.NotMeasurable = "No shell output RTK has an adapter for."
 		return r
 	}
 

@@ -93,8 +93,7 @@ func (s Slice) Estimate(c whatif.Context) whatif.Result {
 	r.Applicable = node.Carry > 0
 	r.Acts = whatif.AxisVolume
 	if !r.Applicable {
-		r.NotMeasurable = fmt.Sprintf("%s cost nothing in this session, so there is "+
-			"nothing there to cut", pathOrRoot(path))
+		r.NotMeasurable = fmt.Sprintf("%s cost nothing here.", pathOrRoot(path))
 		return r
 	}
 

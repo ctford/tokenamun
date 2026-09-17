@@ -322,7 +322,9 @@ func TestMCPToCLIRefusesToInventANumber(t *testing.T) {
 	if r.NotMeasurable == "" {
 		t.Fatal("it must explain why")
 	}
-	if !contains(r.NotMeasurable, "compare") {
+	// The one-line reason says what is missing; the detail says what to do
+	// about it, which is where there is room for a command.
+	if !contains(r.CaveatDetail, "compare") {
 		t.Error("it should point at the A/B that would measure it")
 	}
 }
@@ -478,6 +480,24 @@ func TestAddressableTimesReductionIsTheEffect(t *testing.T) {
 		if r.Addressable.Name == "" {
 			t.Errorf("%s: the addressable part needs a name a reader can go and find",
 				i.Name())
+		}
+	}
+}
+
+func TestReasonsFitInTheTableToo(t *testing.T) {
+	// not_measurable shares the caveat's column, so it shares the caveat's
+	// limit. "No task boundary here: this was one sitting." beats four lines
+	// explaining what a task boundary is; the explanation goes in
+	// caveat_detail, which the full report prints and the table does not.
+	c := testContext(t)
+	for _, i := range Builtin() {
+		r := i.Estimate(c)
+		if n := len([]rune(r.NotMeasurable)); n > CaveatLimit {
+			t.Errorf("%s: not_measurable is %d characters, over the %d limit:\n  %q",
+				i.Name(), n, CaveatLimit, r.NotMeasurable)
+		}
+		if r.NotMeasurable != "" && !strings.HasSuffix(r.NotMeasurable, ".") {
+			t.Errorf("%s: it should read as a sentence: %q", i.Name(), r.NotMeasurable)
 		}
 	}
 }

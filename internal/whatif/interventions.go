@@ -66,7 +66,7 @@ func (CacheTTL) Estimate(c Context) Result {
 
 	if c.Cache.Writes1h > 0 && writes5m == 0 {
 		r.Applicable = false
-		r.NotMeasurable = "this session already used the 1-hour TTL"
+		r.NotMeasurable = "This session already used the 1-hour TTL."
 		r.Derived = []Finding{der("nothing to change", 0, model.EIT)}
 		return r
 	}
@@ -170,7 +170,7 @@ func (RepeatedRetrieval) Estimate(c Context) Result {
 	r.Applicable = redundantBytes > 0
 	r.Acts = AxisVolume
 	if !r.Applicable {
-		r.NotMeasurable = "no content was retrieved twice byte-for-byte in this session"
+		r.NotMeasurable = "Nothing was fetched twice byte-for-byte."
 		return r
 	}
 
@@ -304,7 +304,7 @@ func compressionEstimate(c Context, name, desc string, extraUnknown []string) Re
 	r.Applicable = eligibleBytes > 0
 	r.Acts = AxisVolume
 	if !r.Applicable {
-		r.NotMeasurable = "no eligible tool output in this session"
+		r.NotMeasurable = "No tool output a proxy could have intercepted."
 		return r
 	}
 
@@ -390,17 +390,18 @@ func (MCPToCLI) Estimate(c Context) Result {
 	// session that never touches MCP and the session with no server attached
 	// look identical from a transcript -- and the first of those is the case
 	// the intervention exists for.
-	whyNot := "The saving lives in tool-schema size, and tool schemas are not in the " +
-		"transcript. The observed session preamble is a ceiling on the whole category, " +
-		"not a measurement of the schemas inside it."
+	whyNot := "Tool schemas are not in the transcript."
+	detail := "The saving lives in tool-schema size, and the observed session preamble " +
+		"is a ceiling on the whole category rather than a measurement of the schemas " +
+		"inside it."
 	if mcpCalls == 0 {
-		whyNot += " This session made no MCP calls, which is not the same as having no " +
+		detail += " This session made no MCP calls, which is not the same as having no " +
 			"MCP cost: a connected server's schemas sit in the preamble on every call " +
 			"whether anything calls it or not, and a transcript cannot tell an unused " +
 			"server from an absent one. Reporting 0% here would be a claim, and it " +
 			"would be wrong in the expensive direction."
 	}
-	whyNot += " To measure it, run the same opening prompt with the server connected " +
+	detail += " To measure it, run the same opening prompt with the server connected " +
 		"and disconnected and compare the first call's prompt size: that difference is " +
 		"observed. `tokenamun compare` is the command for it."
 
@@ -409,6 +410,7 @@ func (MCPToCLI) Estimate(c Context) Result {
 		Description:   MCPToCLI{}.Describe(),
 		Applicable:    false,
 		NotMeasurable: whyNot,
+		CaveatDetail:  detail,
 		Observed: []Finding{
 			obs("mcp tool results", float64(mcpCalls), model.Calls),
 			obs("mcp result content", float64(mcpBytes), model.Bytes),
@@ -416,8 +418,6 @@ func (MCPToCLI) Estimate(c Context) Result {
 			obs("cost of carrying the preamble", c.Carry.PreambleCarryEIT, model.EIT),
 		},
 		Caveat: "Measure it with an A/B instead.",
-		CaveatDetail: "Same opening prompt, server connected and disconnected, and " +
-			"compare the first call's prompt size. That difference is observed.",
 		Unknown: []string{
 			"schema_tokens: not observable from a transcript at all.",
 			"tools_available: only tools that were used appear; the ones that merely " +

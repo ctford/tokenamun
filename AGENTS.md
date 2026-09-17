@@ -96,6 +96,24 @@ accounting, you change that document in the same commit.
   Everything downstream consumes `internal/model` types. New format knowledge
   goes in `assumptions.go` with a note on how we detect it breaking.
 * **Stream, don't slurp.** Transcripts reach 9 MB. Nothing loads a whole one.
+* **Output is terse; the argument goes where there is room.** No paragraphs in
+  a table cell, a tooltip, a chart legend or beside a number. A reader hovering
+  a box is competing with the box for their own attention, and a table of eight
+  rows with a paragraph in each is eight paragraphs nobody reads. So: say the
+  one thing in a sentence, and put the reasoning in the field or command that
+  exists for it — `caveat` with `caveat_detail`, `Detail` with `DetailMore`,
+  the treemap legend with `tokenamun tree`. Enforced where it can be: caveats
+  and not-measurable reasons are capped at 64 characters, tooltips at 280, and
+  tests hold the built-ins to both.
+
+  This is not a licence to drop the caveat. Terse is not silent, and every
+  number still arrives with the thing to know before quoting it. What changed
+  is where the argument for it lives. A short caveat must still be a claim —
+  "A ceiling, not an estimate." — because a one-word label qualifies nothing.
+
+  Code comments are the exception and stay as long as they need to be: they
+  explain decisions to whoever changes them next, and nobody is reading them
+  on a chart.
 * **Nothing is viewer-only.** The HTML report and the CLI answer the same
   questions: `tree` is the drill-down, `what-if --all` is the interventions
   table, `treemap --json` is the payload the HTML is handed. A test asserts

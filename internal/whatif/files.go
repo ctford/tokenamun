@@ -105,7 +105,7 @@ func (FileCompression) Estimate(c Context) Result {
 
 	if reads == 0 {
 		r.Applicable = false
-		r.NotMeasurable = "this session read no file content, so there is nothing here to shrink"
+		r.NotMeasurable = "This session read no files."
 		return r
 	}
 	r.Applicable = true

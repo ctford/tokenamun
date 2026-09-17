@@ -10,22 +10,20 @@ Observed
   cost of carrying the preamble                      49,501   [observed]
 
 Not measurable from this data
-  The saving lives in tool-schema size, and tool schemas are not in the
-  transcript. The observed session preamble is a ceiling on the whole
-  category, not a measurement of the schemas inside it. This session made
-  no MCP calls, which is not the same as having no MCP cost: a connected
-  server's schemas sit in the preamble on every call whether anything
-  calls it or not, and a transcript cannot tell an unused server from an
-  absent one. Reporting 0% here would be a claim, and it would be wrong in
-  the expensive direction. To measure it, run the same opening prompt with
-  the server connected and disconnected and compare the first call's
-  prompt size: that difference is observed. `tokenamun compare` is the
-  command for it.
+  Tool schemas are not in the transcript.
 
 Caveat
   Measure it with an A/B instead.
-  Same opening prompt, server connected and disconnected, and compare the
-  first call's prompt size. That difference is observed.
+  The saving lives in tool-schema size, and the observed session preamble
+  is a ceiling on the whole category rather than a measurement of the
+  schemas inside it. This session made no MCP calls, which is not the same
+  as having no MCP cost: a connected server's schemas sit in the preamble
+  on every call whether anything calls it or not, and a transcript cannot
+  tell an unused server from an absent one. Reporting 0% here would be a
+  claim, and it would be wrong in the expensive direction. To measure it,
+  run the same opening prompt with the server connected and disconnected
+  and compare the first call's prompt size: that difference is observed.
+  `tokenamun compare` is the command for it.
 
 Unknown
   - schema_tokens: not observable from a transcript at all.

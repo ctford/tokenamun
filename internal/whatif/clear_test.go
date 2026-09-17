@@ -106,8 +106,13 @@ func TestClearOnNewTaskDoesNotClaimAnythingForASingleSitting(t *testing.T) {
 	if r.Applicable {
 		t.Error("a single sitting has no task boundary to clear at")
 	}
-	if !strings.Contains(r.NotMeasurable, "single sitting") {
-		t.Errorf("it should say this is about the session's shape: %q", r.NotMeasurable)
+	if !strings.Contains(r.NotMeasurable, "one sitting") {
+		t.Errorf("it should say why: %q", r.NotMeasurable)
+	}
+	// The argument moves to the detail rather than being lost.
+	if !strings.Contains(r.CaveatDetail, "session's shape") {
+		t.Errorf("it should still say this is about the session, not the technique: %q",
+			r.CaveatDetail)
 	}
 }
 

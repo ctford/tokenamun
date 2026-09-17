@@ -15,10 +15,7 @@ Observed
   session preamble, re-written by every clear        30,001   [observed]
 
 Not measurable from this data
-  no task boundary is detectable in this session: nothing you typed
-  follows an idle gap of 30 minutes or more that compaction had not
-  already cleared. That is a statement about this session's shape, not
-  about the technique -- a single sitting has no new task to clear for.
+  No task boundary here: this was one sitting.
 
 Unknown
   - re_reading: the agent would have had to fetch again whatever it still

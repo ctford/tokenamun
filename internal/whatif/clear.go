@@ -65,11 +65,12 @@ func (ClearOnNewTask) Estimate(c Context) Result {
 
 	if len(boundaries) == 0 {
 		r.Applicable = false
-		r.NotMeasurable = fmt.Sprintf(
-			"no task boundary is detectable in this session: nothing you typed follows "+
-				"an idle gap of %s or more that compaction had not already cleared. That "+
-				"is a statement about this session's shape, not about the technique -- a "+
-				"single sitting has no new task to clear for.", gapStr(TaskGap))
+		r.NotMeasurable = "No task boundary here: this was one sitting."
+		r.CaveatDetail = fmt.Sprintf(
+			"Nothing you typed follows an idle gap of %s or more that compaction had "+
+				"not already cleared, so there is no new task to clear for. That is a "+
+				"statement about this session's shape, not about the technique.",
+			gapStr(TaskGap))
 		return r
 	}
 	r.Applicable = true

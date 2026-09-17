@@ -169,7 +169,7 @@ func TestFileCompressionSaysNothingWhenNoFilesWereRead(t *testing.T) {
 	if r.Applicable {
 		t.Error("a session that read no files has nothing to shrink")
 	}
-	if !strings.Contains(r.NotMeasurable, "no file content") {
+	if !strings.Contains(r.NotMeasurable, "no files") {
 		t.Errorf("it should say why: %q", r.NotMeasurable)
 	}
 }
