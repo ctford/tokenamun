@@ -46,6 +46,27 @@ check 0 "relative paths that are about this repo" \
 check 2 "both rules at once" '/Users/a-real-name/x' '--dir ../some-client-repo'
 check 0 "an ordinary source line" 'func main() { fmt.Println("hello") }'
 
+# The commit-message rule, under the caller's shell options.
+#
+# This file sets pipefail deliberately, because the quality gates do and the
+# bug it is catching only exists there. The rule was written as
+# `git log | grep -q`; grep exits at the first match, git takes SIGPIPE, and
+# pipefail turns the pipeline's status into git's 141. Every match read as a
+# miss. It went unnoticed because the first test of it ran in a shell without
+# pipefail, where it passed.
+#
+# The probes use text this repository's own messages certainly do and
+# certainly do not contain, so the mechanism is tested without any private
+# name appearing here.
+if ! messages_match 'co-authored-by'; then
+  printf 'FAIL leak guard: messages_match found nothing in a history full of matches\n'
+  fail=1
+fi
+if messages_match 'zzz-not-in-any-commit-message-zzz'; then
+  printf 'FAIL leak guard: messages_match matched a string that is not there\n'
+  fail=1
+fi
+
 # The denylist file must never be tracked: that is the failure mode where the
 # guard publishes the names it protects.
 if git ls-files --error-unmatch .private-names >/dev/null 2>&1; then

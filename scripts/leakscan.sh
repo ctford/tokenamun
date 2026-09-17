@@ -73,6 +73,23 @@ scan_tracked() {
 # Commit messages are included because that is where the leak was worst. No
 # transcript was ever committed, but seven messages named client repositories
 # and quoted their figures, and nothing had ever looked at a commit message.
+# messages_match <regex> -- true when any commit message on any ref matches.
+#
+# Written as a single grep against a here-string, and not as
+# `git log ... | grep -q`, which is how it was written and is the third way
+# this guard has managed to report success over a leak. grep -q exits at the
+# first match, git gets SIGPIPE, and under `set -o pipefail` -- which the
+# quality gates run with -- the pipeline's status becomes git's 141 rather
+# than grep's 0. So a match read as "no match", and only when the leak was
+# large enough for git to still be writing. The isolated test passed because
+# its shell had no pipefail. One command in the pipeline, no such trap.
+messages_match() {
+  if [[ -z "${_message_cache+x}" ]]; then
+    _message_cache="$(git log --format=%B --all 2>/dev/null || true)"
+  fi
+  grep -qiE "$1" <<<"$_message_cache"
+}
+
 scan_private_names() {
   local name f
   if git ls-files --error-unmatch .private-names >/dev/null 2>&1; then
@@ -88,7 +105,7 @@ scan_private_names() {
       [[ -z "$f" ]] && continue
       bad "$f names a private project (matched .private-names; not printed)"
     done < <(git grep -lIiE "$name" -- . ':!.private-names' 2>/dev/null || true)
-    if git log --format=%B --all 2>/dev/null | grep -qiE "$name"; then
+    if messages_match "$name"; then
       bad "a commit message names a private project (matched .private-names; not printed)"
     fi
   done < .private-names
