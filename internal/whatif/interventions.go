@@ -362,16 +362,31 @@ func (MCPToCLI) Estimate(c Context) Result {
 		}
 	}
 
+	// Zero MCP calls is not zero MCP cost, and reporting 0% here would be the
+	// wrong answer in the expensive direction. A connected server puts its
+	// tool schemas in the preamble whether or not anything calls it, so the
+	// session that never touches MCP and the session with no server attached
+	// look identical from a transcript -- and the first of those is the case
+	// the intervention exists for.
+	whyNot := "The saving lives in tool-schema size, and tool schemas are not in the " +
+		"transcript. The observed session preamble is a ceiling on the whole category, " +
+		"not a measurement of the schemas inside it."
+	if mcpCalls == 0 {
+		whyNot += " This session made no MCP calls, which is not the same as having no " +
+			"MCP cost: a connected server's schemas sit in the preamble on every call " +
+			"whether anything calls it or not, and a transcript cannot tell an unused " +
+			"server from an absent one. Reporting 0% here would be a claim, and it " +
+			"would be wrong in the expensive direction."
+	}
+	whyNot += " To measure it, run the same opening prompt with the server connected " +
+		"and disconnected and compare the first call's prompt size: that difference is " +
+		"observed. `tokenamun compare` is the command for it."
+
 	r := Result{
-		Intervention: "mcp-to-cli",
-		Description:  MCPToCLI{}.Describe(),
-		Applicable:   false,
-		NotMeasurable: "The saving lives in tool-schema size, and tool schemas are not " +
-			"in the transcript. The observed session preamble is a ceiling on the whole " +
-			"category, not a measurement of the schemas inside it. To measure it, run " +
-			"the same opening prompt with the server connected and disconnected and " +
-			"compare the first call's prompt size: that difference is observed. " +
-			"`tokenamun compare` is the command for it.",
+		Intervention:  "mcp-to-cli",
+		Description:   MCPToCLI{}.Describe(),
+		Applicable:    false,
+		NotMeasurable: whyNot,
 		Observed: []Finding{
 			obs("mcp tool results", float64(mcpCalls), model.Calls),
 			obs("mcp result content", float64(mcpBytes), model.Bytes),
