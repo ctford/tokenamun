@@ -177,6 +177,32 @@
         "unit": "eit",
         "provenance": "derived"
       }
+    },
+    {
+      "tool": "Edit",
+      "path": "internal/payment/charge.go",
+      "category": "source code",
+      "tokens": {
+        "value": 1.9906654001983761,
+        "unit": "tokens",
+        "provenance": "derived-approx"
+      },
+      "entered_at_call": 5,
+      "resident_for_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "observed"
+      },
+      "cold_calls": {
+        "value": 0,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "carry_cost": {
+        "value": 2.48833175024797,
+        "unit": "eit",
+        "provenance": "derived"
+      }
     }
   ],
   "unattributed_growth_share": {

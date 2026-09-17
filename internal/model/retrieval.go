@@ -70,6 +70,9 @@ type RetrievedContent struct {
 	// CommandClass groups shell commands by what they do -- tests, git,
 	// exploration -- so shell output can be drilled into meaningfully.
 	CommandClass string `json:"command_class,omitempty"`
+	// CommandDetail is the specific command within that class, so git can be
+	// opened up into git status, git diff and the rest.
+	CommandDetail string `json:"command_detail,omitempty"`
 	// CategoryProv is derived when the path was observed in the tool result,
 	// and inferred when it was parsed out of a shell command line.
 	CategoryProv Provenance `json:"category_provenance"`

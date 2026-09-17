@@ -32,10 +32,18 @@ type CarryReport struct {
 	// context that was rebuilt. They truncate every open residency span.
 	Resets []int `json:"reset_calls"`
 
-	// AssistantCarryEIT is what re-sending the model's own words cost. Output
-	// is billed once at the output rate when generated, then carried as input
-	// on every later call; this is the second part, which is invisible if you
-	// only look at output tokens.
+	// PromptCarryEIT is what re-sending what you typed cost.
+	PromptCarryEIT float64 `json:"prompt_carry_eit"`
+	// ThinkingTokens is observed: the model's reasoning, billed as output.
+	// Its carry is deliberately absent -- Claude Code records thinking blocks
+	// with empty text, so whether they are re-sent is not knowable from a
+	// transcript, and guessing would be the thing this tool refuses to do.
+	ThinkingTokens int64 `json:"thinking_tokens"`
+
+	// AssistantCarryEIT is what re-sending the model's own words cost,
+	// excluding thinking. Output is billed once at the output rate when
+	// generated, then carried as input on every later call; this is the second
+	// part, which is invisible if you only look at output tokens.
 	AssistantCarryEIT float64 `json:"assistant_carry_eit"`
 	// ToolInputCarryEIT is what re-sending the tool calls the model wrote
 	// cost. On real sessions the model writes nearly as many bytes into tool
@@ -132,42 +140,55 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 		r.PreambleShare = r.PreambleCarryEIT / r.PromptCostEIT
 	}
 
+	// What you typed is carried like anything else.
+	for _, pe := range s.PromptEntries {
+		if pe.Bytes == 0 || pe.InvocationSeq < 0 {
+			continue
+		}
+		warm, coldN := residency(pe.InvocationSeq+1, len(s.Invocations), cold, r.Resets)
+		switch {
+		case warm > 0:
+			warm--
+		case coldN > 0:
+			coldN--
+		}
+		r.PromptCarryEIT += (float64(pe.Bytes) / ratioOf(s)) *
+			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
+	}
+
 	// The model's own output is carried too: generated once at the output
-	// rate, then re-sent as input on every later call.
+	// rate, then re-sent as input on every later call. Thinking is excluded,
+	// because its text is not in the transcript and whether it is re-sent
+	// cannot be established from one.
 	for _, inv := range s.Invocations {
-		if !inv.IsRealCall() || inv.Usage.Output == 0 {
+		r.ThinkingTokens += inv.Usage.Thinking
+		carried := inv.Usage.Output - inv.Usage.Thinking
+		if !inv.IsRealCall() || carried <= 0 {
 			continue
 		}
 		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, r.Resets)
-		if warm+coldN == 0 {
-			continue
-		}
-		if warm > 0 {
+		switch {
+		case warm > 0:
 			warm--
-		} else {
+		case coldN > 0:
 			coldN--
 		}
-		r.AssistantCarryEIT += float64(inv.Usage.Output) *
+		r.AssistantCarryEIT += float64(carried) *
 			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
 	}
 
 	// So are the tool calls it wrote, which are not free: the arguments sit in
 	// the conversation exactly like the results do.
-	ratio := s.Estimator.BytesPerToken
-	if ratio <= 0 {
-		ratio = 3.6
-	}
+	ratio := ratioOf(s)
 	for _, tc := range s.ToolCalls {
 		if tc.InvocationSeq < 0 || tc.InputBytes == 0 {
 			continue
 		}
 		warm, coldN := residency(tc.InvocationSeq+1, len(s.Invocations), cold, r.Resets)
-		if warm+coldN == 0 {
-			continue
-		}
-		if warm > 0 {
+		switch {
+		case warm > 0:
 			warm--
-		} else {
+		case coldN > 0:
 			coldN--
 		}
 		r.ToolInputCarryEIT += (float64(tc.InputBytes) / ratio) *
@@ -180,14 +201,13 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 			continue
 		}
 		warm, coldN := residency(entered+1, len(s.Invocations), cold, r.Resets)
-		if warm+coldN == 0 {
-			continue
-		}
 		// The call that first carries the content in writes it to cache; the
-		// rest read it.
-		if warm > 0 {
+		// rest read it. Content that arrives on the final call is still sent
+		// once, so it keeps the write and has no reads.
+		switch {
+		case warm > 0:
 			warm--
-		} else if coldN > 0 {
+		case coldN > 0:
 			coldN--
 		}
 
@@ -209,6 +229,14 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 	}
 	sort.SliceStable(r.Items, func(i, j int) bool { return r.Items[i].CarryEIT > r.Items[j].CarryEIT })
 	return r
+}
+
+// ratioOf is the session's calibrated bytes-per-token, or the fallback.
+func ratioOf(s *model.Session) float64 {
+	if s.Estimator.BytesPerToken > 0 {
+		return s.Estimator.BytesPerToken
+	}
+	return 3.6
 }
 
 // residency counts the warm and cold calls between from and end, stopping at

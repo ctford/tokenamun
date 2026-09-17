@@ -9,21 +9,48 @@ import (
 
 func treeFixture() *model.Session {
 	return &model.Session{
-		Retrievals: []model.RetrievedContent{
-			// Shell output that could be attributed to a file.
-			{Seq: 0, Tool: "Bash", Channel: model.ChanShell, CommandClass: "cat / sed / head",
-				Category: model.CatADR, Path: "docs/decisions/a.md", Bytes: 4000, Tokens: 1000, InvocationSeq: 0},
-			// The same file again: should collapse into one rectangle.
-			{Seq: 1, Tool: "Bash", Channel: model.ChanShell, CommandClass: "cat / sed / head",
-				Category: model.CatADR, Path: "docs/decisions/a.md", Bytes: 4000, Tokens: 1000, InvocationSeq: 1},
-			// Shell output with no path.
-			{Seq: 2, Tool: "Bash", Channel: model.ChanShell, CommandClass: "tests",
-				Category: model.CatToolOutput, Bytes: 9000, Tokens: 2500, InvocationSeq: 2},
-			// A direct file read: a different channel.
-			{Seq: 3, Tool: "Read", Channel: model.ChanFileRead,
-				Category: model.CatSourceCode, Path: "internal/pay/charge.go", Bytes: 6000, Tokens: 1600, InvocationSeq: 3},
+		Invocations: []model.ModelInvocation{
+			{Seq: 0, Model: "claude-opus-5", Usage: model.TokenUsage{
+				CacheRead: 10_000, Output: 600, Thinking: 200}},
+			{Seq: 1, Model: "claude-opus-5", Usage: model.TokenUsage{
+				CacheRead: 11_000, Output: 400, Thinking: 100}},
+			{Seq: 2, Model: "claude-opus-5", Usage: model.TokenUsage{
+				CacheRead: 12_000, Output: 300}},
+			{Seq: 3, Model: "claude-opus-5", Usage: model.TokenUsage{
+				CacheRead: 13_000, Output: 200}},
 		},
+		ToolCalls: []model.ToolCall{
+			{Seq: 0, ID: "t0", Name: "Bash", InvocationSeq: 0, InputBytes: 400,
+				Command: "cat docs/decisions/a.md"},
+			{Seq: 1, ID: "t1", Name: "Bash", InvocationSeq: 1, InputBytes: 300,
+				Command: "cd /repo && git status -sb"},
+			{Seq: 2, ID: "t2", Name: "Read", InvocationSeq: 2, InputBytes: 100},
+			{Seq: 3, ID: "t3", Name: "mcp__github__list_issues", InvocationSeq: 3, InputBytes: 80},
+		},
+		PromptEntries: []model.PromptEntry{{Bytes: 500, InvocationSeq: 0}},
+		ProseBytes:    1200,
+		Retrievals: []model.RetrievedContent{
+			{Seq: 0, ToolID: "t0", Tool: "Bash", Channel: model.ChanShell,
+				CommandClass: "cat / sed / head", CommandDetail: "cat",
+				Category: model.CatADR, Path: "docs/decisions/a.md",
+				Bytes: 4000, Tokens: 1000, InvocationSeq: 0},
+			{Seq: 1, ToolID: "t1", Tool: "Bash", Channel: model.ChanShell,
+				CommandClass: "git", CommandDetail: "git status",
+				Category: model.CatToolOutput, Bytes: 9000, Tokens: 2500, InvocationSeq: 1},
+			{Seq: 2, ToolID: "t2", Tool: "Read", Channel: model.ChanFileRead,
+				Category: model.CatSourceCode, Path: "internal/pay/charge.go",
+				Bytes: 6000, Tokens: 1600, InvocationSeq: 2},
+			{Seq: 3, ToolID: "t3", Tool: "mcp__github__list_issues", Channel: model.ChanMCP,
+				Category: model.CatMCPOutput, Bytes: 2000, Tokens: 550, InvocationSeq: 3},
+		},
+		Estimator: model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true},
 	}
+}
+
+func built(t *testing.T) *Node {
+	t.Helper()
+	s := treeFixture()
+	return BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
 }
 
 func child(t *testing.T, n *Node, name string) *Node {
@@ -41,117 +68,115 @@ func child(t *testing.T, n *Node, name string) *Node {
 	return nil
 }
 
-// The top level answers "how was this obtained", because that is the level a
-// reader can act on. What it turned out to be is one level down.
-func TestTopLevelIsAcquisitionChannel(t *testing.T) {
-	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	retrieved := child(t, tree, "retrieved content")
-
-	shell := child(t, retrieved, "shell output")
-	if _ = child(t, retrieved, "Read tool"); shell.Tokens != 4500 {
-		t.Errorf("shell output tokens = %v, want 4500", shell.Tokens)
-	}
-	// Shell output splits by what the command was doing; "shell output" with
-	// no further structure is the least useful answer available.
-	reading := child(t, shell, "cat / sed / head")
-	child(t, shell, "tests")
-	if reading.Tokens != 2000 {
-		t.Errorf("file reading tokens = %v, want 2000", reading.Tokens)
-	}
-	// Other channels split by content category.
-	direct := child(t, retrieved, "Read tool")
-	child(t, direct, string(model.CatSourceCode))
-}
-
-func TestRepeatedFilesCollapseIntoOneRectangle(t *testing.T) {
-	// A treemap of forty identical slivers hides the thing worth seeing.
-	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	reading := child(t, child(t, child(t, tree, "retrieved content"), "shell output"), "cat / sed / head")
-
-	if len(reading.Children) != 1 {
-		t.Fatalf("expected the two reads of one file to collapse, got %d rectangles",
-			len(reading.Children))
-	}
-	leaf := reading.Children[0]
-	if leaf.Items != 2 {
-		t.Errorf("items = %d, want 2", leaf.Items)
-	}
-	if leaf.Tokens != 2000 {
-		t.Errorf("tokens = %v, want both reads summed", leaf.Tokens)
-	}
-	if leaf.Detail == "" || !contains(leaf.Detail, "2 retrievals") {
-		t.Errorf("a collapsed rectangle must say how many retrievals it is, got %q", leaf.Detail)
+// One axis at the top: who or what put the tokens there, because each branch
+// is a different conversation -- with the harness, with yourself, with the
+// model, or with the environment.
+func TestTopLevelIsWhoPutTheTokensThere(t *testing.T) {
+	tree := built(t)
+	for _, name := range []string{
+		"preamble", "your prompts", "writing output", "output carried", "tool results",
+	} {
+		child(t, tree, name)
 	}
 }
 
-func TestUnattributedOutputIsNamedAsABucket(t *testing.T) {
-	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	tests := child(t, child(t, child(t, tree, "retrieved content"), "shell output"), "tests")
-	name := tests.Children[0].Name
-	if !contains(name, "unattributed") {
-		t.Errorf("name = %q; a merged bucket must not look like one result", name)
+// Thinking is observed within the output total, so it gets its own block --
+// but whether it is re-read afterwards is not knowable from a transcript, and
+// the tree must not imply otherwise.
+func TestThinkingIsSplitOutOfOutputButNotCarried(t *testing.T) {
+	tree := built(t)
+	writing := child(t, tree, "writing output")
+	thinking := child(t, writing, "thinking")
+
+	if thinking.Tokens != 300 {
+		t.Errorf("thinking tokens = %v, want the observed 300", thinking.Tokens)
+	}
+	if thinking.Detail == "" || !contains(thinking.Detail, "not knowable") {
+		t.Errorf("thinking must say its carry is unknowable, got %q", thinking.Detail)
+	}
+	// The carried side excludes it: 1500 output - 300 thinking = 1200 carried.
+	carried := child(t, tree, "output carried")
+	child(t, carried, "prose")
+	child(t, carried, "tool arguments")
+	if carried.Carry >= writing.Carry*6 {
+		t.Error("carried output should not include the thinking tokens")
 	}
 }
 
-func TestTotalsRollUpAndMatchTheRetrievals(t *testing.T) {
-	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	retrieved := child(t, tree, "retrieved content")
-	if retrieved.Items != 4 {
-		t.Errorf("retrieved items = %d, want 4", retrieved.Items)
+// "In tool calls, I expected to see which tools."
+func TestToolArgumentsBreakDownByTool(t *testing.T) {
+	tree := built(t)
+	args := child(t, child(t, tree, "output carried"), "tool arguments")
+
+	bash := child(t, args, "Bash")
+	child(t, args, "Read")
+	child(t, args, "mcp__github__list_issues")
+	if bash.Items != 2 {
+		t.Errorf("Bash calls = %d, want 2", bash.Items)
 	}
-	if retrieved.Tokens != 6100 {
-		t.Errorf("retrieved tokens = %v, want 6100", retrieved.Tokens)
-	}
-	var sum float64
-	for _, ch := range retrieved.Children {
-		sum += ch.Tokens
-	}
-	if sum != retrieved.Tokens {
-		t.Errorf("children sum to %v but the branch says %v", sum, retrieved.Tokens)
+	// Bash wrote the most argument bytes, so it must carry the most cost.
+	if bash.Carry <= child(t, args, "Read").Carry {
+		t.Error("cost should follow argument bytes")
 	}
 }
 
-// A viewer of retrieved content alone answers a narrower question than "where
-// did the tokens go". The parts that cannot be decomposed have to be present,
-// or every percentage in the view is inflated.
-func TestTreeAccountsForTheWholePromptCost(t *testing.T) {
-	carry := analysis.CarryReport{
-		PromptCostEIT:    1000,
-		PreambleCarryEIT: 200,
-		Items: []analysis.CarriedItem{
-			{RetrievalSeq: 0, CarryEIT: 100},
-			{RetrievalSeq: 3, CarryEIT: 50},
-		},
-	}
-	tree := BuildTree(treeFixture(), carry)
+// "In file reading, I expected to see which files."
+func TestFileContentBreaksDownByFile(t *testing.T) {
+	tree := built(t)
+	files := child(t, child(t, tree, "tool results"), "file content")
 
-	child(t, tree, "session preamble")
-	rest := child(t, tree, "unattributed")
-	// 1000 total - 150 retrieval - 200 preamble = 650 left over.
-	if rest.Carry != 650 {
-		t.Errorf("remainder = %v, want 650", rest.Carry)
-	}
-	// Every block that is not a retrieval breakdown must explain itself,
-	// rather than looking like an omission or a shrug.
-	for _, name := range []string{"session preamble", "unattributed"} {
-		if d := child(t, tree, name).Detail; d == "" {
-			t.Errorf("%s: no explanation", name)
+	// However it was read: the Read tool and cat both land here.
+	child(t, files, "docs/decisions/a.md")
+	child(t, files, "internal/pay/charge.go")
+}
+
+// git is tool invocation, not file reading, and CLI is separated from MCP
+// because that is the axis the MCP-versus-CLI argument turns on.
+func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
+	tree := built(t)
+	results := child(t, tree, "tool results")
+
+	cli := child(t, results, "CLI output")
+	child(t, cli, "git")
+	child(t, results, "MCP output")
+
+	// File content must not be filed under CLI output.
+	for _, c := range cli.Children {
+		if c.Name == "file content" {
+			t.Error("file content is its own mechanism, not a CLI command family")
 		}
 	}
-	if got := child(t, tree, "retrieved content").Carry; got != 150 {
-		t.Errorf("retrieval carry = %v, want 150", got)
+}
+
+// "If it's possible to drill down from git to git status, that'd be great."
+func TestCLIOutputOpensUpBySubcommand(t *testing.T) {
+	tree := built(t)
+	git := child(t, child(t, child(t, tree, "tool results"), "CLI output"), "git")
+
+	// The compound command was `cd /repo && git status -sb`, so the level is
+	// the git subcommand, not cd and not the flag.
+	child(t, git, "git status")
+}
+
+func TestTotalsRollUpFromTheLeaves(t *testing.T) {
+	tree := built(t)
+	var sum float64
+	for _, c := range tree.Children {
+		sum += c.Carry
 	}
-	if tree.Carry != 1000 {
-		t.Errorf("root carry = %v; the tree should account for the whole prompt cost", tree.Carry)
+	if sum != tree.Carry {
+		t.Errorf("children sum to %v but root says %v", sum, tree.Carry)
+	}
+	if tree.Carry <= 0 {
+		t.Fatal("the tree should have a cost")
 	}
 }
 
 func TestEveryLevelIsSortedLargestFirst(t *testing.T) {
-	tree := BuildTree(treeFixture(), analysis.CarryReport{})
 	var check func(*Node)
 	check = func(n *Node) {
 		for i := 1; i < len(n.Children); i++ {
-			if n.Children[i-1].Tokens < n.Children[i].Tokens {
+			if n.Children[i-1].Carry < n.Children[i].Carry {
 				t.Errorf("%q: children out of order", n.Name)
 			}
 		}
@@ -159,49 +184,19 @@ func TestEveryLevelIsSortedLargestFirst(t *testing.T) {
 			check(c)
 		}
 	}
-	check(tree)
+	check(built(t))
 }
 
-// The model re-reading its own output is a first-class cost, and on real
-// sessions the largest single one. Leaving it inside a vague remainder hid it.
-func TestTheModelsOwnOutputAndToolCallsAreCarriedSeparately(t *testing.T) {
-	s := treeFixture()
-	s.Invocations = []model.ModelInvocation{
-		{Seq: 0, Model: "claude-opus-5", Usage: model.TokenUsage{CacheRead: 10_000, Output: 500}},
-		{Seq: 1, Model: "claude-opus-5", Usage: model.TokenUsage{CacheRead: 11_000, Output: 400}},
-		{Seq: 2, Model: "claude-opus-5", Usage: model.TokenUsage{CacheRead: 12_000, Output: 300}},
+func TestBlocksThatCannotBeScaledAreMarked(t *testing.T) {
+	// The colour ramp measures carry per token. A block with cost but no
+	// attributable token count has no such rate, and rendering it at the
+	// palest step would read as "cheap to keep" -- a claim we cannot make.
+	tree := built(t)
+	if !child(t, tree, "preamble").Unscaled {
+		t.Error("the preamble has no per-token rate and must be off the ramp")
 	}
-	s.ToolCalls = []model.ToolCall{{Seq: 0, InvocationSeq: 0, InputBytes: 3600}}
-	s.Estimator = model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true}
-
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
-	if carry.AssistantCarryEIT <= 0 {
-		t.Fatal("output written early is re-sent later and must be priced")
-	}
-	if carry.ToolInputCarryEIT <= 0 {
-		t.Fatal("the arguments of a tool call sit in the conversation like its results do")
-	}
-
-	tree := BuildTree(s, carry)
-	replies := child(t, tree, "model replies")
-	if replies.Carry != carry.AssistantCarryEIT {
-		t.Errorf("replies block = %v, want %v", replies.Carry, carry.AssistantCarryEIT)
-	}
-	child(t, tree, "tool calls")
-}
-
-func TestCarryJoinsOntoLeaves(t *testing.T) {
-	carry := analysis.CarryReport{Items: []analysis.CarriedItem{
-		{RetrievalSeq: 0, CarryEIT: 500, ResidentFor: 3},
-		{RetrievalSeq: 3, CarryEIT: 90, ResidentFor: 1},
-	}}
-	tree := BuildTree(treeFixture(), carry)
-	if got := child(t, tree, "retrieved content").Carry; got != 590 {
-		t.Errorf("retrieval carry = %v, want 590", got)
-	}
-	// The ramp needs a per-token rate on every node it colours.
-	if tree.CarryPerToken <= 0 {
-		t.Error("root should have a carry-per-token rate")
+	if child(t, child(t, tree, "tool results"), "file content").Unscaled {
+		t.Error("file content has a real per-token rate and belongs on the ramp")
 	}
 }
 

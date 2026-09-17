@@ -137,6 +137,10 @@ func absorb(s *model.Session, e claudecode.Entry, cl content.Classifier, byReque
 		// marks harness-injected content rather than something a human typed.
 		if !e.IsMeta {
 			s.Prompts++
+			s.PromptEntries = append(s.PromptEntries, model.PromptEntry{
+				Bytes:         e.Message.Content.Len(),
+				InvocationSeq: len(s.Invocations) - 1,
+			})
 		}
 	}
 }
@@ -182,6 +186,11 @@ func absorbAssistant(s *model.Session, e claudecode.Entry, byRequest, toolIndex 
 
 	if e.Message == nil {
 		return
+	}
+	for _, b := range e.Message.Content.Blocks {
+		if b.Type == "text" {
+			s.ProseBytes += len(b.Text)
+		}
 	}
 	for _, b := range e.Message.ToolUses() {
 		if _, dup := toolIndex[b.ID]; dup {
@@ -242,6 +251,7 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 		Category:      cat,
 		Channel:       content.ChannelFor(tc.Name, meta.Path != ""),
 		CommandClass:  content.CommandClass(tc.Command),
+		CommandDetail: content.CommandDetail(tc.Command),
 		CategoryProv:  prov,
 		Declared:      declared,
 		Path:          path,

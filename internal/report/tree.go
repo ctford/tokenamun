@@ -1,9 +1,11 @@
 package report
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/ctford/tokenamun/internal/analysis"
+	"github.com/ctford/tokenamun/internal/content"
 	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/model"
 )
@@ -45,211 +47,368 @@ type Node struct {
 
 // BuildTree assembles the drill-down hierarchy.
 //
-// A viewer of retrieved content alone is answering a narrower question than
-// "where did the tokens go", and by a wide margin: on a real session the
-// retrieval carry is about a third of the bill, and retrieved content measured
-// as *volume* is under one percent of it. Content is priced once and carried
-// on every later call, and most of what is carried is not retrieved content at
-// all -- it is the preamble, the conversation, and per-call overhead.
+// One axis at the top: who or what put the tokens there. That is the level a
+// reader can act on, because each branch is a different conversation --
+// with the harness, with yourself, with the model, or with the environment.
 //
-// So the tree covers the whole prompt cost. Retrieved content is the part that
-// decomposes; the rest appears as sibling blocks that cannot be broken down
-// from a transcript, and say so. That way a percentage in the viewer is a
-// share of the session's cost rather than a share of the part we happen to be
-// able to itemise.
+//	session
+//	├─ preamble                     the harness put it there
+//	├─ your prompts                 you did
+//	├─ writing output               the model did, at the output rate
+//	│  ├─ thinking                  observed
+//	│  ├─ prose
+//	│  └─ tool arguments            → by tool
+//	├─ output carried               the same words, re-read as input
+//	│  ├─ prose
+//	│  └─ tool arguments            → by tool
+//	└─ tool results                 the environment answered
+//	   ├─ file content              → by file
+//	   ├─ CLI output                → by command family → by command
+//	   ├─ MCP output                → by tool
+//	   ├─ web                       → by tool
+//	   └─ subagent reports
 //
-// The hierarchy:
-//
-//	channel -> (command class | content category) -> file or result
-//
-// Shell output splits by what the command was doing, because "shell output"
-// with no further structure is the least useful answer a profiler can give.
-// Every other channel splits by content category.
+// Splitting CLI from MCP is deliberate: it is the axis the whole
+// MCP-versus-CLI argument turns on, and it is observable.
 func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
-	root := buildRetrievalTree(s, carry)
-	addNonRetrievalCost(root, s, carry)
+	root := &Node{Name: "session", Kind: "root"}
+	root.Children = append(root.Children,
+		preambleNode(carry),
+		promptNode(s, carry),
+		writingNode(s, carry),
+		carriedNode(s, carry),
+		resultsNode(s, carry),
+	)
+	root.Children = compact(root.Children)
 	rollUp(root)
 	sortTree(root)
+
+	// The parts are estimated where output is apportioned by byte share, so
+	// they can overshoot the measured cost. Report the gap rather than
+	// clamping: a decomposition that reconciles itself silently looks more
+	// certain than it is.
+	measured := carry.PromptCostEIT + outputCost(s)
+	if measured > 0 && root.Carry > measured {
+		root.Reconciliation = measured - root.Carry
+	}
 	return root
 }
 
-// buildRetrievalTree builds the part that decomposes.
-func buildRetrievalTree(s *model.Session, carry analysis.CarryReport) *Node {
+func preambleNode(carry analysis.CarryReport) *Node {
+	return &Node{
+		Name: "preamble", Kind: "bucket", Unscaled: true,
+		Tokens: float64(carry.Preamble),
+		Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryEIT, Items: 1,
+		Detail: "system prompt, tool schemas, instruction files and skills, carried on every " +
+			"call. Not decomposable: none of its parts are in the transcript.",
+	}
+}
+
+func promptNode(s *model.Session, carry analysis.CarryReport) *Node {
+	var bytes int
+	for _, pe := range s.PromptEntries {
+		bytes += pe.Bytes
+	}
+	return &Node{
+		Name: "your prompts", Kind: "bucket", Unscaled: true,
+		Tokens: float64(bytes) / ratioOf(s),
+		Carry:  carry.PromptCarryEIT, CarryUncached: carry.PromptCarryEIT,
+		Items:  len(s.PromptEntries),
+		Detail: "what you typed, carried for the rest of the session.",
+	}
+}
+
+// writingNode is the output-rate charge for generating tokens. Output totals
+// are observed and thinking is observed within them; the remainder is
+// apportioned between prose and tool arguments by byte share, which is the
+// only split available since the API reports one output number per call.
+func writingNode(s *model.Session, carry analysis.CarryReport) *Node {
+	w := cost.For(firstModel(s))
+	usage := s.Usage()
+	thinking := carry.ThinkingTokens
+	rest := usage.Output - thinking
+
+	n := &Node{Name: "writing output", Kind: "bucket",
+		Detail: "the output-rate charge for generating tokens, five times the input rate. " +
+			"Carrying them afterwards is counted separately."}
+	if thinking > 0 {
+		n.Children = append(n.Children, &Node{
+			Name: "thinking", Kind: "source", Unscaled: true,
+			Tokens: float64(thinking),
+			Carry:  float64(thinking) * w.Output, CarryUncached: float64(thinking) * w.Output,
+			Items: 1,
+			Detail: "observed. Whether it is re-read as input afterwards is not knowable " +
+				"from a transcript: Claude Code records thinking blocks with empty text.",
+		})
+	}
+	prose, args := apportion(s, rest)
+	if prose > 0 {
+		n.Children = append(n.Children, &Node{
+			Name: "prose", Kind: "source", Unscaled: true,
+			Tokens: prose, Carry: prose * w.Output, CarryUncached: prose * w.Output, Items: 1,
+			Detail: "assistant text. Apportioned from the observed output total by byte share.",
+		})
+	}
+	if args > 0 {
+		argNode := &Node{Name: "tool arguments", Kind: "source", Unscaled: true,
+			Detail: "what the model wrote to invoke tools, apportioned by byte share."}
+		argNode.Children = byToolArguments(s, args*w.Output, args)
+		n.Children = append(n.Children, argNode)
+	}
+	return n
+}
+
+// carriedNode is the input-side cost of the model's own words.
+func carriedNode(s *model.Session, carry analysis.CarryReport) *Node {
+	n := &Node{Name: "output carried", Kind: "bucket",
+		Detail: "the model re-reading its own words on every later call. Thinking is " +
+			"excluded, since whether it is re-sent cannot be established here."}
+	if carry.AssistantCarryEIT > 0 {
+		n.Children = append(n.Children, &Node{
+			Name: "prose", Kind: "source", Unscaled: true,
+			Tokens: 0,
+			Carry:  carry.AssistantCarryEIT, CarryUncached: carry.AssistantCarryEIT, Items: 1,
+			Detail: "assistant text, re-sent as input for the rest of the session.",
+		})
+	}
+	if carry.ToolInputCarryEIT > 0 {
+		argNode := &Node{Name: "tool arguments", Kind: "source", Unscaled: true,
+			Detail: "the arguments of every tool call, re-sent exactly as the results are."}
+		argNode.Children = byToolArguments(s, carry.ToolInputCarryEIT, 0)
+		n.Children = append(n.Children, argNode)
+	}
+	return n
+}
+
+// byToolArguments splits a cost across the tools whose arguments produced it,
+// which is what "which tools" means on this side of the ledger.
+func byToolArguments(s *model.Session, totalCost, totalTokens float64) []*Node {
+	bytesByTool := map[string]int{}
+	callsByTool := map[string]int{}
+	var total int
+	for _, tc := range s.ToolCalls {
+		if tc.InputBytes == 0 {
+			continue
+		}
+		bytesByTool[tc.Name] += tc.InputBytes
+		callsByTool[tc.Name]++
+		total += tc.InputBytes
+	}
+	if total == 0 {
+		return nil
+	}
+	var out []*Node
+	for name, b := range bytesByTool {
+		share := float64(b) / float64(total)
+		out = append(out, &Node{
+			Name: name, Kind: "tool", Unscaled: true,
+			Tokens: totalTokens * share,
+			Carry:  totalCost * share, CarryUncached: totalCost * share,
+			Items:  callsByTool[name],
+			Detail: fmt.Sprintf("%d calls, %s of arguments", callsByTool[name], byteStr(b)),
+		})
+	}
+	return out
+}
+
+// resultsNode is what the environment sent back, split by mechanism.
+func resultsNode(s *model.Session, carry analysis.CarryReport) *Node {
 	carryBySeq := map[int]analysis.CarriedItem{}
 	for _, it := range carry.Items {
 		carryBySeq[it.RetrievalSeq] = it
 	}
 
-	root := &Node{Name: "session", Kind: "root"}
-	retrieved := &Node{Name: "retrieved content", Kind: "bucket"}
-	root.Children = append(root.Children, retrieved)
-	channels := map[model.Channel]*Node{}
+	root := &Node{Name: "tool results", Kind: "bucket",
+		Detail: "content the environment returned, which is what the retrieval " +
+			"optimisations all target."}
+	commands := map[string]string{}
+	for _, tc := range s.ToolCalls {
+		if tc.Command != "" {
+			commands[tc.ID] = tc.Command
+		}
+	}
+
 	groups := map[string]*Node{}
+	nested := map[string]*Node{}
 
 	for _, c := range s.Retrievals {
-		ch := c.Channel
-		if ch == "" {
-			ch = model.ChanOtherTool
-		}
-		chNode := channels[ch]
-		if chNode == nil {
-			chNode = &Node{Name: string(ch), Kind: "channel"}
-			channels[ch] = chNode
-			retrieved.Children = append(retrieved.Children, chNode)
-		}
+		it := carryBySeq[c.Seq]
+		kind, sub := resultKind(c)
 
-		// Second level: what the command was doing, or what the content is.
-		groupName := string(c.Category)
-		groupKind := "category"
-		if ch == model.ChanShell && c.CommandClass != "" {
-			groupName = c.CommandClass
-			groupKind = "command"
+		g := groups[kind]
+		if g == nil {
+			g = &Node{Name: kind, Kind: "mechanism", Detail: kindDetail(kind)}
+			groups[kind] = g
+			root.Children = append(root.Children, g)
 		}
-		key := string(ch) + "/" + groupName
-		grp := groups[key]
-		if grp == nil {
-			grp = &Node{Name: groupName, Kind: groupKind}
-			groups[key] = grp
-			chNode.Children = append(chNode.Children, grp)
+		parent := g
+		if sub != "" {
+			// CLI output opens up command by command: git, then git checkout,
+			// then git checkout AGENTS.md.
+			levels := []string{sub}
+			if kind == "CLI output" {
+				if p := content.CommandPath(commands[c.ToolID]); len(p) > 0 {
+					levels = append(levels, p[1:]...)
+				}
+			}
+			key := kind
+			for _, level := range levels {
+				key += "/" + level
+				child := nested[key]
+				if child == nil {
+					child = &Node{Name: level, Kind: "command"}
+					nested[key] = child
+					parent.Children = append(parent.Children, child)
+				}
+				parent = child
+			}
 		}
 
 		leafName := c.Path
 		if leafName == "" {
-			// Results with no path collapse into one rectangle per tool, so
-			// the name has to say it is a bucket rather than a single result.
-			leafName = "(unattributed " + c.Tool + " output)"
+			leafName = c.CommandDetail
+			if leafName == "" {
+				leafName = "(unattributed " + c.Tool + " output)"
+			}
 		}
-		it := carryBySeq[c.Seq]
 		leaf := &Node{
-			Name:          leafName,
-			Kind:          "item",
-			Tokens:        c.Tokens,
-			Carry:         it.CarryEIT,
-			CarryUncached: it.CarryUncachedEIT,
-			Bytes:         c.ObservedBytes(),
-			Items:         1,
-			Detail:        leafDetail(c, it),
+			Name: leafName, Kind: "item",
+			Tokens: c.Tokens, Carry: it.CarryEIT, CarryUncached: it.CarryUncachedEIT,
+			Bytes: c.ObservedBytes(), Items: 1,
+			Detail: leafDetail(c, it),
 		}
 		if c.Tokens > 0 {
 			leaf.CarryPerToken = it.CarryEIT / c.Tokens
 		}
-		grp.Children = append(grp.Children, leaf)
+		parent.Children = append(parent.Children, leaf)
 	}
 
-	// Files read more than once collapse into one rectangle, since a treemap
-	// of forty identical slivers hides the thing worth seeing.
-	for _, ch := range retrieved.Children {
-		for i, grp := range ch.Children {
-			ch.Children[i] = collapseByName(grp)
-		}
-	}
+	collapseLeaves(root)
 	return root
 }
 
-// addNonRetrievalCost adds what the retrieval breakdown does not cover, so the
-// tree accounts for the whole prompt cost.
-//
-// None of these can be decomposed from a transcript: the preamble is the
-// system prompt, tool schemas and instruction files together with no
-// separation available, and the remainder is user prompts, assistant text,
-// thinking tokens, system reminders and per-call message envelope carried on
-// every later call. They are blocks with a note rather than an omission,
-// because leaving them out silently inflates every percentage in the view.
-func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryReport) {
-	var retrievalCarry float64
-	for _, it := range carry.Items {
-		retrievalCarry += it.CarryEIT
+// collapseLeaves merges repeated names wherever leaves sit, at any depth.
+func collapseLeaves(n *Node) {
+	if len(n.Children) == 0 {
+		return
 	}
-
-	if carry.PreambleCarryEIT > 0 {
-		root.Children = append(root.Children, &Node{
-			Name: "session preamble", Kind: "bucket", Unscaled: true,
-			Tokens: float64(carry.Preamble),
-			Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryEIT, Items: 1,
-			Detail: "system prompt, tool schemas, instruction files and skills, carried on " +
-				"every call. Not decomposable: none of it is in the transcript.",
-		})
+	if n.Children[0].Kind == "item" {
+		n.Children = collapseByName(n).Children
+		return
 	}
-
-	if carry.AssistantCarryEIT > 0 {
-		root.Children = append(root.Children, &Node{
-			Name: "model replies", Kind: "bucket", Unscaled: true,
-			Tokens: float64(s.Usage().Output),
-			Carry:  carry.AssistantCarryEIT, CarryUncached: carry.AssistantCarryEIT, Items: 1,
-			Detail: "text and thinking the model wrote, priced as input for the rest of the " +
-				"session. Its own replies are part of the conversation it re-reads on every " +
-				"call, and that is billed separately from writing them.",
-		})
-	}
-	if carry.ToolInputCarryEIT > 0 {
-		root.Children = append(root.Children, &Node{
-			Name: "tool calls", Kind: "bucket", Unscaled: true,
-			Tokens: toolInputTokens(s),
-			Carry:  carry.ToolInputCarryEIT, CarryUncached: carry.ToolInputCarryEIT, Items: 1,
-			Detail: "the arguments of every tool call - shell commands, file paths, patches - " +
-				"which sit in the conversation and are re-sent exactly as the results are.",
-		})
-	}
-
-	rest := carry.PromptCostEIT - retrievalCarry - carry.PreambleCarryEIT -
-		carry.AssistantCarryEIT - carry.ToolInputCarryEIT
-	if rest < 0 {
-		// The parts came to more than the measured cost. That is estimator
-		// error, and reporting it is the point: a decomposition that silently
-		// clamps itself to fit looks more certain than it is.
-		root.Reconciliation = rest
-	}
-	if rest > 0 {
-		root.Children = append(root.Children, &Node{
-			Name: "unattributed", Kind: "bucket", Unscaled: true,
-			Carry: rest, CarryUncached: rest, Items: 1,
-			Detail: "what the parts above do not account for: the prompts you typed, system " +
-				"reminders, per-call message envelope, and the error in the byte-per-token " +
-				"estimate. Reported rather than distributed.",
-		})
-	}
-
-	w := cost.For(firstModel(s))
-	if out := w.OutputCost(s.Usage()); out > 0 {
-		root.Children = append(root.Children, &Node{
-			Name: "writing output", Kind: "bucket", Unscaled: true,
-			Tokens: float64(s.Usage().Output),
-			Carry:  out, CarryUncached: out, Items: 1,
-			Detail: "the output-rate charge for generating those tokens, five times the input " +
-				"rate. Separate from carrying them afterwards, which is model replies.",
-		})
+	for _, child := range n.Children {
+		collapseLeaves(child)
 	}
 }
 
-// toolInputTokens estimates the arguments the model wrote into tool calls.
-func toolInputTokens(s *model.Session) float64 {
-	ratio := s.Estimator.BytesPerToken
-	if ratio <= 0 {
-		return 0
+// resultKind decides which mechanism returned a payload, and what to open it
+// up by. File content is separated from command output because they are
+// different questions -- which files, versus which commands -- and CLI is
+// separated from MCP because that is the axis the MCP-versus-CLI argument
+// turns on.
+func resultKind(c model.RetrievedContent) (kind, sub string) {
+	switch c.Channel {
+	case model.ChanMCP:
+		return "MCP output", c.Tool
+	case model.ChanWeb:
+		return "web", c.Tool
+	case model.ChanSubagent:
+		return "subagent reports", ""
+	case model.ChanEdit:
+		return "edit confirmations", ""
 	}
-	var bytes int
+	if c.Path != "" && isReadingClass(c.CommandClass, c.Channel) {
+		return "file content", ""
+	}
+	if c.Channel == model.ChanShell {
+		return "CLI output", c.CommandClass
+	}
+	return "other tool output", ""
+}
+
+// isReadingClass reports whether the payload is a file's contents rather than
+// a command's report about files.
+func isReadingClass(class string, ch model.Channel) bool {
+	if ch == model.ChanFileRead {
+		return true
+	}
+	return class == "cat / sed / head"
+}
+
+func kindDetail(kind string) string {
+	switch kind {
+	case "file content":
+		return "the contents of files, however they were read: the Read tool or cat, sed and head."
+	case "CLI output":
+		return "what command-line tools reported: git, test runners, builds, searches, listings."
+	case "MCP output":
+		return "what MCP servers returned. Compare its size with CLI output when weighing " +
+			"whether to put a server behind a CLI."
+	default:
+		return ""
+	}
+}
+
+func outputCost(s *model.Session) float64 {
+	return cost.For(firstModel(s)).OutputCost(s.Usage())
+}
+
+// apportion splits non-thinking output between prose and tool arguments by
+// byte share, since the API reports one output number per call.
+func apportion(s *model.Session, rest int64) (prose, args float64) {
+	var argBytes int
 	for _, tc := range s.ToolCalls {
-		bytes += tc.InputBytes
+		argBytes += tc.InputBytes
 	}
-	return float64(bytes) / ratio
+	total := s.ProseBytes + argBytes
+	if rest <= 0 || total == 0 {
+		return 0, 0
+	}
+	proseShare := float64(s.ProseBytes) / float64(total)
+	return float64(rest) * proseShare, float64(rest) * (1 - proseShare)
 }
 
-func firstModel(s *model.Session) string {
-	if ms := s.Models(); len(ms) > 0 {
-		return ms[0]
+// compact drops branches with no cost, so an empty category is absent rather
+// than a zero-area rectangle.
+func compact(nodes []*Node) []*Node {
+	var out []*Node
+	for _, n := range nodes {
+		n.Children = compact(n.Children)
+		if n.Carry > 0 || len(n.Children) > 0 {
+			out = append(out, n)
+		}
 	}
-	return ""
+	return out
 }
 
-// collapseByName merges leaves that name the same file.
+func ratioOf(s *model.Session) float64 {
+	if s.Estimator.BytesPerToken > 0 {
+		return s.Estimator.BytesPerToken
+	}
+	return 3.6
+}
+
+func byteStr(n int) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
+}
+
+// collapseByName merges leaves that name the same thing, since a treemap of
+// forty identical slivers hides what is worth seeing.
 func collapseByName(grp *Node) *Node {
 	merged := map[string]*Node{}
 	var order []string
 	for _, leaf := range grp.Children {
 		m := merged[leaf.Name]
 		if m == nil {
-			copy := *leaf
-			merged[leaf.Name] = &copy
+			copied := *leaf
+			merged[leaf.Name] = &copied
 			order = append(order, leaf.Name)
 			continue
 		}
@@ -259,7 +418,7 @@ func collapseByName(grp *Node) *Node {
 		m.Bytes += leaf.Bytes
 		m.Items += leaf.Items
 	}
-	out := &Node{Name: grp.Name, Kind: grp.Kind}
+	out := &Node{Name: grp.Name, Kind: grp.Kind, Detail: grp.Detail}
 	for _, name := range order {
 		m := merged[name]
 		if m.Items > 1 {
@@ -271,6 +430,13 @@ func collapseByName(grp *Node) *Node {
 		out.Children = append(out.Children, m)
 	}
 	return out
+}
+
+func firstModel(s *model.Session) string {
+	if ms := s.Models(); len(ms) > 0 {
+		return ms[0]
+	}
+	return ""
 }
 
 // rollUp totals each branch from its children.
@@ -292,14 +458,19 @@ func rollUp(n *Node) {
 	}
 }
 
-// sortTree orders every level largest first, so the layout is stable and the
-// eye starts at the thing that matters.
+// sortTree orders every level by cost, largest first, so the layout is stable
+// and the eye starts where the money is. Cost rather than volume, because
+// several branches legitimately have cost and no attributable token count.
 func sortTree(n *Node) {
 	sort.SliceStable(n.Children, func(i, j int) bool {
-		if n.Children[i].Tokens != n.Children[j].Tokens {
-			return n.Children[i].Tokens > n.Children[j].Tokens
+		a, b := n.Children[i], n.Children[j]
+		if a.Carry != b.Carry {
+			return a.Carry > b.Carry
 		}
-		return n.Children[i].Name < n.Children[j].Name
+		if a.Tokens != b.Tokens {
+			return a.Tokens > b.Tokens
+		}
+		return a.Name < b.Name
 	})
 	for _, child := range n.Children {
 		sortTree(child)

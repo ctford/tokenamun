@@ -28,6 +28,96 @@ var commandClasses = []struct {
 	{"scripting", regexp.MustCompile(`\b(python3?|node|ruby|perl|bash -c|sh -c)\b`)},
 }
 
+// CommandDetail names the specific command inside its family: the family says
+// "git", this says "git status". It returns the text the family's own pattern
+// matched, which is already the specific form.
+func CommandDetail(cmd string) string {
+	lower := strings.ToLower(cmd)
+	for _, c := range commandClasses {
+		if m := c.re.FindString(lower); m != "" {
+			return strings.Join(strings.Fields(m), " ")
+		}
+	}
+	return ""
+}
+
+// CommandPath returns progressively more specific forms of the command, so a
+// reader can open "git" into "git log" or "git status".
+//
+// It stops at the subcommand. Going further was tried and abandoned: real
+// agent commands are compound shells with heredocs, quoted format strings,
+// subshells and assignments, so splitting on whitespace produced levels like
+//
+//	git log --reverse --format='===   ->   git log --reverse --format='=== %h
+//	was=$(git rev-parse               ->   was=$(git rev-parse @{upstream})
+//
+// which are noise, usually have exactly one child, and would need a real
+// shell parser to fix. The arguments worth seeing are file paths, and those
+// are already recovered separately and attributed as content.
+//
+// Only the stage that matched a known family is used, because a compound
+// command like `cd /repo && git status` belongs under git rather than cd.
+func CommandPath(cmd string) []string {
+	stage, ok := matchingStage(cmd)
+	if !ok {
+		return nil
+	}
+	var words []string
+	for _, f := range strings.Fields(stage) {
+		// Flags, assignments, substitutions and quoted fragments are not
+		// levels; they are the reason this used to produce nonsense.
+		if strings.HasPrefix(f, "-") || strings.ContainsAny(f, "'\"$=(){}<>`") {
+			continue
+		}
+		words = append(words, f)
+		if len(words) == 2 {
+			break
+		}
+	}
+	if len(words) == 0 {
+		return nil
+	}
+	out := []string{words[0]}
+	if len(words) > 1 {
+		// A path as the second word is not a subcommand: `cat foo.go` opens
+		// up by file, not by "cat foo.go".
+		if !strings.ContainsAny(words[1], "/.") {
+			out = append(out, words[0]+" "+words[1])
+		}
+	}
+	return out
+}
+
+// matchingStage finds the part of a compound command that a known family
+// matched.
+func matchingStage(cmd string) (string, bool) {
+	for _, stage := range splitStages(cmd) {
+		lower := strings.ToLower(stage)
+		for _, c := range commandClasses {
+			if c.re.MatchString(lower) {
+				return lower, true
+			}
+		}
+	}
+	return "", false
+}
+
+// splitStages breaks a compound command into independently-executed parts.
+func splitStages(cmd string) []string {
+	var out []string
+	for _, part := range stageSplitter.Split(cmd, -1) {
+		if i := strings.IndexAny(part, ">"); i >= 0 {
+			part = part[:i]
+		}
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+var stageSplitter = regexp.MustCompile(`\|\||&&|[;\n|]`)
+
 // CommandClass names what a shell command was doing. An unrecognised command
 // is "other shell" rather than being forced into a class it does not fit.
 func CommandClass(cmd string) string {

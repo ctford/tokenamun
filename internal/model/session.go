@@ -73,6 +73,13 @@ type ToolCall struct {
 	Command string `json:"command,omitempty"`
 }
 
+// PromptEntry is one thing the user typed.
+type PromptEntry struct {
+	Bytes int `json:"bytes"`
+	// InvocationSeq is the call that first carried it.
+	InvocationSeq int `json:"invocation_seq"`
+}
+
 // Warning is something the reader needs to know about the data rather than
 // about the session. Warnings are reported, never swallowed.
 type Warning struct {
@@ -88,9 +95,16 @@ type Session struct {
 	Retrievals  []RetrievedContent `json:"retrievals,omitempty"`
 	Repeats     []Repeat           `json:"repeats,omitempty"`
 	Prompts     int                `json:"user_prompts"`
-	Branch      string             `json:"branch,omitempty"`
-	CWD         string             `json:"cwd,omitempty"`
-	Warnings    []Warning          `json:"warnings,omitempty"`
+	// PromptEntries record each user prompt's size and where it entered, so
+	// what you typed can be carried like anything else.
+	PromptEntries []PromptEntry `json:"prompt_entries,omitempty"`
+	// ProseBytes is assistant text, excluding thinking and tool arguments.
+	// Output tokens are observed in total but not broken down, so the split
+	// between prose and tool arguments is apportioned by these byte counts.
+	ProseBytes int       `json:"prose_bytes"`
+	Branch     string    `json:"branch,omitempty"`
+	CWD        string    `json:"cwd,omitempty"`
+	Warnings   []Warning `json:"warnings,omitempty"`
 	// TranscriptLines and AssistantEntries support the dedup diagnostic.
 	TranscriptLines  int            `json:"transcript_lines"`
 	AssistantEntries int            `json:"assistant_entries"`
