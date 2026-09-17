@@ -132,6 +132,9 @@
   #tip dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 
   table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  #level-table tr.drillable { cursor: pointer; }
+  #level-table tr.drillable:hover td { background: var(--plane); }
+  #level-table td:first-child, #level-table th:first-child { text-align: left; }
   th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
   #interventions th { white-space: nowrap; }
   #interventions td:first-child { white-space: nowrap; }
@@ -153,7 +156,6 @@
   <p class="sub">Session <strong id="sid"></strong> · <span id="calls"></span> API calls · <span id="origin"></span></p>
 
   <div class="controls">
-    <span class="muted">Rectangle area:</span>
     <button id="mode-carry" aria-pressed="true">Token cost (cache-aware)</button>
     <button id="mode-uncached" aria-pressed="false">Token cost (no caching)</button>
     <span style="flex:1"></span>
@@ -161,20 +163,20 @@
     <button id="toggle-theme">Dark / light</button>
   </div>
 
-  <p class="muted" id="unit-note">
-    <strong>Costs are in cost-weighted tokens.</strong> Every token class is put on one
-    scale, where 1 is one full-price input token of this model: a cache read counts 0.1, a
-    5-minute cache write 1.25, a 1-hour write 2.0, a generated token 5.0 — the published
-    Claude multipliers. Being model-relative, a mixed-model session still adds up; multiply
-    by that model's input price for money.
-  </p>
 
   <h2 id="tm-title"></h2>
   <p class="muted" id="tm-sub"></p>
   <div class="panel">
     <nav id="crumbs" aria-label="Breadcrumb"></nav>
     <svg id="treemap" viewBox="0 0 1000 560" role="img" aria-labelledby="tm-title"></svg>
-    <div class="legend">
+    <table id="level-table" hidden>
+      <thead><tr>
+        <th>Name</th><th>Share of level</th><th>Share of session</th>
+        <th>Cost</th><th>Contains</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="legend" id="legend">
       <span>carry cost per token: low</span>
       <span class="ramp" id="ramp"></span>
       <span>high</span>
@@ -197,19 +199,6 @@
     </table>
   </div>
 
-  <div id="table-view" hidden>
-    <h2>All retrievals</h2>
-    <div class="panel" style="overflow:auto; max-height: 520px">
-      <table>
-        <thead><tr>
-          <th>Content</th><th>Category</th><th>Tokens</th><th>Bytes</th>
-          <th>Entered at</th><th>Resident for</th><th>Carry (EIT)</th>
-        </tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </div>
-
   <footer>
     <p><strong>What this is not.</strong> It does not reconstruct the context window
     at any moment. Costs are what each token class was billed at, attributed to the
@@ -227,6 +216,7 @@ const DATA = __TOKENAMUN_DATA__;
 const fmt = n => n.toLocaleString("en-US", {maximumFractionDigits: 0});
 const bytes = n => n >= 1048576 ? (n/1048576).toFixed(1)+" MB"
   : n >= 1024 ? (n/1024).toFixed(1)+" KB" : fmt(n)+" B";
+const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? "" : "s"}`;
 
 document.title = DATA.title + " — Tokenamun";
 document.getElementById("title").textContent = DATA.title;
@@ -248,11 +238,6 @@ document.querySelector("#interventions tbody").innerHTML = DATA.interventions.ma
     <td class="muted" style="text-align:left">${esc(i.caveat || i.note)}</td>
   </tr>`;
 }).join("");
-
-document.getElementById("rows").innerHTML = DATA.items.map(i => `
-  <tr><td>${i.label}</td><td>${i.category}</td><td>${fmt(i.tokens)}</td>
-  <td>${bytes(i.bytes)}</td><td>call ${i.enteredAt}</td>
-  <td>${fmt(i.residentFor)} calls</td><td>${fmt(i.carry)}</td></tr>`).join("");
 
 const RAMP = ["--seq-100","--seq-200","--seq-300","--seq-400","--seq-500","--seq-600","--seq-700"];
 document.getElementById("ramp").innerHTML =
@@ -481,39 +466,45 @@ function render() {
     parts.push(`</g>`);
   }
   svg.innerHTML = parts.join("");
+  renderLevelTable(here, kids);
   renderCrumbs();
 
-  const unit = "cost-weighted tokens";
-  const titles = {
-    carry: "Area = cost-weighted tokens as billed: cache reads at a tenth of input price, rebuilt prefixes at the write rate",
-    uncached: "Area = cost-weighted tokens with no caching: the same content re-sent the same number of times, at full input price",
-  };
-  document.getElementById("tm-title").textContent = titles[mode];
+  // The breadcrumb already carries the name, the total and the share, so the
+  // heading says only which level you are looking at and under which pricing.
+  document.getElementById("tm-title").textContent =
+    mode === "uncached" ? `${here.name} — without caching` : here.name;
 
   const heavyEnd = darkMode() ? "brighter" : "darker";
   const lightEnd = darkMode() ? "deeper" : "paler";
   document.getElementById("ramp-caption").textContent =
     `— ${lightEnd} is bulky but cheap to keep; ${heavyEnd} was carried for many calls`;
 
-  let scope;
-  if (mode === "uncached") {
-    scope = `Prompt caching saved ${pct(100 * cacheSaving(nodeAt([])))} of this session overall. `
-      + "Compare with 'as billed' to see what caching is worth on any rectangle.";
-  } else {
-    scope = path.length === 0
-      ? "Percentages are shares of the session's whole token cost. Click a box to go into it."
-      : `${pct(pctOfSession(here))} of the session's token cost. Percentages are shares of this level.`;
-  }
-  const levelOf = {
-    root: "how the tokens were spent",
-    bucket: "how the content was obtained",
-    channel: "what the commands were doing",
-    category: "what the content is",
-    command: "which files",
-  };
-  const showing = levelOf[here.kind] ? ` Showing: ${levelOf[here.kind]}.` : "";
-  document.getElementById("tm-sub").textContent =
-    `${here.name}: ${fmt(value(here))} ${unit} across ${fmt(here.items)} retrievals.${showing} ${scope}`;
+  // What each level means is already on the node itself, in the tooltip. A
+  // second copy up here was a guess keyed off node kind, and it went stale.
+  document.getElementById("tm-sub").textContent = mode === "uncached"
+    ? `Caching saved ${pct(100 * cacheSaving(nodeAt([])))} of the session.`
+    : "Click a box to go in.";
+}
+
+/* The table is the same level as the boxes, not a separate listing: it
+   navigates with the breadcrumb and drills in on click, so a reader who wants
+   exact numbers is not sent to a different view of different data. */
+function renderLevelTable(here, kids) {
+  const rows = kids.map((n, i) => {
+    const leaf = !n.children || n.children.length === 0;
+    return `<tr data-path="${i}" ${leaf ? "" : 'class="drillable"'}>
+      <td>${esc(n.name)}${n.unscaled ? ' <span class="muted">(off the ramp)</span>' : ""}</td>
+      <td>${pct(pctOfView(n, here))}</td>
+      <td>${pct(pctOfSession(n))}</td>
+      <td>${fmt(value(n))}</td>
+      <td>${leaf ? plural(n.items, "retrieval") : `${fmt(n.children.length)} inside`}</td>
+    </tr>`;
+  }).join("");
+  const body = document.querySelector("#level-table tbody");
+  body.innerHTML = rows;
+  body.querySelectorAll("tr.drillable").forEach(tr => {
+    tr.onclick = () => goTo([...path, Number(tr.dataset.path)]);
+  });
 }
 
 function renderCrumbs() {
@@ -642,18 +633,26 @@ for (const [name, button] of Object.entries(modeButtons)) {
 }
 
 const tableBtn = document.getElementById("toggle-table");
+let tableMode = false;
 tableBtn.onclick = () => {
-  const view = document.getElementById("table-view");
-  const showing = view.hidden;
-  view.hidden = !showing;
-  tableBtn.setAttribute("aria-pressed", String(showing));
+  tableMode = !tableMode;
+  applyViewMode();
 };
+
+function applyViewMode() {
+  document.getElementById("treemap").hidden = tableMode;
+  document.getElementById("legend").hidden = tableMode;
+  document.getElementById("level-table").hidden = !tableMode;
+  tableBtn.setAttribute("aria-pressed", String(tableMode));
+  tableBtn.textContent = tableMode ? "Boxes" : "Table view";
+}
 
 document.getElementById("toggle-theme").onclick = () => {
   document.documentElement.setAttribute("data-theme", darkMode() ? "light" : "dark");
   render(); // the ramp inverts, so the label ink has to be re-chosen
 };
 
+applyViewMode();
 document.getElementById("completeness").innerHTML =
   (DATA.completeness || []).map(c => `<li>${esc(c)}</li>`).join("");
 document.getElementById("foot-est").textContent = DATA.estimatorNote +

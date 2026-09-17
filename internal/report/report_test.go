@@ -487,9 +487,15 @@ func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 	if !strings.Contains(html, "estimated") {
 		t.Error("the report must state how content tokens were counted")
 	}
-	// Ten categories all carry meaning, so the numbers must also exist as text.
-	if !strings.Contains(html, "<table>") {
-		t.Error("a table view must exist for accessibility and for >7 categories")
+	// Every area also has to be readable as a number, for a screen reader and
+	// for anyone who wants the exact figure. The table is the same level as the
+	// boxes rather than a separate listing, so it must navigate too.
+	if !strings.Contains(html, `id="level-table"`) ||
+		!strings.Contains(html, `id="toggle-table"`) {
+		t.Error("a table view of the current level must exist for accessibility")
+	}
+	if !strings.Contains(html, "renderLevelTable") {
+		t.Error("the table must be rendered from the same level as the boxes")
 	}
 	// Dark mode is selected, under both the OS setting and the explicit toggle.
 	if !strings.Contains(html, "prefers-color-scheme: dark") ||
