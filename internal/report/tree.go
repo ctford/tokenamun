@@ -469,38 +469,50 @@ func nestByDirectory(n *Node) {
 	n.Children = append(branches, root.Children...)
 }
 
+// GroupsEarnTheirPlaceAt is how many tools a tool-identity group needs before
+// it is worth a level of its own.
+//
+// A group's whole job is to stop a handful of small rows crowding out a big
+// one: "standard tools" holds grep, find, head, tail, ls, wc and which, and
+// hoisting all seven would bury git. Three rows is not a crowd. Below this
+// many members the group costs a click and saves nothing -- "language
+// toolchains" holding pnpm, go and npm is a word you have to click through to
+// learn that you ran pnpm.
+//
+// A threshold rather than a judgement per group, because the taxonomy is
+// fixed and industry-wide while how much of it a session exercised is not.
+const GroupsEarnTheirPlaceAt = 4
+
 // collapseEmptyLevels removes a level you click through to learn nothing.
 //
-// Two kinds of them. A tool-identity group that turned out to contain one
-// tool: the groups are worth having when they group -- "standard tools"
-// holding seven binaries saves a reader from scanning seven rows -- but a
-// "version control" holding nothing but git teaches a word you already knew,
-// and it pushes the drill-down that matters, git then git status, one click
-// further away. The taxonomy stays fixed and industry-wide; whether a given
-// session exercised enough of a group for it to be worth a level is a
-// property of that session, and this is where that is decided.
+// Two kinds of them. A tool-identity group with too few tools in it to be
+// worth the click: one is always pointless, and the threshold above says
+// where the rest stop paying for themselves. The members are hoisted into the
+// parent, so nothing is lost but the heading.
 //
 // And a node whose only child repeats its name, which is how "git add"
 // containing one leaf called "git add" happened. That is not a hierarchy, it
 // is the same row twice.
 func collapseEmptyLevels(n *Node) {
-	for i, c := range n.Children {
+	var out []*Node
+	for _, c := range n.Children {
 		collapseEmptyLevels(c)
-		for len(c.Children) == 1 {
+
+		if c.Kind == "group" && len(c.Children) < GroupsEarnTheirPlaceAt {
+			out = append(out, c.Children...)
+			continue
+		}
+		// A node whose only child is a repeat of itself.
+		for len(c.Children) == 1 && c.Children[0].Name == c.Name {
 			only := c.Children[0]
-			group := c.Kind == "group"
-			// The child keeps its own name: it is the tool, and the level
-			// above contributed nothing but a heading.
-			if !group && only.Name != c.Name {
-				break
-			}
 			if only.Detail == "" {
 				only.Detail = c.Detail
 			}
 			c = only
-			n.Children[i] = c
 		}
+		out = append(out, c)
 	}
+	n.Children = out
 }
 
 // ensureDir finds or creates a directory level.

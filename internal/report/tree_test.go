@@ -1,6 +1,7 @@
 package report
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ctford/tokenamun/internal/analysis"
@@ -299,6 +300,46 @@ func TestRepeatedLeavesMergeEvenBesideBranches(t *testing.T) {
 	}
 }
 
+func TestAGroupWithTooFewToolsIsHoistedAway(t *testing.T) {
+	// A group's job is to stop a handful of small rows crowding out a big
+	// one. Three rows is not a crowd: "language toolchains" holding pnpm, go
+	// and npm was a word you clicked through to learn that you ran pnpm.
+	root := &Node{Name: "CLI output", Kind: "mechanism", Children: []*Node{
+		{Name: "language toolchains", Kind: "group", Children: []*Node{
+			{Name: "pnpm", Kind: "command", Carry: 7, Items: 1},
+			{Name: "go", Kind: "command", Carry: 3, Items: 1},
+			{Name: "npm", Kind: "command", Carry: 1, Items: 1},
+		}},
+		{Name: "standard tools", Kind: "group", Children: []*Node{
+			{Name: "grep", Kind: "command", Carry: 5, Items: 1},
+			{Name: "find", Kind: "command", Carry: 4, Items: 1},
+			{Name: "head", Kind: "command", Carry: 3, Items: 1},
+			{Name: "tail", Kind: "command", Carry: 2, Items: 1},
+		}},
+	}}
+	collapseEmptyLevels(root)
+
+	var names []string
+	for _, c := range root.Children {
+		names = append(names, c.Name)
+	}
+	// The small group's members are hoisted; the group that earns its place
+	// survives whole.
+	want := []string{"pnpm", "go", "npm", "standard tools"}
+	if strings.Join(names, ",") != strings.Join(want, ",") {
+		t.Errorf("got %v, want %v", names, want)
+	}
+	if got := len(root.Children[3].Children); got != 4 {
+		t.Errorf("standard tools should keep its four tools, got %d", got)
+	}
+	// Nothing is lost by hoisting: the members are still there, at the level
+	// above, and the branch still totals what its leaves do.
+	rollUp(root)
+	if root.Carry != 7+3+1+5+4+3+2 {
+		t.Errorf("hoisting changed the total: %.0f", root.Carry)
+	}
+}
+
 func TestALevelThatTeachesNothingIsRemoved(t *testing.T) {
 	// The tool-identity taxonomy is fixed and industry-wide, but whether a
 	// given session exercised enough of a group for the group to be worth
@@ -333,7 +374,7 @@ func TestALevelThatTeachesNothingIsRemoved(t *testing.T) {
 	for _, c := range cli.Children {
 		names = append(names, c.Name)
 	}
-	want := []string{"git", "standard tools", "npx"}
+	want := []string{"git", "grep", "sed", "npx"}
 	if len(names) != len(want) {
 		t.Fatalf("got %v, want %v", names, want)
 	}
@@ -346,8 +387,8 @@ func TestALevelThatTeachesNothingIsRemoved(t *testing.T) {
 	if got := len(cli.Children[0].Children); got != 2 {
 		t.Errorf("git should still hold its subcommands, got %d", got)
 	}
-	if cli.Children[1].Name != "standard tools" {
-		t.Error("a group that actually groups must survive")
+	if cli.Children[1].Name != "grep" {
+		t.Error("a group below the threshold is hoisted, members and all")
 	}
 
 	// The other kind: a node whose only child repeats its name is the same
