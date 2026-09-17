@@ -53,9 +53,15 @@ type Node struct {
 	// rather than low. Rendering it at the palest step would read as "cheap to
 	// keep", which is a claim we cannot make.
 	Unscaled bool `json:"unscaled,omitempty"`
-	// Detail is shown in the tooltip for leaves.
-	Detail   string  `json:"detail,omitempty"`
-	Children []*Node `json:"children,omitempty"`
+	// Detail is what this node is, in a sentence. It goes in the viewer's
+	// tooltip, where a paragraph is not read: a box you are hovering over
+	// competes with the box itself for your attention.
+	Detail string `json:"detail,omitempty"`
+	// DetailMore is the argument behind it, for the CLI, which has room.
+	// Same split as a caveat and for the same reason: the screen has no
+	// space and the terminal does.
+	DetailMore string  `json:"-"`
+	Children   []*Node `json:"children,omitempty"`
 	// Reconciliation is set on the root when the parts overshoot the measured
 	// prompt cost, which happens through byte-per-token estimation error.
 	Reconciliation float64 `json:"reconciliation,omitempty"`
@@ -116,7 +122,8 @@ func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
 		root.Children = append(root.Children, &Node{
 			Name: "unattributed", Kind: "bucket", Unscaled: true,
 			Carry: rest, CarryUncached: restUncached, Items: 1,
-			Detail: unattributedDetail(s, carry, rest),
+			Detail:     unattributedDetail(),
+			DetailMore: unattributedMore(s, carry, rest),
 		})
 		rollUp(root)
 	}
@@ -139,11 +146,13 @@ func preambleNode(carry analysis.CarryReport) *Node {
 		Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryUncachedEIT, Items: 1,
 		RoundTrips: carry.PreambleRoundTrips,
 		tokenCalls: float64(carry.Preamble) * carry.PreambleRoundTrips,
-		Detail: "system prompt, tool schemas, instruction files and skills, carried on every " +
-			"call. Not decomposable: none of its parts are in the transcript. Its round " +
-			"trips and its cost both stop at the first context reset -- compaction can " +
-			"leave a prefix smaller than the first call's prompt, and what the harness " +
-			"put back is not observable -- so both are lower bounds.",
+		Detail: "system prompt, tool schemas, instruction files and skills, carried on " +
+			"every call. Both figures here are lower bounds.",
+		DetailMore: "It cannot be decomposed: none of its parts are in the transcript. " +
+			"Its round trips and its cost both stop at the first context reset, because " +
+			"compaction can leave a prefix smaller than the first call's prompt and what " +
+			"the harness put back is not observable. So the real figures are higher, by " +
+			"an amount nobody can measure from a transcript.",
 	}
 }
 

@@ -1,6 +1,7 @@
 package report
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -487,4 +488,52 @@ func TestBranchesAreNamedForWhatCameBackNotForTheSource(t *testing.T) {
 		}
 	}
 	walk(tree)
+}
+
+func TestTooltipsStaySomethingAPersonWillRead(t *testing.T) {
+	// A paragraph on a box you are hovering over competes with the box for
+	// your attention, and loses. The remainder's tooltip was 547 characters
+	// and nobody read it. The argument belongs in `tokenamun tree`, where a
+	// reader has asked for it.
+	const limit = 280
+	tree := built(t)
+	var walk func(*Node)
+	walk = func(n *Node) {
+		if len([]rune(n.Detail)) > limit {
+			t.Errorf("%q has a %d-character tooltip; put the argument in DetailMore",
+				n.Name, len([]rune(n.Detail)))
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(tree)
+}
+
+func TestTheArgumentSurvivesBeingMovedOutOfTheTooltip(t *testing.T) {
+	// Shortening a tooltip must not lose what it said, only relocate it.
+	// The carry fixture overshoots, so it has a remainder to explain.
+	s := carrySession(t)
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	tree := BuildTree(s, carry)
+	for _, name := range []string{"unattributed", "preamble"} {
+		n := child(t, tree, name)
+		if n.Detail == "" {
+			t.Errorf("%s should still say what it is", name)
+		}
+		if n.DetailMore == "" {
+			t.Errorf("%s lost its explanation rather than moving it", name)
+		}
+	}
+	// And DetailMore must not be in the payload the viewer reads: it is
+	// there for the terminal, and shipping it would only make the HTML
+	// bigger for text nothing renders.
+	raw, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "detailMore") ||
+		strings.Contains(string(raw), "DetailMore") {
+		t.Error("the long form should not be serialised into the viewer's payload")
+	}
 }

@@ -73,6 +73,9 @@ type TreeNode struct {
 	Children int `json:"children"`
 	// Detail is what the viewer puts in the tooltip: what this node means.
 	Detail string `json:"detail,omitempty"`
+	// DetailMore is the argument behind it. Only the node you are on carries
+	// it, because it is a paragraph and a level has up to forty rows.
+	DetailMore string `json:"detail_more,omitempty"`
 	// At is the value to pass to --at to go here.
 	At string `json:"at,omitempty"`
 }
@@ -114,6 +117,7 @@ func BuildTreeView(s *model.Session, carry analysis.CarryReport, at []string, mo
 		v.Reconciliation = root.Reconciliation
 	}
 	v.Here = flatten(here, costOf(here, mode), v.Total, mode, path)
+	v.Here.DetailMore = here.DetailMore
 
 	for _, c := range here.Children {
 		child := flatten(c, costOf(here, mode), v.Total, mode, append(path, c.Name))
@@ -245,6 +249,9 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 	}
 	if v.Here.Detail != "" {
 		fmt.Fprintf(b, "\n%s\n", wrap(v.Here.Detail, 74, ""))
+	}
+	if v.Here.DetailMore != "" {
+		fmt.Fprintf(b, "\n%s\n", wrap(v.Here.DetailMore, 74, ""))
 	}
 	b.WriteString("\n")
 

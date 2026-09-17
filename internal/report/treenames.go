@@ -99,11 +99,8 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 // levelDetail explains a level whose name cannot carry its own meaning.
 func levelDetail(level string) string {
 	if level == "unidentified files" {
-		return "file contents read through the shell where the filename could not be " +
-			"recovered, because the command was compound or the path was in a variable: " +
-			"`cd /repo && echo \"=== spec ===\" && sed -n '1,80p' \"$SPEC\"`. It is real file " +
-			"reading with the file unknown. Reads through the Read tool, or through simpler " +
-			"commands, are attributed to their files."
+		return "real file reading, with the file unknown: the command was compound or " +
+			"the path was in a variable."
 	}
 	return ""
 }
@@ -187,40 +184,45 @@ func byteStr(n int) string {
 	}
 }
 
-// unattributedDetail says what the remainder is likely to be made of.
+// unattributedDetail says what the remainder is, and unattributedMore makes
+// the argument.
 //
-// "What the parts do not account for" is true and useless at 34% of a
-// session. Two of the candidates have computable ceilings, so they are
-// computed: a reader can then see whether the gap is mostly one thing we
-// deliberately decline to claim, or genuinely diffuse. They are ceilings and
-// they are labelled as ceilings -- both rest on residency the transcript does
-// not confirm, which is exactly why the cost is here and not in a branch.
-func unattributedDetail(s *model.Session, carry analysis.CarryReport, rest float64) string {
+// Two lengths, because the tooltip and the terminal are different places. A
+// 547-character paragraph on a box you are hovering over is not read; the
+// same text in `tokenamun tree --at unattributed` is exactly what somebody
+// asking has asked for.
+func unattributedDetail() string {
+	return "the bill is bigger than the parts that can be named, and this is the " +
+		"difference: tokens that were certainly charged but cannot be pinned to any " +
+		"one piece of content. Mostly the model re-reading its own thinking, and the " +
+		"reminders the harness adds to every call."
+}
+
+// unattributedMore computes what the two largest candidates would come to.
+//
+// Both are ceilings, and both rest on residency the transcript does not
+// confirm -- which is exactly why the cost is in the remainder and not in a
+// branch. Computing them turns "34% we cannot explain" into "34%, of which
+// this much would be one thing we decline to claim".
+func unattributedMore(s *model.Session, carry analysis.CarryReport, rest float64) string {
 	w := cost.For(firstModel(s))
 	var b strings.Builder
-	b.WriteString("what the parts above do not account for: system reminders, the " +
-		"per-call message envelope, thinking re-read if it is re-read at all, the " +
-		"preamble after a compaction, and the error in apportioning output by byte " +
-		"share. Reported rather than distributed.")
+	b.WriteString("Four things end up here. Thinking that was re-read: it is generated " +
+		"and billed, but Claude Code records thinking blocks with empty text, so " +
+		"whether it went round again is not in the transcript. The preamble after a " +
+		"compaction, since what survives one is not observable. The system reminders " +
+		"and per-call message envelope the harness adds, which are in the prompt but " +
+		"in no retrieval. And the error in estimating content tokens from bytes.")
 
-	// Thinking is generated and billed, and then it is in the conversation.
-	// Whether it is sent back is not in the transcript -- Claude Code records
-	// thinking blocks with empty text -- so its carry is not claimed anywhere.
-	// If it were carried like the rest of the model's output, it would be:
 	if carry.ThinkingTokens > 0 && carry.AssistantRoundTrips > 0 {
 		ceiling := float64(carry.ThinkingTokens) * carry.AssistantRoundTrips * w.CacheRead
 		fmt.Fprintf(&b, " Carrying thinking the way the rest of the model's output is "+
-			"carried would be up to %s of this, or %s of the remainder.",
+			"carried would be up to %s, or %s of this remainder.",
 			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
 	}
-
-	// The preamble's residency stops at the first reset, because compaction
-	// can leave a prefix smaller than the first call's prompt and what the
-	// harness put back is not observable.
 	if beyond := float64(carry.Calls-1) - carry.PreambleRoundTrips; beyond > 0 {
 		ceiling := float64(carry.Preamble) * beyond * w.CacheRead
-		fmt.Fprintf(&b, " Carrying the preamble past the first context reset, which is "+
-			"not claimed because what survives a compaction is not observable, would be "+
+		fmt.Fprintf(&b, " Carrying the preamble past the first context reset would be "+
 			"up to a further %s, or %s.",
 			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
 	}
