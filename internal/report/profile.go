@@ -23,7 +23,6 @@ type Profile struct {
 	Usage         UsageReport     `json:"usage"`
 	Caching       CachingReport   `json:"caching"`
 	Retrieved     RetrievalTotals `json:"retrieved_content"`
-	ByCategory    []CategoryTotal `json:"retrieved_by_category"`
 	Tools         []ToolSummary   `json:"tools"`
 	Warnings      []model.Warning `json:"warnings,omitempty"`
 	Notes         []string        `json:"notes"`
@@ -130,10 +129,9 @@ func BuildProfile(s *model.Session) Profile {
 			TTL1h:             model.Obs(float64(u.CacheCreation1h), model.Tokens),
 			TTLBucket:         ttl,
 		},
-		Retrieved:  retrieval.Total,
-		ByCategory: retrieval.ByCategory,
-		Tools:      toolSummaries(s),
-		Warnings:   s.Warnings,
+		Retrieved: retrieval.Total,
+		Tools:     toolSummaries(s),
+		Warnings:  s.Warnings,
 		Notes: []string{
 			"prompt_volume is raw tokens moved; prompt_cost is what they cost. They are different quantities and must not be added.",
 			"EIT is an effective input-equivalent token: one full-price input token of the same model.",
@@ -232,13 +230,6 @@ func RenderText(w io.Writer, p Profile) error {
 	if p.Retrieved.Items.Value > 0 {
 		b.WriteString("Retrieved content (observed size of what entered context)\n")
 		fmt.Fprintf(b, "%-22s %14s   [%s]\n", "  Total", bytesStr(p.Retrieved.Bytes.Value), p.Retrieved.Bytes.Prov)
-		for i, c := range p.ByCategory {
-			if i >= 5 {
-				break
-			}
-			fmt.Fprintf(b, "  %-18s %12s %6.1f%%   [%s]\n", trunc(string(c.Category), 18),
-				bytesStr(c.Bytes.Value), c.Share.Value*100, c.Confidence)
-		}
 		if p.Retrieved.Redundant.Value > 0 {
 			fmt.Fprintf(b, "%-22s %14s   [%s]  (%.1f%% of retrieved bytes)\n", "  Retrieved again",
 				bytesStr(p.Retrieved.Redundant.Value), p.Retrieved.Redundant.Prov,

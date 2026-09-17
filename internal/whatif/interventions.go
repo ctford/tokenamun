@@ -268,10 +268,13 @@ func compressionEstimate(c Context, name, desc string, extraUnknown []string) Re
 		}
 		eligibleBytes += item.Bytes
 		eligibleItems++
-		switch item.Category {
-		case model.CatToolOutput, model.CatMCPOutput:
+		// Opaque output is anything with no file behind it: build logs,
+		// status, search results. Content is a file the agent went looking
+		// for. Whether a path could be attributed is the honest test, and it
+		// replaces a semantic category that was itself a guess.
+		if item.Path == "" {
 			opaqueBytes += item.Bytes
-		default:
+		} else {
 			contentBytes += item.Bytes
 		}
 	}
@@ -353,7 +356,7 @@ func (MCPToCLI) Estimate(c Context) Result {
 	var mcpCalls int
 	var mcpBytes int
 	for _, item := range c.Session.Retrievals {
-		if item.Category == model.CatMCPOutput {
+		if item.Channel == model.ChanMCP {
 			mcpCalls++
 			mcpBytes += item.Bytes
 		}

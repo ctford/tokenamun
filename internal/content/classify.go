@@ -1,68 +1,21 @@
-// Package content classifies retrieved content into categories.
+// Package content works out what a tool result was: which file it came from,
+// which command produced it, and how it arrived.
 //
-// There are two mechanisms, and the order matters. A Classifier built from
-// .tokenamun.json maps declared subtrees to categories, which is exact: the
-// team says where its decision records live. The ordered rules below are the
-// zero-configuration fallback -- a guess from directory naming, covering the
-// conventions that are common across codebases rather than any one
-// repository's layout. A declared answer is knowledge; a rule match is an
-// assumption, and reports distinguish them.
-//
-// Rules are first-match-wins, so a more specific rule must come before a more
-// general one: docs/adr/0001.md is an ADR, not documentation, and
-// internal/x_test.go is a test, not source.
+// It deliberately does not classify content into semantic categories such as
+// ADRs or specifications. That axis was removed: in practice a repository's
+// directory layout already carries it -- docs/decisions *is* the decision
+// records -- so nesting retrieved content by directory answers the same
+// question with no configuration and no guessing about someone else's
+// project. The one thing categories could do that directories cannot is
+// aggregate content scattered by convention, and on real sessions that was a
+// rounding error next to the cost of being wrong about a layout.
 package content
 
 import (
 	"path"
 	"regexp"
 	"strings"
-
-	"github.com/ctford/tokenamun/internal/model"
 )
-
-// Rule maps a path pattern to a category.
-type Rule struct {
-	Pattern  *regexp.Regexp
-	Category model.Category
-}
-
-// rules is the embedded default. Order matters.
-var rules = []Rule{
-	{regexp.MustCompile(`(^|/)adrs?/|architecture-decision|(^|/)adr-\d+|(^|/)\d{4}-.*-adr`), model.CatADR},
-	{regexp.MustCompile(`(^|/)docs?/(decisions?|decision-records?|rfcs?)(/|$)`), model.CatADR},
-	{regexp.MustCompile(`(^|/)(decisions?|decision-records?|rfcs?)/[^/]*\.(md|rst|adoc|txt)$`), model.CatADR},
-	{regexp.MustCompile(`(^|/)specs?/|\.spec\.[a-z]+$|(^|/)spec\.md$|(^|/)contracts?/|openapi|\.proto$`), model.CatSpecification},
-	{regexp.MustCompile(`(^|/)plans?/|-plan\.md$|(^|/)plan\.md$|(^|/)roadmap\.md$`), model.CatPlan},
-	{regexp.MustCompile(`_test\.go$|\.test\.[a-z]+$|\.spec\.ts$|_spec\.rb$|(^|/)tests?/|(^|/)spec/|(^|/)testdata/|^test_|/test_`), model.CatTest},
-	{regexp.MustCompile(`(^|/)claude\.md$|(^|/)agents\.md$|(^|/)\.claude/|(^|/)skills?/|(^|/)readme\.md$|(^|/)contributing\.md$|(^|/)methodology\.md$|(^|/)\.cursor/`), model.CatInstructions},
-	{regexp.MustCompile(`(^|/)docs?/|\.md$|\.rst$|\.adoc$|(^|/)wiki/`), model.CatDocumentation},
-	{regexp.MustCompile(`\.(go|ts|tsx|js|jsx|py|rb|rs|java|kt|scala|c|h|cc|cpp|hpp|cs|php|swift|m|mm|ex|exs|clj|sh|bash|zsh|sql|tf|yaml|yml|json|toml|proto)$`), model.CatSourceCode},
-}
-
-// Classify categorises a path. An empty or unrecognised path is not forced
-// into a category: callers decide what an unattributable payload is.
-func Classify(p string) (model.Category, bool) {
-	if p == "" {
-		return model.CatOther, false
-	}
-	lower := strings.ToLower(p)
-	for _, r := range rules {
-		if r.Pattern.MatchString(lower) {
-			return r.Category, true
-		}
-	}
-	return model.CatOther, false
-}
-
-// ClassifyTool categorises a result by the tool that produced it, used when no
-// path could be attributed.
-func ClassifyTool(tool string) model.Category {
-	if strings.HasPrefix(tool, "mcp__") {
-		return model.CatMCPOutput
-	}
-	return model.CatToolOutput
-}
 
 // readingCommands are shell commands whose output is substantially the content
 // of the files they name. A command not on this list is treated as tool output

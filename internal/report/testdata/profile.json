@@ -130,32 +130,6 @@
       "provenance": "derived"
     }
   },
-  "retrieved_by_category": [
-    {
-      "category": "tool output",
-      "items": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "bytes": {
-        "value": 10,
-        "unit": "bytes",
-        "provenance": "observed"
-      },
-      "tokens": {
-        "value": 2.7777777777777777,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "share_of_bytes": {
-        "value": 1,
-        "unit": "ratio",
-        "provenance": "derived"
-      },
-      "confidence": "observed"
-    }
-  ],
   "tools": [
     {
       "name": "Bash",

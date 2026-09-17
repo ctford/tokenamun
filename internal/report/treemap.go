@@ -50,6 +50,8 @@ type treemapTile struct {
 	Label      string `json:"label"`
 	Value      string `json:"value"`
 	Provenance string `json:"provenance"`
+	// Note explains a figure whose label cannot carry its own meaning.
+	Note string `json:"note,omitempty"`
 }
 
 // treemapWhatIf is one intervention's bottom line, for the summary table.
@@ -69,7 +71,6 @@ type treemapItem struct {
 	ID            int     `json:"id"`
 	Label         string  `json:"label"`
 	ShortLabel    string  `json:"shortLabel"`
-	Category      string  `json:"category"`
 	Tool          string  `json:"tool"`
 	Bytes         int     `json:"bytes"`
 	Tokens        float64 `json:"tokens"`
@@ -101,14 +102,28 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 	}
 
 	p.Tiles = []treemapTile{
-		{"Retrieved content", bytesStr(retrieval.Total.Bytes.Value), "observed"},
-		{"Estimated tokens", num(int(retrieval.Total.Tokens.Value)), "derived-approx"},
-		{"Prompt cost", num(int(carry.PromptCostEIT)), "derived, cost-weighted tokens"},
-		{"Retrieved again", bytesStr(retrieval.Total.Redundant.Value), "derived"},
+		{Label: "Prompt cost", Value: num(int(carry.PromptCostEIT)),
+			Provenance: "derived, cost-weighted tokens"},
+		{Label: "Content retrieved", Value: bytesStr(retrieval.Total.Bytes.Value),
+			Provenance: "observed",
+			Note:       "what tools returned into the context"},
+		{Label: "Fetched more than once", Value: bytesStr(retrieval.Total.Redundant.Value),
+			Provenance: "derived",
+			Note:       "byte-identical content the agent asked for again"},
 	}
 	if retrieval.Total.Withheld.Value > 0 {
 		p.Tiles = append(p.Tiles, treemapTile{
-			"Withheld by harness", bytesStr(retrieval.Total.Withheld.Value), "observed"})
+			Label: "Truncated by Claude Code", Value: bytesStr(retrieval.Total.Withheld.Value),
+			Provenance: "observed",
+			Note:       "output too large to send, spilled to a file instead — you were not billed for it",
+		})
+	}
+	if retrieval.Total.Images.Value > 0 {
+		p.Tiles = append(p.Tiles, treemapTile{
+			Label: "Images", Value: num(int(retrieval.Total.Images.Value)),
+			Provenance: "observed",
+			Note:       "priced by dimensions, so their tokens are not estimated here",
+		})
 	}
 
 	p.Interventions = interventionTable(s, carry)
@@ -128,7 +143,6 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 			ID:         c.Seq,
 			Label:      label,
 			ShortLabel: shortLabel(label),
-			Category:   string(c.Category),
 			Tool:       c.Tool,
 			Bytes:      c.Bytes,
 			Tokens:     c.Tokens,

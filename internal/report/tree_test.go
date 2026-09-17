@@ -31,17 +31,13 @@ func treeFixture() *model.Session {
 		ProseBytes:    1200,
 		Retrievals: []model.RetrievedContent{
 			{Seq: 0, ToolID: "t0", Tool: "Bash", Channel: model.ChanShell,
-				CommandClass: "cat / sed / head", CommandDetail: "cat", CommandBinary: "cat",
-				Category: model.CatADR, Path: "docs/decisions/a.md",
+				CommandClass: "cat / sed / head", CommandDetail: "cat", CommandBinary: "cat", Path: "docs/decisions/a.md",
 				Bytes: 4000, Tokens: 1000, InvocationSeq: 0},
 			{Seq: 1, ToolID: "t1", Tool: "Bash", Channel: model.ChanShell,
-				CommandClass: "git", CommandDetail: "git status", CommandBinary: "git",
-				Category: model.CatToolOutput, Bytes: 9000, Tokens: 2500, InvocationSeq: 1},
-			{Seq: 2, ToolID: "t2", Tool: "Read", Channel: model.ChanFileRead,
-				Category: model.CatSourceCode, Path: "internal/pay/charge.go",
+				CommandClass: "git", CommandDetail: "git status", CommandBinary: "git", Bytes: 9000, Tokens: 2500, InvocationSeq: 1},
+			{Seq: 2, ToolID: "t2", Tool: "Read", Channel: model.ChanFileRead, Path: "internal/pay/charge.go",
 				Bytes: 6000, Tokens: 1600, InvocationSeq: 2},
-			{Seq: 3, ToolID: "t3", Tool: "mcp__github__list_issues", Channel: model.ChanMCP,
-				Category: model.CatMCPOutput, Bytes: 2000, Tokens: 550, InvocationSeq: 3},
+			{Seq: 3, ToolID: "t3", Tool: "mcp__github__list_issues", Channel: model.ChanMCP, Bytes: 2000, Tokens: 550, InvocationSeq: 3},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true},
 	}
@@ -141,8 +137,7 @@ func TestDirectoryReadsAreLabelledAsDirectories(t *testing.T) {
 	s := treeFixture()
 	s.Retrievals = append(s.Retrievals, model.RetrievedContent{
 		Seq: 9, ToolID: "t9", Tool: "Bash", Channel: model.ChanShell,
-		CommandBinary: "cat", CommandDetail: "cat", Category: model.CatADR,
-		Path: "docs/decisions", Bytes: 3000, Tokens: 830, InvocationSeq: 0,
+		CommandBinary: "cat", CommandDetail: "cat", Path: "docs/decisions", Bytes: 3000, Tokens: 830, InvocationSeq: 0,
 	})
 	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
 	decisions := child(t, child(t, tree, "file content"), "docs/decisions")
@@ -256,16 +251,12 @@ func TestRepeatedLeavesMergeEvenBesideBranches(t *testing.T) {
 	// Three unattributed sed reads and two of the same file, at one level.
 	s.Retrievals = append(s.Retrievals,
 		model.RetrievedContent{Seq: 4, ToolID: "t4", Tool: "Bash", Channel: model.ChanShell,
-			CommandBinary: "sed", CommandDetail: "sed", Category: model.CatToolOutput,
-			Bytes: 1000, Tokens: 280, InvocationSeq: 0},
+			CommandBinary: "sed", CommandDetail: "sed", Bytes: 1000, Tokens: 280, InvocationSeq: 0},
 		model.RetrievedContent{Seq: 5, ToolID: "t5", Tool: "Bash", Channel: model.ChanShell,
-			CommandBinary: "sed", CommandDetail: "sed", Category: model.CatToolOutput,
-			Bytes: 2000, Tokens: 550, InvocationSeq: 1},
+			CommandBinary: "sed", CommandDetail: "sed", Bytes: 2000, Tokens: 550, InvocationSeq: 1},
 		model.RetrievedContent{Seq: 6, ToolID: "t6", Tool: "Bash", Channel: model.ChanShell,
-			CommandBinary: "sed", CommandDetail: "sed", Category: model.CatToolOutput,
-			Bytes: 3000, Tokens: 830, InvocationSeq: 2},
-		model.RetrievedContent{Seq: 7, ToolID: "t7", Tool: "Read", Channel: model.ChanFileRead,
-			Category: model.CatADR, Path: "docs/decisions/a.md",
+			CommandBinary: "sed", CommandDetail: "sed", Bytes: 3000, Tokens: 830, InvocationSeq: 2},
+		model.RetrievedContent{Seq: 7, ToolID: "t7", Tool: "Read", Channel: model.ChanFileRead, Path: "docs/decisions/a.md",
 			Bytes: 4000, Tokens: 1000, InvocationSeq: 2},
 	)
 	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))

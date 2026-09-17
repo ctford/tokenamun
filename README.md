@@ -89,6 +89,12 @@ every token that enters the context is re-sent on every subsequent API call. A
 treemap of retrieved content is a map of what was fetched, not of what was paid
 for. Tokenamun reports both, separately, and never adds them together.
 
+**There is no semantic classification of content.** An earlier version
+declared categories -- ADRs, specifications, plans -- per repository. It was
+removed: a directory layout already carries that, so retrieved content nests
+by directory instead, which needs no configuration and cannot be wrong about
+your project. See [`docs/plan.md`](docs/plan.md) for what that trades away.
+
 **Activity attribution is inferred.** "Planning" and "debugging" are not
 recorded anywhere. They are a classifier's opinion over tool-call patterns, and
 the classifier prefers `other` to a confident guess.

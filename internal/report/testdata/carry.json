@@ -54,7 +54,6 @@
     {
       "tool": "Read",
       "path": "internal/payment/charge.go",
-      "category": "source code",
       "tokens": {
         "value": 1194.3992401190255,
         "unit": "tokens",
@@ -80,7 +79,6 @@
     {
       "tool": "Bash",
       "path": "docs/adr/0003-retries.md",
-      "category": "adrs",
       "tokens": {
         "value": 663.5551333994587,
         "unit": "tokens",
@@ -105,7 +103,6 @@
     },
     {
       "tool": "Bash",
-      "category": "tool output",
       "tokens": {
         "value": 59.71996200595128,
         "unit": "tokens",
@@ -130,7 +127,6 @@
     },
     {
       "tool": "Bash",
-      "category": "tool output",
       "tokens": {
         "value": 59.71996200595128,
         "unit": "tokens",
@@ -155,7 +151,6 @@
     },
     {
       "tool": "Bash",
-      "category": "tool output",
       "tokens": {
         "value": 59.71996200595128,
         "unit": "tokens",
@@ -181,7 +176,6 @@
     {
       "tool": "Edit",
       "path": "internal/payment/charge.go",
-      "category": "source code",
       "tokens": {
         "value": 1.9906654001983761,
         "unit": "tokens",

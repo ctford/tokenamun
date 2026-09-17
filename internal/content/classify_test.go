@@ -1,66 +1,6 @@
 package content
 
-import (
-	"strings"
-	"testing"
-
-	"github.com/ctford/tokenamun/internal/model"
-)
-
-func TestClassifyPrecedence(t *testing.T) {
-	// Every case here exists because a more general rule would otherwise win.
-	cases := []struct {
-		path string
-		want model.Category
-	}{
-		{"docs/adr/0001-use-go.md", model.CatADR},
-		{"docs/adrs/ADR-0042.md", model.CatADR},
-		{"architecture-decisions/db.md", model.CatADR},
-		{"specs/booking.md", model.CatSpecification},
-		{"SPEC.md", model.CatSpecification},
-		{"contracts/openapi.yaml", model.CatSpecification},
-		{"docs/plans/journey-plan.md", model.CatPlan},
-		{"internal/ingest/ingest_test.go", model.CatTest},
-		{"test/fixtures/thing.go", model.CatTest},
-		{"src/app.test.ts", model.CatTest},
-		{"CLAUDE.md", model.CatInstructions},
-		{"AGENTS.md", model.CatInstructions},
-		{".claude/settings.json", model.CatInstructions},
-		{"README.md", model.CatInstructions},
-		{"docs/architecture.md", model.CatDocumentation},
-		{"notes.md", model.CatDocumentation},
-		{"internal/cost/cost.go", model.CatSourceCode},
-		{"src/payment.ts", model.CatSourceCode},
-		{"Makefile", model.CatOther},
-	}
-	for _, c := range cases {
-		got, _ := Classify(c.path)
-		if got != c.want {
-			t.Errorf("Classify(%q) = %q, want %q", c.path, got, c.want)
-		}
-	}
-}
-
-func TestClassifyReportsWhenItCouldNotAttribute(t *testing.T) {
-	if _, ok := Classify(""); ok {
-		t.Error("an empty path must not claim a confident classification")
-	}
-	if _, ok := Classify("Makefile"); ok {
-		t.Error("an unmatched path must report that it was not classified")
-	}
-	if _, ok := Classify("main.go"); !ok {
-		t.Error("a matched path must report success")
-	}
-}
-
-func TestMCPOutputIsCategorisedByTool(t *testing.T) {
-	if got := ClassifyTool("mcp__github__list_issues"); got != model.CatMCPOutput {
-		t.Errorf("got %q, want mcp output", got)
-	}
-	if got := ClassifyTool("Bash"); got != model.CatToolOutput {
-		t.Errorf("got %q, want tool output", got)
-	}
-}
+import "testing"
 
 func TestPathsFromReadingCommands(t *testing.T) {
 	cases := []struct {
@@ -100,43 +40,6 @@ func TestOnlyTheFirstPipelineStageIsTreatedAsTheSource(t *testing.T) {
 	got := PathsFromCommand("cat internal/model/session.go | grep -n Usage")
 	if len(got) != 1 || got[0] != "internal/model/session.go" {
 		t.Fatalf("got %v, want just the source file", got)
-	}
-}
-
-// Decision records are named differently in every codebase. Getting this wrong
-// reported "no architectural decisions were ever read" for a repository that
-// reads them constantly.
-func TestDecisionRecordsUnderAnyOfTheUsualNames(t *testing.T) {
-	cases := []string{
-		"docs/adr/0024-name-the-environments.md",
-		"docs/adrs/ADR-0042.md",
-		"docs/decisions/bafog-lunon--deploy-as-separate-services.md",
-		"docs/decisions/README.md",
-		"docs/decisions/rationale",
-		"docs/decision-records/0001-thing.md",
-		"docs/rfcs/0007-retry.md",
-		"decisions/0002-queue-choice.md",
-		"architecture-decisions/db.md",
-	}
-	for _, path := range cases {
-		if got, _ := Classify(path); got != model.CatADR {
-			t.Errorf("Classify(%q) = %q, want adrs", path, got)
-		}
-	}
-}
-
-func TestACodePackageCalledDecisionsIsNotArchitecture(t *testing.T) {
-	// This repository has both docs/decisions/ (records) and
-	// packages/decisions/ (code). Sweeping the latter in would inflate the
-	// ADR category with source.
-	for _, path := range []string{
-		"packages/decisions/index.ts",
-		"apps/decision-surface/main.go",
-		"infra/decision-surface/main.tf",
-	} {
-		if got, _ := Classify(path); got == model.CatADR {
-			t.Errorf("Classify(%q) = adrs; it is code", path)
-		}
 	}
 }
 
@@ -225,71 +128,6 @@ echo "=== b ===" && cat internal/pay/charge.go`,
 				break
 			}
 		}
-	}
-}
-
-func TestDeclaredSubtreesBeatNamingHeuristics(t *testing.T) {
-	cl, err := NewClassifier(Config{Categories: map[string][]string{
-		"adrs":         {"docs/decisions"},
-		"instructions": {".claude"},
-	}}, "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Declared: exact, and reported as declared.
-	cat, ok, declared := cl.Match("docs/decisions/bafog-lunon--deploy.md")
-	if !ok || cat != model.CatADR || !declared {
-		t.Errorf("declared subtree: got (%q, %v, %v)", cat, ok, declared)
-	}
-	// Absolute paths are the normal case in a transcript.
-	cat, ok, declared = cl.Match("/Users/x/repo/docs/decisions/a.md")
-	if !ok || cat != model.CatADR || !declared {
-		t.Errorf("absolute path: got (%q, %v, %v)", cat, ok, declared)
-	}
-	// A declaration wins over the heuristic that would have said `plans`.
-	cat, _, declared = cl.Match("/Users/x/.claude/plans/thing.md")
-	if cat != model.CatInstructions || !declared {
-		t.Errorf("declaration should beat the heuristic, got (%q, declared=%v)", cat, declared)
-	}
-	// Undeclared paths still fall back, and say they were not declared.
-	cat, ok, declared = cl.Match("internal/pay/charge.go")
-	if !ok || cat != model.CatSourceCode || declared {
-		t.Errorf("fallback: got (%q, %v, %v)", cat, ok, declared)
-	}
-}
-
-func TestSubtreeMatchingRespectsSegmentBoundaries(t *testing.T) {
-	cl, _ := NewClassifier(Config{Categories: map[string][]string{
-		"adrs": {"docs/decisions"},
-	}}, "test")
-	if cat, _, _ := cl.Match("docs/decisions-archive/old.md"); cat == model.CatADR {
-		t.Error("docs/decisions must not match docs/decisions-archive")
-	}
-}
-
-func TestLongestDeclaredSubtreeWins(t *testing.T) {
-	cl, _ := NewClassifier(Config{Categories: map[string][]string{
-		"documentation": {"docs"},
-		"adrs":          {"docs/decisions"},
-	}}, "test")
-	if cat, _, _ := cl.Match("docs/decisions/a.md"); cat != model.CatADR {
-		t.Errorf("the more specific subtree should win, got %q", cat)
-	}
-	if cat, _, _ := cl.Match("docs/guide.md"); cat != model.CatDocumentation {
-		t.Errorf("got %q, want documentation", cat)
-	}
-}
-
-func TestUnknownCategoryInConfigIsRejected(t *testing.T) {
-	_, err := NewClassifier(Config{Categories: map[string][]string{
-		"archtecture": {"docs/decisions"},
-	}}, "test")
-	if err == nil {
-		t.Fatal("a misspelled category should be an error, not silently ignored")
-	}
-	if !strings.Contains(err.Error(), "adrs") {
-		t.Errorf("the error should list valid categories, got %q", err)
 	}
 }
 

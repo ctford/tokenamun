@@ -69,7 +69,7 @@ func TestEveryCommandEmitsAVersionedContract(t *testing.T) {
 	wantKeys := map[string][]string{
 		"sessions":  {"sessions"},
 		"profile":   {"session", "usage", "caching", "retrieved_content", "notes"},
-		"retrieval": {"session", "total", "by_category", "token_estimator", "notes"},
+		"retrieval": {"session", "total", "largest", "token_estimator", "notes"},
 		"carry":     {"session", "context", "preamble", "items", "notes"},
 		"cache":     {"session", "observed_ttl", "by_cause", "ttl_expiry", "notes"},
 	}

@@ -43,9 +43,9 @@ func TestEveryInterventionDeclaresWhatItCannotKnow(t *testing.T) {
 			inv(2, 30*time.Minute, 1, 300, 32_000),
 		},
 		Retrievals: []model.RetrievedContent{
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 5000, Tokens: 1400, InvocationSeq: 0},
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 5000, Tokens: 1400, InvocationSeq: 1, Hash: "dup"},
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 5000, Tokens: 1400, InvocationSeq: 2, Hash: "dup"},
+			{Tool: "Bash", Bytes: 5000, Tokens: 1400, InvocationSeq: 0},
+			{Tool: "Bash", Bytes: 5000, Tokens: 1400, InvocationSeq: 1, Hash: "dup"},
+			{Tool: "Bash", Bytes: 5000, Tokens: 1400, InvocationSeq: 2, Hash: "dup"},
 		},
 		Repeats: []model.Repeat{{
 			Hash: "dup", Tool: "Bash", Count: 2, Bytes: 5000, WasteByte: 5000,
@@ -83,7 +83,7 @@ func TestCounterfactualFindingsAreLabelledCounterfactual(t *testing.T) {
 			inv(1, 40*time.Minute, 1, 200, 25_000),
 		},
 		Retrievals: []model.RetrievedContent{
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 9000, Tokens: 2500, InvocationSeq: 0},
+			{Tool: "Bash", Bytes: 9000, Tokens: 2500, InvocationSeq: 0},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true},
 	}
@@ -167,8 +167,8 @@ func TestReductionNeverExceedsTheObservedEligibleVolume(t *testing.T) {
 	s := &model.Session{
 		Invocations: []model.ModelInvocation{inv(0, 0, 1, 0, 20_000), inv(1, time.Minute, 1, 20_000, 500)},
 		Retrievals: []model.RetrievedContent{
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 8000, Tokens: 2200, InvocationSeq: 0},
-			{Tool: "Read", Category: model.CatSourceCode, Bytes: 4000, Tokens: 1100, InvocationSeq: 1},
+			{Tool: "Bash", Bytes: 8000, Tokens: 2200, InvocationSeq: 0},
+			{Tool: "Read", Bytes: 4000, Tokens: 1100, InvocationSeq: 1},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true},
 	}
@@ -206,10 +206,10 @@ func TestShellDeliveredFileContentIsEligible(t *testing.T) {
 		Retrievals: []model.RetrievedContent{
 			// A decision record read through the shell: classified as an ADR,
 			// still delivered by Bash.
-			{Tool: "Bash", Category: model.CatADR, Path: "docs/decisions/a.md",
+			{Tool: "Bash", Path: "docs/decisions/a.md",
 				Bytes: 5000, Tokens: 1400, InvocationSeq: 0},
 			// The same content read directly: a different channel.
-			{Tool: "Read", Category: model.CatADR, Path: "docs/decisions/b.md",
+			{Tool: "Read", Path: "docs/decisions/b.md",
 				Bytes: 5000, Tokens: 1400, InvocationSeq: 1},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true},
@@ -238,7 +238,7 @@ func TestCompressionStatesItsAssumedRatio(t *testing.T) {
 	s := &model.Session{
 		Invocations: []model.ModelInvocation{inv(0, 0, 1, 0, 10_000)},
 		Retrievals: []model.RetrievedContent{
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 5000, Tokens: 1400},
+			{Tool: "Bash", Bytes: 5000, Tokens: 1400},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6},
 	}
@@ -266,7 +266,7 @@ func TestReplayedMeasurementReplacesTheAssumedRatio(t *testing.T) {
 	s := &model.Session{
 		Invocations: []model.ModelInvocation{inv(0, 0, 1, 0, 10_000)},
 		Retrievals: []model.RetrievedContent{
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 10_000, Tokens: 2800},
+			{Tool: "Bash", Bytes: 10_000, Tokens: 2800},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6},
 	}
@@ -292,7 +292,7 @@ func TestCavemanCitesTheGapBetweenClaimAndIndependentMeasurement(t *testing.T) {
 	s := &model.Session{
 		Invocations: []model.ModelInvocation{inv(0, 0, 1, 0, 10_000)},
 		Retrievals: []model.RetrievedContent{
-			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 5000, Tokens: 1400},
+			{Tool: "Bash", Bytes: 5000, Tokens: 1400},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6},
 	}
@@ -337,8 +337,8 @@ func TestRepeatedRetrievalJoinsCarryForPathlessContent(t *testing.T) {
 			inv(3, 3*time.Minute, 1, 21_600, 800),
 		},
 		Retrievals: []model.RetrievedContent{
-			{Seq: 0, Tool: "Bash", Category: model.CatToolOutput, Bytes: 4000, Tokens: 1100, InvocationSeq: 0, Hash: "dup"},
-			{Seq: 1, Tool: "Bash", Category: model.CatToolOutput, Bytes: 4000, Tokens: 1100, InvocationSeq: 2, Hash: "dup"},
+			{Seq: 0, Tool: "Bash", Bytes: 4000, Tokens: 1100, InvocationSeq: 0, Hash: "dup"},
+			{Seq: 1, Tool: "Bash", Bytes: 4000, Tokens: 1100, InvocationSeq: 2, Hash: "dup"},
 		},
 		Repeats: []model.Repeat{{
 			Hash: "dup", Tool: "Bash", Count: 2, Bytes: 4000, WasteByte: 4000,
@@ -380,7 +380,7 @@ func TestRepeatedRetrievalIsNotApplicableWithoutRepeats(t *testing.T) {
 	s := &model.Session{
 		Invocations: []model.ModelInvocation{inv(0, 0, 1, 0, 10_000)},
 		Retrievals: []model.RetrievedContent{
-			{Tool: "Read", Path: "a.go", Category: model.CatSourceCode, Bytes: 500, Tokens: 140},
+			{Tool: "Read", Path: "a.go", Bytes: 500, Tokens: 140},
 		},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.6},
 	}

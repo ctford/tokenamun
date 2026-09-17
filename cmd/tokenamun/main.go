@@ -16,7 +16,6 @@ import (
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/claudecode"
 	"github.com/ctford/tokenamun/internal/codescan"
-	"github.com/ctford/tokenamun/internal/content"
 	"github.com/ctford/tokenamun/internal/cost"
 	"github.com/ctford/tokenamun/internal/entire"
 	"github.com/ctford/tokenamun/internal/ingest"
@@ -69,9 +68,6 @@ Flags:
   --cost N        measured intervention cost in EIT, for series payback
   --scan PATH     tree to scan for code metrics (hotspots; default --dir).
                   Point this at a checkout of the branch the session ran on.
-  --config PATH   classification config. Defaults to .tokenamun.json found by
-                  walking up from --dir; without one, directory-naming
-                  heuristics are used and reports say so.
 `
 
 func main() {
@@ -97,7 +93,6 @@ func run(args []string) error {
 	out := fs.String("o", "tokenamun-treemap.html", "output file for the treemap")
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
-	configPath := fs.String("config", "", "classification config (default: .tokenamun.json, found upwards)")
 	title := fs.String("title", "", "heading for the treemap report")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
@@ -120,13 +115,13 @@ func run(args []string) error {
 	case "sessions":
 		return cmdSessions(*dir, *source, *asJSON)
 	case "profile":
-		return cmdProfile(*dir, *source, selector, *configPath, *asJSON)
+		return cmdProfile(*dir, *source, selector, *asJSON)
 	case "retrieval":
-		return cmdRetrieval(*dir, *source, selector, *configPath, *asJSON)
+		return cmdRetrieval(*dir, *source, selector, *asJSON)
 	case "carry":
-		return cmdCarry(*dir, *source, selector, *configPath, *asJSON)
+		return cmdCarry(*dir, *source, selector, *asJSON)
 	case "cache":
-		return cmdCache(*dir, *source, selector, *configPath, *asJSON)
+		return cmdCache(*dir, *source, selector, *asJSON)
 	case "scan":
 		return cmdScan(*dir, selector, *asJSON)
 	case "hotspots":
@@ -136,7 +131,7 @@ func run(args []string) error {
 	case "series":
 		return cmdSeries(positional, *interventionCost, *asJSON)
 	case "treemap":
-		return cmdTreemap(*dir, *source, selector, *configPath, *title, *out)
+		return cmdTreemap(*dir, *source, selector, *title, *out)
 	case "what-if", "whatif":
 		return cmdWhatIf(*dir, *source, selector, second, *ratio, *replayWith, *asJSON)
 	case "version":
@@ -227,8 +222,8 @@ func cmdSessions(dir, source string, asJSON bool) error {
 	return nil
 }
 
-func cmdProfile(dir, source, selector, configPath string, asJSON bool) error {
-	s, err := loadSelectedWith(dir, source, selector, configPath)
+func cmdProfile(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
@@ -239,8 +234,8 @@ func cmdProfile(dir, source, selector, configPath string, asJSON bool) error {
 	return report.RenderText(os.Stdout, p)
 }
 
-func cmdRetrieval(dir, source, selector, configPath string, asJSON bool) error {
-	s, err := loadSelectedWith(dir, source, selector, configPath)
+func cmdRetrieval(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
@@ -251,8 +246,8 @@ func cmdRetrieval(dir, source, selector, configPath string, asJSON bool) error {
 	return report.RenderRetrieval(os.Stdout, r)
 }
 
-func cmdCarry(dir, source, selector, configPath string, asJSON bool) error {
-	s, err := loadSelectedWith(dir, source, selector, configPath)
+func cmdCarry(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
@@ -263,8 +258,8 @@ func cmdCarry(dir, source, selector, configPath string, asJSON bool) error {
 	return report.RenderCarry(os.Stdout, r)
 }
 
-func cmdCache(dir, source, selector, configPath string, asJSON bool) error {
-	s, err := loadSelectedWith(dir, source, selector, configPath)
+func cmdCache(dir, source, selector string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
@@ -339,8 +334,8 @@ func cmdSeries(files []string, interventionCost float64, asJSON bool) error {
 	return report.RenderSeries(os.Stdout, out)
 }
 
-func cmdTreemap(dir, source, selector, configPath, title, outPath string) error {
-	s, err := loadSelectedWith(dir, source, selector, configPath)
+func cmdTreemap(dir, source, selector, title, outPath string) error {
+	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
@@ -356,7 +351,7 @@ func cmdTreemap(dir, source, selector, configPath, title, outPath string) error 
 		return err
 	}
 	fmt.Printf("wrote %s (%d retrievals)\n", outPath, len(payload.Items))
-	fmt.Println("Area is observed retrieved-content size, not a picture of the context window.")
+	fmt.Println("Area is cost-weighted tokens. It is not a picture of the context window.")
 	return nil
 }
 
@@ -439,12 +434,6 @@ func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith str
 
 // loadSelected resolves a selector and parses the transcript it names.
 func loadSelected(dir, source, selector string) (*model.Session, error) {
-	return loadSelectedWith(dir, source, selector, "")
-}
-
-// loadSelectedWith parses a transcript using a declared classification config
-// where one is available.
-func loadSelectedWith(dir, source, selector, configPath string) (*model.Session, error) {
 	refs, err := discover(dir, source)
 	if err != nil {
 		return nil, err
@@ -453,21 +442,7 @@ func loadSelectedWith(dir, source, selector, configPath string) (*model.Session,
 	if err != nil {
 		return nil, err
 	}
-	classifier, err := classifierFor(dir, configPath)
-	if err != nil {
-		return nil, err
-	}
-	return ingest.LoadWith(ref, ingest.Options{Classifier: classifier})
-}
-
-// classifierFor resolves the classification config: an explicit path if given,
-// otherwise .tokenamun.json found by walking up from dir, otherwise the
-// built-in naming heuristics.
-func classifierFor(dir, configPath string) (content.Classifier, error) {
-	if configPath != "" {
-		return content.LoadConfigFile(configPath)
-	}
-	return content.LoadConfig(dir)
+	return ingest.Load(ref)
 }
 
 // selectSession resolves a selector against the discovered sessions.

@@ -41,7 +41,6 @@ type PreambleReport struct {
 type CarryItem struct {
 	Tool        string         `json:"tool"`
 	Path        string         `json:"path,omitempty"`
-	Category    model.Category `json:"category"`
 	Tokens      model.Quantity `json:"tokens"`
 	EnteredAt   int            `json:"entered_at_call"`
 	ResidentFor model.Quantity `json:"resident_for_calls"`
@@ -82,7 +81,7 @@ func BuildCarry(s *model.Session, c analysis.CarryReport) Carry {
 			break
 		}
 		r.Items = append(r.Items, CarryItem{
-			Tool: it.Tool, Path: it.Path, Category: it.Category,
+			Tool: it.Tool, Path: it.Path,
 			Tokens:      model.Quantity{Value: it.Tokens, Unit: model.Tokens, Prov: model.DerivedApprox},
 			EnteredAt:   it.EnteredAt,
 			ResidentFor: model.Obs(float64(it.ResidentFor), model.Calls),

@@ -28,7 +28,6 @@ Caching
 
 Retrieved content (observed size of what entered context)
   Total                          10 B   [observed]
-  tool output                10 B  100.0%   [observed]
 
 Tool results by tool
   Bash                         10 B         1 calls

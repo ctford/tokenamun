@@ -55,18 +55,12 @@ func TestPartialReadIsCountedAsPartial(t *testing.T) {
 	if r.StartLine != 10 || r.Lines != 20 || r.TotalLines != 500 {
 		t.Errorf("line range wrong: %+v", r)
 	}
-	if r.Category != model.CatSourceCode {
-		t.Errorf("category = %q, want source code", r.Category)
-	}
-	if r.CategoryProv != model.Derived {
-		t.Errorf("a path reported by the tool is observed, so classification is derived; got %q", r.CategoryProv)
+	if r.PathProv != model.Derived {
+		t.Errorf("a path reported by the tool is observed, so attribution is derived; got %q", r.PathProv)
 	}
 	full := find(t, s, "t7")
 	if full.Partial {
 		t.Error("a read of all 140 of 140 lines is not partial")
-	}
-	if full.Category != model.CatTest {
-		t.Errorf("category = %q, want tests", full.Category)
 	}
 }
 
@@ -79,29 +73,8 @@ func TestShellReadsAreAttributedButLabelledInferred(t *testing.T) {
 	if adr.Path != "docs/adr/0007-retry-policy.md" {
 		t.Errorf("path = %q, want the file named in the command", adr.Path)
 	}
-	if adr.Category != model.CatADR {
-		t.Errorf("category = %q, want adrs", adr.Category)
-	}
-	if adr.CategoryProv != model.Inferred {
-		t.Errorf("a path parsed from a command line is inferred, got %q", adr.CategoryProv)
-	}
-}
-
-func TestUnattributableOutputIsNotGivenASpeculativeCategory(t *testing.T) {
-	s := retrievalFixture(t)
-	spilled := find(t, s, "t2")
-	if spilled.Category != model.CatToolOutput {
-		t.Errorf("`go test` output is tool output, not a file category; got %q", spilled.Category)
-	}
-	if spilled.Path != "" {
-		t.Errorf("no path should be claimed, got %q", spilled.Path)
-	}
-}
-
-func TestMCPResultsAreCategorisedSeparately(t *testing.T) {
-	s := retrievalFixture(t)
-	if got := find(t, s, "t4").Category; got != model.CatMCPOutput {
-		t.Errorf("category = %q, want mcp output", got)
+	if adr.PathProv != model.Inferred {
+		t.Errorf("a path parsed from a command line is inferred, got %q", adr.PathProv)
 	}
 }
 

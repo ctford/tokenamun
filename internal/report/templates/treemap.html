@@ -154,9 +154,8 @@
 
   <div class="controls">
     <span class="muted">Rectangle area:</span>
-    <button id="mode-carry" aria-pressed="true">Token cost, as billed</button>
-    <button id="mode-uncached" aria-pressed="false">Token cost, if nothing cached</button>
-    <button id="mode-tokens" aria-pressed="false">Volume entering context</button>
+    <button id="mode-carry" aria-pressed="true">Token cost (cache-aware)</button>
+    <button id="mode-uncached" aria-pressed="false">Token cost (no caching)</button>
     <span style="flex:1"></span>
     <button id="toggle-table" aria-pressed="false">Table view</button>
     <button id="toggle-theme">Dark / light</button>
@@ -240,6 +239,7 @@ document.getElementById("tiles").innerHTML = DATA.tiles.map(t => `
     <div class="label">${t.label}</div>
     <div class="value">${t.value}</div>
     <div class="prov">${t.provenance}</div>
+    ${t.note ? `<div class="prov" style="margin-top:4px;max-width:20ch">${esc(t.note)}</div>` : ""}
   </div>`).join("");
 
 /* Category bars: single hue, magnitude only, with the values shown. */
@@ -333,9 +333,7 @@ function nodeAt(p) {
 }
 
 function value(n) {
-  if (mode === "tokens") return n.tokens || 0;
-  if (mode === "uncached") return n.carryUncached || 0;
-  return n.carry || 0;
+  return (mode === "uncached" ? n.carryUncached : n.carry) || 0;
 }
 
 /* What prompt caching was worth on a node: the same content, the same number
@@ -494,11 +492,10 @@ function render() {
   svg.innerHTML = parts.join("");
   renderCrumbs();
 
-  const unit = mode === "tokens" ? "estimated tokens" : "cost-weighted tokens";
+  const unit = "cost-weighted tokens";
   const titles = {
     carry: "Area = cost-weighted tokens as billed: cache reads at a tenth of input price, rebuilt prefixes at the write rate",
     uncached: "Area = cost-weighted tokens with no caching: the same content re-sent the same number of times, at full input price",
-    tokens: "Area = volume entering the context: what was fetched, once",
   };
   document.getElementById("tm-title").textContent = titles[mode];
 
@@ -508,10 +505,7 @@ function render() {
     `— ${lightEnd} is bulky but cheap to keep; ${heavyEnd} was carried for many calls`;
 
   let scope;
-  if (mode === "tokens") {
-    scope = "Volume is not cost: content is priced once and carried on every later call, so this "
-      + "view covers only retrieved content and its percentages are shares of that, not of the bill.";
-  } else if (mode === "uncached") {
+  if (mode === "uncached") {
     scope = `Prompt caching saved ${pct(100 * cacheSaving(nodeAt([])))} of this session overall. `
       + "Compare with 'as billed' to see what caching is worth on any rectangle.";
   } else {
@@ -645,7 +639,6 @@ addEventListener("keydown", e => {
 const modeButtons = {
   carry: document.getElementById("mode-carry"),
   uncached: document.getElementById("mode-uncached"),
-  tokens: document.getElementById("mode-tokens"),
 };
 for (const [name, button] of Object.entries(modeButtons)) {
   button.onclick = () => {

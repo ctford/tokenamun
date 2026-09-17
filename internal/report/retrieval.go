@@ -15,7 +15,6 @@ type Retrieval struct {
 	Session       SessionInfo          `json:"session"`
 	Estimator     model.TokenEstimator `json:"token_estimator"`
 	Total         RetrievalTotals      `json:"total"`
-	ByCategory    []CategoryTotal      `json:"by_category"`
 	Largest       []Item               `json:"largest"`
 	Repeated      []RepeatItem         `json:"repeated_retrieval"`
 	Warnings      []model.Warning      `json:"warnings,omitempty"`
@@ -36,34 +35,20 @@ type RetrievalTotals struct {
 	RedundantShare model.Quantity `json:"redundant_share"`
 }
 
-// CategoryTotal is one row of the category breakdown.
-type CategoryTotal struct {
-	Category model.Category `json:"category"`
-	Items    model.Quantity `json:"items"`
-	Bytes    model.Quantity `json:"bytes"`
-	Tokens   model.Quantity `json:"tokens"`
-	Share    model.Quantity `json:"share_of_bytes"`
-	// Confidence is the weakest provenance contributing to this row: a
-	// category built from shell-command guesses is inferred, not derived.
-	Confidence model.Provenance `json:"confidence"`
-}
-
 // Item is a single retrieval.
 type Item struct {
-	Tool     string         `json:"tool"`
-	Path     string         `json:"path,omitempty"`
-	Category model.Category `json:"category"`
-	Bytes    model.Quantity `json:"bytes"`
-	Tokens   model.Quantity `json:"tokens"`
-	Range    string         `json:"range,omitempty"`
-	Call     int            `json:"invocation_seq"`
+	Tool   string         `json:"tool"`
+	Path   string         `json:"path,omitempty"`
+	Bytes  model.Quantity `json:"bytes"`
+	Tokens model.Quantity `json:"tokens"`
+	Range  string         `json:"range,omitempty"`
+	Call   int            `json:"invocation_seq"`
 }
 
 // RepeatItem is content retrieved more than once.
 type RepeatItem struct {
 	Path      string         `json:"path,omitempty"`
 	Tool      string         `json:"tool"`
-	Category  model.Category `json:"category"`
 	Count     model.Quantity `json:"retrievals"`
 	Bytes     model.Quantity `json:"bytes_each"`
 	Redundant model.Quantity `json:"redundant_bytes"`
@@ -87,13 +72,6 @@ func BuildRetrieval(s *model.Session) Retrieval {
 	}
 
 	var totalBytes, totalTokens, withheld, redundant, images, imageBytes int
-	type agg struct {
-		items  int
-		bytes  int
-		tokens float64
-		prov   model.Provenance
-	}
-	byCat := map[model.Category]*agg{}
 	var observedBytes int
 	for _, c := range s.Retrievals {
 		observedBytes += c.ObservedBytes()
@@ -102,22 +80,13 @@ func BuildRetrieval(s *model.Session) Retrieval {
 		withheld += c.WithheldBytes
 		images += c.Images
 		imageBytes += c.ImageBytes
-		a, ok := byCat[c.Category]
-		if !ok {
-			a = &agg{prov: c.CategoryProv}
-			byCat[c.Category] = a
-		}
-		a.items++
-		a.bytes += c.Bytes
-		a.tokens += c.Tokens
-		a.prov = weakest(a.prov, c.CategoryProv)
 	}
 	for _, rep := range s.Repeats {
 		redundant += rep.WasteByte
 	}
 
 	// The denominator is everything observed, including image payload, so the
-	// share is not inflated by excluding the images from the bottom only.
+	// share is not inflated by excluding images from the bottom only.
 	share := 0.0
 	if observedBytes > 0 {
 		share = float64(redundant) / float64(observedBytes)
@@ -125,35 +94,13 @@ func BuildRetrieval(s *model.Session) Retrieval {
 	r.Total = RetrievalTotals{
 		Items:          model.Obs(float64(len(s.Retrievals)), model.Calls),
 		Bytes:          model.Obs(float64(totalBytes), model.Bytes),
-		Tokens:         model.Quantity{Value: float64(totalTokens), Unit: model.Tokens, Prov: estimatorProv(s)},
+		Tokens:         model.Quantity{Value: float64(totalTokens), Unit: model.Tokens, Prov: model.DerivedApprox},
 		Withheld:       model.Obs(float64(withheld), model.Bytes),
 		Images:         model.Obs(float64(images), model.Calls),
 		ImageBytes:     model.Obs(float64(imageBytes), model.Bytes),
 		Redundant:      model.Der(float64(redundant), model.Bytes),
 		RedundantShare: model.Der(share, model.Ratio),
 	}
-
-	for _, cat := range model.Categories() {
-		a, ok := byCat[cat]
-		if !ok {
-			continue
-		}
-		catShare := 0.0
-		if totalBytes > 0 {
-			catShare = float64(a.bytes) / float64(totalBytes)
-		}
-		r.ByCategory = append(r.ByCategory, CategoryTotal{
-			Category:   cat,
-			Items:      model.Obs(float64(a.items), model.Calls),
-			Bytes:      model.Obs(float64(a.bytes), model.Bytes),
-			Tokens:     model.Quantity{Value: a.tokens, Unit: model.Tokens, Prov: estimatorProv(s)},
-			Share:      model.Der(catShare, model.Ratio),
-			Confidence: a.prov,
-		})
-	}
-	sort.SliceStable(r.ByCategory, func(i, j int) bool {
-		return r.ByCategory[i].Bytes.Value > r.ByCategory[j].Bytes.Value
-	})
 
 	ranked := make([]model.RetrievedContent, len(s.Retrievals))
 	copy(ranked, s.Retrievals)
@@ -163,7 +110,7 @@ func BuildRetrieval(s *model.Session) Retrieval {
 			break
 		}
 		r.Largest = append(r.Largest, Item{
-			Tool: c.Tool, Path: c.Path, Category: c.Category,
+			Tool: c.Tool, Path: c.Path,
 			Bytes:  model.Obs(float64(c.Bytes), model.Bytes),
 			Tokens: model.Quantity{Value: c.Tokens, Unit: model.Tokens, Prov: c.TokensProv},
 			Range:  rangeOf(c),
@@ -176,7 +123,7 @@ func BuildRetrieval(s *model.Session) Retrieval {
 			break
 		}
 		r.Repeated = append(r.Repeated, RepeatItem{
-			Path: rep.Path, Tool: rep.Tool, Category: rep.Category,
+			Path: rep.Path, Tool: rep.Tool,
 			Count:     model.Obs(float64(rep.Count), model.Calls),
 			Bytes:     model.Obs(float64(rep.Bytes), model.Bytes),
 			Redundant: model.Der(float64(rep.WasteByte), model.Bytes),
@@ -239,16 +186,6 @@ func RenderRetrieval(w io.Writer, r Retrieval) error {
 			bytesStr(r.Total.ImageBytes.Value))
 	}
 	b.WriteString("\n")
-
-	if len(r.ByCategory) > 0 {
-		b.WriteString("By category\n")
-		for _, c := range r.ByCategory {
-			fmt.Fprintf(b, "  %-18s %12s %6.1f%%  %4s items   [%s]\n",
-				trunc(string(c.Category), 18), bytesStr(c.Bytes.Value),
-				c.Share.Value*100, num(int(c.Items.Value)), c.Confidence)
-		}
-		b.WriteString("\n")
-	}
 
 	if len(r.Largest) > 0 {
 		b.WriteString("Largest retrievals\n")

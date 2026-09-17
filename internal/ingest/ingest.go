@@ -26,12 +26,9 @@ import (
 // result. Lines above it are reported rather than silently truncated.
 const maxLine = 64 << 20
 
-// Options configures ingestion.
-type Options struct {
-	// Classifier decides what retrieved content is. The zero value uses the
-	// built-in naming heuristics.
-	Classifier content.Classifier
-}
+// Options configures ingestion. Retained as an extension point; there is
+// nothing to configure at present.
+type Options struct{}
 
 // Load parses the transcript a ref points at, using the built-in classifier.
 func Load(ref model.SessionRef) (*model.Session, error) {
@@ -61,10 +58,6 @@ func Parse(r io.Reader, ref model.SessionRef) (*model.Session, error) {
 // cost the whole profile -- but it is counted.
 func ParseWith(r io.Reader, ref model.SessionRef, opts Options) (*model.Session, error) {
 	s := &model.Session{Ref: ref}
-	s.ClassifierSource = opts.Classifier.Source
-	if s.ClassifierSource == "" {
-		s.ClassifierSource = "built-in heuristics"
-	}
 
 	byRequest := map[string]int{} // request id -> index into s.Invocations
 	toolIndex := map[string]int{} // tool_use id -> index into s.ToolCalls
@@ -86,7 +79,7 @@ func ParseWith(r io.Reader, ref model.SessionRef, opts Options) (*model.Session,
 			continue
 		}
 		lastLineBad = false
-		absorb(s, e, opts.Classifier, byRequest, toolIndex)
+		absorb(s, e, byRequest, toolIndex)
 	}
 	if err := sc.Err(); err != nil && !errors.Is(err, bufio.ErrTooLong) {
 		return nil, err
@@ -110,7 +103,7 @@ func ParseWith(r io.Reader, ref model.SessionRef, opts Options) (*model.Session,
 }
 
 // absorb folds one transcript entry into the session.
-func absorb(s *model.Session, e claudecode.Entry, cl content.Classifier, byRequest, toolIndex map[string]int) {
+func absorb(s *model.Session, e claudecode.Entry, byRequest, toolIndex map[string]int) {
 	if e.CWD != "" && s.CWD == "" {
 		s.CWD = e.CWD
 	}
@@ -129,7 +122,7 @@ func absorb(s *model.Session, e claudecode.Entry, cl content.Classifier, byReque
 		if results := e.Message.ToolResults(); len(results) > 0 {
 			meta := claudecode.ParseResultMeta(e.ToolUseResult)
 			for _, b := range results {
-				absorbResult(s, b, meta, cl, toolIndex)
+				absorbResult(s, b, meta, toolIndex)
 			}
 			return
 		}
@@ -216,7 +209,7 @@ func absorbAssistant(s *model.Session, e claudecode.Entry, byRequest, toolIndex 
 // same thing: on real sessions it disagrees by more than an order of
 // magnitude, because large output is spilled to a file and the model is shown
 // only an excerpt. It is used here for path, line range and truncation only.
-func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMeta, cl content.Classifier, toolIndex map[string]int) {
+func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMeta, toolIndex map[string]int) {
 	bytesIn := b.Content.Len()
 	images, imageBytes := b.Content.Images()
 
@@ -243,21 +236,18 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 	if bytesIn == 0 && images == 0 {
 		return
 	}
-	cat, prov, path, declared, paths := categorise(cl, tc.Name, tc.Command, meta)
+	filePath, prov := attributePath(tc.Command, meta)
 	s.Retrievals = append(s.Retrievals, model.RetrievedContent{
 		Seq:            len(s.Retrievals),
 		ToolID:         tc.ID,
 		Tool:           tc.Name,
-		Category:       cat,
 		Channel:        content.ChannelFor(tc.Name, meta.Path != ""),
 		CommandClass:   content.CommandClass(tc.Command),
 		CommandDetail:  content.CommandDetail(tc.Command),
 		CommandBinary:  content.CommandBinary(tc.Command),
 		PipelineFilter: content.IsPipelineFilter(tc.Command),
-		CategoryProv:   prov,
-		Declared:       declared,
-		Path:           path,
-		Paths:          paths,
+		PathProv:       prov,
+		Path:           filePath,
 		Bytes:          bytesIn,
 		Images:         images,
 		ImageBytes:     imageBytes,
@@ -279,46 +269,22 @@ func absorbResult(s *model.Session, b claudecode.Block, meta claudecode.ResultMe
 // A path parsed out of a shell command line is a guess, so it is inferred.
 // Output that cannot be attributed to a path is tool output rather than a
 // speculative category.
-func categorise(cl content.Classifier, tool, command string, meta claudecode.ResultMeta) (
-	cat model.Category, prov model.Provenance, path string, declared bool, paths []string) {
+// attributePath works out which file a payload came from.
+//
+// A path the tool reported is observed, so using it is derived. A path parsed
+// out of a shell command line is a guess about what the command read, so it
+// is inferred. Content with no attributable path keeps none rather than being
+// assigned one.
+func attributePath(command string, meta claudecode.ResultMeta) (string, model.Provenance) {
 	if meta.Path != "" {
-		c, ok, dec := cl.Match(meta.Path)
-		if ok {
-			return c, model.Derived, meta.Path, dec, []string{meta.Path}
-		}
-		return model.CatOther, model.Derived, meta.Path, false, []string{meta.Path}
+		return meta.Path, model.Derived
 	}
-
 	if command != "" {
-		found := content.PathsFromCommand(command)
-		cats := map[model.Category]bool{}
-		anyDeclared := false
-		var classified []string
-		for _, p := range found {
-			c, ok, dec := cl.Match(p)
-			if !ok {
-				continue
-			}
-			cats[c] = true
-			anyDeclared = anyDeclared || dec
-			classified = append(classified, p)
-		}
-		switch len(cats) {
-		case 0:
-			// Nothing classifiable; fall through to tool output.
-		case 1:
-			for c := range cats {
-				return c, model.Inferred, classified[0], anyDeclared, classified
-			}
-		default:
-			// A compound command that read a decision record, a source file
-			// and a directory listing in one result is genuinely a mixture.
-			// Splitting the bytes between them would be invented precision,
-			// and picking one would be arbitrary.
-			return model.CatMixed, model.Inferred, "", anyDeclared, classified
+		if paths := content.PathsFromCommand(command); len(paths) > 0 {
+			return paths[0], model.Inferred
 		}
 	}
-	return content.ClassifyTool(tool), model.Observed, "", false, nil
+	return "", model.Observed
 }
 
 // withheld reports how much content the harness kept out of context. It is
@@ -509,7 +475,6 @@ func findRepeats(s *model.Session) {
 		size := g.r.ObservedBytes()
 		s.Repeats = append(s.Repeats, model.Repeat{
 			Hash:          h,
-			Category:      g.r.Category,
 			Path:          g.r.Path,
 			Tool:          g.r.Tool,
 			Count:         g.count,

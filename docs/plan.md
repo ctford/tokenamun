@@ -104,27 +104,32 @@ lean on tool names. The Bash handler parses command lines for file paths
 the output to those paths, tagging the attribution `inferred`. Commands whose
 output can't be attributed become category `tool output` rather than a guess.
 
-### Content classification
+### Content classification: removed
 
-Ordered rules over path and command, first match wins, shipped as an embedded
-default and overridable from `.tokenamun.yml`:
+There was a category axis -- ADRs, specifications, plans, tests, source --
+declared per repository in `.tokenamun.json` and otherwise guessed from
+directory naming. It is gone, and the reasoning is worth keeping because it
+applies to the next taxonomy someone proposes.
 
-| category | signals |
-| --- | --- |
-| ADR | `adr/`, `adrs/`, `architecture-decision*`, `ADR-\d+` |
-| specification | `specs/`, `*.spec.md`, `SPEC.md`, `contracts/`, `openapi*` |
-| plan | `plans/`, `*-plan.md`, `PLAN.md` |
-| test | `_test.go`, `*.test.*`, `*_spec.rb`, `test/`, `tests/`, `spec/` |
-| instructions | `CLAUDE.md`, `AGENTS.md`, `.claude/`, `skills/`, `README.md` |
-| documentation | `docs/`, `*.md` not matched above |
-| source code | source extensions not matched above |
-| MCP output | tool name `mcp__*` |
-| tool output | unattributable command output |
-| other | fallthrough |
+In practice a repository's directory layout already carries the category:
+`docs/decisions` *is* the decision records. Once retrieved content was nested
+by directory, the tree answered the same question with no configuration and
+no guessing about someone else's project. Measured on the reference dataset,
+8 of 9 categories were being filled by naming heuristics rather than by
+declarations, and only one category's content spanned more than one directory
+-- so the thing a category could do that a directory cannot was a rounding
+error next to the cost of being wrong about a layout.
 
-Classification is `derived` when it comes from an observed path, `inferred` when
-the path came from parsing a Bash command line. Those are different confidence
-levels and the JSON says which.
+What was lost, stated plainly: aggregating content scattered by convention
+(Go tests live beside the code they test, so a directory view shows them in
+nine places), and the ability to declare that a path is not what it looks
+like (`.claude/projects/**/tool-results/*.txt` reads as instructions from its
+path but is spilled tool output). If either becomes painful, the answer is a
+narrow override file for misleading paths -- not a second taxonomy.
+
+Paths are still attributed, and their provenance still distinguishes a path
+the tool reported (derived) from one parsed out of a shell command line
+(inferred).
 
 ### Token counting
 

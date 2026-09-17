@@ -9,14 +9,6 @@ Retrieved content (what entered the context)
   Estimated tokens              3,750   [derived-approx]
   Withheld                    38.2 KB   [observed]  (kept out of context by the harness)
 
-By category
-  tests                    5.1 KB   38.5%     1 items   [derived]
-  adrs                     2.9 KB   22.2%     1 items   [inferred]
-  mcp output               2.1 KB   16.3%     1 items   [observed]
-  source code              1.8 KB   13.3%     1 items   [derived]
-  tool output               900 B    6.7%     1 items   [observed]
-  instructions              408 B    3.0%     2 items   [inferred]
-
 Largest retrievals
   internal/payment/charge_test.go              5.1 KB  call 6  all 140 lines
   docs/adr/0007-retry-policy.md                2.9 KB  call 2

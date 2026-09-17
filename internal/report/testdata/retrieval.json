@@ -62,157 +62,10 @@
       "provenance": "derived"
     }
   },
-  "by_category": [
-    {
-      "category": "tests",
-      "items": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "bytes": {
-        "value": 5200,
-        "unit": "bytes",
-        "provenance": "observed"
-      },
-      "tokens": {
-        "value": 1444.4444444444443,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "share_of_bytes": {
-        "value": 0.3849570624814925,
-        "unit": "ratio",
-        "provenance": "derived"
-      },
-      "confidence": "derived"
-    },
-    {
-      "category": "adrs",
-      "items": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "bytes": {
-        "value": 3000,
-        "unit": "bytes",
-        "provenance": "observed"
-      },
-      "tokens": {
-        "value": 833.3333333333333,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "share_of_bytes": {
-        "value": 0.2220906129700918,
-        "unit": "ratio",
-        "provenance": "derived"
-      },
-      "confidence": "inferred"
-    },
-    {
-      "category": "mcp output",
-      "items": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "bytes": {
-        "value": 2200,
-        "unit": "bytes",
-        "provenance": "observed"
-      },
-      "tokens": {
-        "value": 611.1111111111111,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "share_of_bytes": {
-        "value": 0.16286644951140064,
-        "unit": "ratio",
-        "provenance": "derived"
-      },
-      "confidence": "observed"
-    },
-    {
-      "category": "source code",
-      "items": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "bytes": {
-        "value": 1800,
-        "unit": "bytes",
-        "provenance": "observed"
-      },
-      "tokens": {
-        "value": 500,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "share_of_bytes": {
-        "value": 0.13325436778205507,
-        "unit": "ratio",
-        "provenance": "derived"
-      },
-      "confidence": "derived"
-    },
-    {
-      "category": "tool output",
-      "items": {
-        "value": 1,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "bytes": {
-        "value": 900,
-        "unit": "bytes",
-        "provenance": "observed"
-      },
-      "tokens": {
-        "value": 250,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "share_of_bytes": {
-        "value": 0.06662718389102754,
-        "unit": "ratio",
-        "provenance": "derived"
-      },
-      "confidence": "observed"
-    },
-    {
-      "category": "instructions",
-      "items": {
-        "value": 2,
-        "unit": "calls",
-        "provenance": "observed"
-      },
-      "bytes": {
-        "value": 408,
-        "unit": "bytes",
-        "provenance": "observed"
-      },
-      "tokens": {
-        "value": 113.33333333333333,
-        "unit": "tokens",
-        "provenance": "derived-approx"
-      },
-      "share_of_bytes": {
-        "value": 0.030204323363932483,
-        "unit": "ratio",
-        "provenance": "derived"
-      },
-      "confidence": "inferred"
-    }
-  ],
   "largest": [
     {
       "tool": "Read",
       "path": "internal/payment/charge_test.go",
-      "category": "tests",
       "bytes": {
         "value": 5200,
         "unit": "bytes",
@@ -229,7 +82,6 @@
     {
       "tool": "Bash",
       "path": "docs/adr/0007-retry-policy.md",
-      "category": "adrs",
       "bytes": {
         "value": 3000,
         "unit": "bytes",
@@ -244,7 +96,6 @@
     },
     {
       "tool": "mcp__github__list_issues",
-      "category": "mcp output",
       "bytes": {
         "value": 2200,
         "unit": "bytes",
@@ -260,7 +111,6 @@
     {
       "tool": "Read",
       "path": "internal/payment/charge.go",
-      "category": "source code",
       "bytes": {
         "value": 1800,
         "unit": "bytes",
@@ -276,7 +126,6 @@
     },
     {
       "tool": "Bash",
-      "category": "tool output",
       "bytes": {
         "value": 900,
         "unit": "bytes",
@@ -292,7 +141,6 @@
     {
       "tool": "Bash",
       "path": "CLAUDE.md",
-      "category": "instructions",
       "bytes": {
         "value": 204,
         "unit": "bytes",
@@ -308,7 +156,6 @@
     {
       "tool": "Bash",
       "path": "CLAUDE.md",
-      "category": "instructions",
       "bytes": {
         "value": 204,
         "unit": "bytes",
@@ -326,7 +173,6 @@
     {
       "path": "CLAUDE.md",
       "tool": "Bash",
-      "category": "instructions",
       "retrievals": {
         "value": 2,
         "unit": "calls",

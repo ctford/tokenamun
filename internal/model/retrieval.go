@@ -1,32 +1,5 @@
 package model
 
-// Category classifies retrieved content. Categories are deliberately about
-// what the content *is*, not which tool fetched it, because the same tool
-// fetches very different things.
-type Category string
-
-const (
-	CatSourceCode    Category = "source code"
-	CatTest          Category = "tests"
-	CatADR           Category = "adrs"
-	CatSpecification Category = "specifications"
-	CatPlan          Category = "plans"
-	CatDocumentation Category = "documentation"
-	CatInstructions  Category = "instructions"
-	CatMixed         Category = "mixed"
-	CatToolOutput    Category = "tool output"
-	CatMCPOutput     Category = "mcp output"
-	CatOther         Category = "other"
-)
-
-// Categories lists every category in report order.
-func Categories() []Category {
-	return []Category{
-		CatSourceCode, CatTest, CatADR, CatSpecification, CatPlan,
-		CatDocumentation, CatInstructions, CatMixed, CatToolOutput, CatMCPOutput, CatOther,
-	}
-}
-
 // Channel is how content reached the context. It answers a different question
 // from Category: a decision record read through `cat` is an ADR by category
 // and file reading by channel, and both are worth seeing.
@@ -61,10 +34,9 @@ func Channels() []Channel {
 // a file and passes the model only an excerpt. toolUseResult is used for
 // attribution metadata -- path, line range, truncation -- and never for size.
 type RetrievedContent struct {
-	Seq      int      `json:"seq"`
-	ToolID   string   `json:"tool_id"`
-	Tool     string   `json:"tool"`
-	Category Category `json:"category"`
+	Seq    int    `json:"seq"`
+	ToolID string `json:"tool_id"`
+	Tool   string `json:"tool"`
 	// Channel is how this content arrived, independent of what it is.
 	Channel Channel `json:"channel"`
 	// CommandClass groups shell commands by what they do -- tests, git,
@@ -80,18 +52,13 @@ type RetrievedContent struct {
 	// its output is another command's output reshaped rather than a file it
 	// read.
 	PipelineFilter bool `json:"pipeline_filter,omitempty"`
-	// CategoryProv is derived when the path was observed in the tool result,
-	// and inferred when it was parsed out of a shell command line.
-	CategoryProv Provenance `json:"category_provenance"`
+	// PathProv is derived when the path was reported by the tool, and
+	// inferred when it was parsed out of a shell command line.
+	PathProv Provenance `json:"path_provenance"`
 	// Declared is true when the category came from a configured subtree rather
 	// than from a guess about directory naming.
 	Declared bool   `json:"declared,omitempty"`
 	Path     string `json:"path,omitempty"`
-	// Paths lists every path the content was attributed to. A compound shell
-	// command can read several files in one result, and pretending otherwise
-	// would either lose content or invent precision about which file it came
-	// from.
-	Paths []string `json:"paths,omitempty"`
 	// Bytes is the observed size of what entered context.
 	Bytes int `json:"bytes"`
 	// Tokens is an estimate unless a real tokenizer was used; Prov says which.
@@ -135,12 +102,11 @@ func (r RetrievedContent) ObservedBytes() int {
 
 // Repeat describes content retrieved more than once in a session.
 type Repeat struct {
-	Hash     string   `json:"hash"`
-	Category Category `json:"category"`
-	Path     string   `json:"path,omitempty"`
-	Tool     string   `json:"tool"`
-	Count    int      `json:"count"`
-	Bytes    int      `json:"bytes"`
+	Hash  string `json:"hash"`
+	Path  string `json:"path,omitempty"`
+	Tool  string `json:"tool"`
+	Count int    `json:"count"`
+	Bytes int    `json:"bytes"`
 	// ImageBytes is how much of Bytes was image payload. Re-sending an image
 	// costs image tokens again, so the repeat is real; it just cannot be
 	// priced by a byte ratio.
