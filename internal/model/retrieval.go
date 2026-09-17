@@ -99,4 +99,7 @@ type Repeat struct {
 	ImageBytes int   `json:"image_bytes,omitempty"`
 	WasteByte  int   `json:"redundant_bytes"`
 	Seqs       []int `json:"invocation_seqs"`
+	// RetrievalSeqs identifies the retrievals themselves, in order. Joining on
+	// path cannot work: most retrieved content is shell output and has none.
+	RetrievalSeqs []int `json:"retrieval_seqs"`
 }

@@ -42,11 +42,14 @@ type CarryReport struct {
 
 // CarriedItem is one retrieval priced by residency rather than by size.
 type CarriedItem struct {
-	Tool     string         `json:"tool"`
-	Path     string         `json:"path,omitempty"`
-	Category model.Category `json:"category"`
-	Bytes    int            `json:"bytes"`
-	Tokens   float64        `json:"tokens"`
+	// RetrievalSeq identifies which retrieval this is, so other analyses can
+	// join onto it exactly instead of matching on a path that may be absent.
+	RetrievalSeq int            `json:"retrieval_seq"`
+	Tool         string         `json:"tool"`
+	Path         string         `json:"path,omitempty"`
+	Category     model.Category `json:"category"`
+	Bytes        int            `json:"bytes"`
+	Tokens       float64        `json:"tokens"`
 	// EnteredAt is the call that carried it into the context.
 	EnteredAt int `json:"entered_at_call"`
 	// ResidentFor is how many later calls re-sent it.
@@ -115,7 +118,8 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 			continue
 		}
 		r.Items = append(r.Items, CarriedItem{
-			Tool: c.Tool, Path: c.Path, Category: c.Category,
+			RetrievalSeq: c.Seq,
+			Tool:         c.Tool, Path: c.Path, Category: c.Category,
 			Bytes: c.Bytes, Tokens: c.Tokens,
 			EnteredAt:   entered,
 			ResidentFor: warm + coldN,

@@ -47,7 +47,10 @@ func TestEveryInterventionDeclaresWhatItCannotKnow(t *testing.T) {
 			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 5000, Tokens: 1400, InvocationSeq: 1, Hash: "dup"},
 			{Tool: "Bash", Category: model.CatToolOutput, Bytes: 5000, Tokens: 1400, InvocationSeq: 2, Hash: "dup"},
 		},
-		Repeats:   []model.Repeat{{Hash: "dup", Tool: "Bash", Count: 2, Bytes: 5000, WasteByte: 5000}},
+		Repeats: []model.Repeat{{
+			Hash: "dup", Tool: "Bash", Count: 2, Bytes: 5000, WasteByte: 5000,
+			RetrievalSeqs: []int{1, 2},
+		}},
 		Estimator: model.TokenEstimator{BytesPerToken: 3.5, Calibrated: true},
 	}
 	c := ctxFor(s)
@@ -284,6 +287,57 @@ func TestMCPToCLIRefusesToInventANumber(t *testing.T) {
 	if !contains(r.NotMeasurable, "compare") {
 		t.Error("it should point at the A/B that would measure it")
 	}
+}
+
+// The join must work for content with no path, which is most of it: shell
+// output has no file to match on, so an earlier path-based join reported zero
+// avoidable cost for every session.
+func TestRepeatedRetrievalJoinsCarryForPathlessContent(t *testing.T) {
+	s := &model.Session{
+		Invocations: []model.ModelInvocation{
+			inv(0, 0, 1, 0, 20_000),
+			inv(1, time.Minute, 1, 20_000, 800),
+			inv(2, 2*time.Minute, 1, 20_800, 800),
+			inv(3, 3*time.Minute, 1, 21_600, 800),
+		},
+		Retrievals: []model.RetrievedContent{
+			{Seq: 0, Tool: "Bash", Category: model.CatToolOutput, Bytes: 4000, Tokens: 1100, InvocationSeq: 0, Hash: "dup"},
+			{Seq: 1, Tool: "Bash", Category: model.CatToolOutput, Bytes: 4000, Tokens: 1100, InvocationSeq: 2, Hash: "dup"},
+		},
+		Repeats: []model.Repeat{{
+			Hash: "dup", Tool: "Bash", Count: 2, Bytes: 4000, WasteByte: 4000,
+			RetrievalSeqs: []int{0, 1},
+		}},
+		Estimator: model.TokenEstimator{BytesPerToken: 3.6, Calibrated: true},
+	}
+	r := (RepeatedRetrieval{}).Estimate(ctxFor(s))
+
+	var carry float64
+	for _, f := range r.Derived {
+		if f.Label == "carry cost of the redundant copies" {
+			carry = f.Quantity.Value
+		}
+	}
+	if carry <= 0 {
+		t.Fatal("the carry of the second copy must be found even with no path to join on")
+	}
+
+	// And only the later copy counts: the first fetch would still happen.
+	first := c0(s, 0)
+	if carry >= first {
+		t.Errorf("carry %.0f should be the later copy alone, not both", carry)
+	}
+}
+
+// c0 is the carry cost of a session's first retrieval, for comparison.
+func c0(s *model.Session, seq int) float64 {
+	cache := analysis.Cache(s, analysis.TTL5m)
+	for _, it := range analysis.Carry(s, cache).Items {
+		if it.RetrievalSeq == seq {
+			return it.CarryEIT
+		}
+	}
+	return 0
 }
 
 func TestRepeatedRetrievalIsNotApplicableWithoutRepeats(t *testing.T) {

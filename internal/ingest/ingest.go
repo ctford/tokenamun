@@ -424,6 +424,7 @@ func findRepeats(s *model.Session) {
 		r     model.RetrievedContent
 		count int
 		seqs  []int
+		items []int
 	}
 	groups := map[string]*group{}
 	var order []string
@@ -436,6 +437,7 @@ func findRepeats(s *model.Session) {
 		}
 		g.count++
 		g.seqs = append(g.seqs, r.InvocationSeq)
+		g.items = append(g.items, r.Seq)
 	}
 	for _, h := range order {
 		g := groups[h]
@@ -444,15 +446,16 @@ func findRepeats(s *model.Session) {
 		}
 		size := g.r.ObservedBytes()
 		s.Repeats = append(s.Repeats, model.Repeat{
-			Hash:       h,
-			Category:   g.r.Category,
-			Path:       g.r.Path,
-			Tool:       g.r.Tool,
-			Count:      g.count,
-			Bytes:      size,
-			ImageBytes: g.r.ImageBytes,
-			WasteByte:  size * (g.count - 1),
-			Seqs:       g.seqs,
+			Hash:          h,
+			Category:      g.r.Category,
+			Path:          g.r.Path,
+			Tool:          g.r.Tool,
+			Count:         g.count,
+			Bytes:         size,
+			ImageBytes:    g.r.ImageBytes,
+			WasteByte:     size * (g.count - 1),
+			Seqs:          g.seqs,
+			RetrievalSeqs: g.items,
 		})
 	}
 	sort.SliceStable(s.Repeats, func(i, j int) bool {

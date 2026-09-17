@@ -134,9 +134,11 @@ func (RepeatedRetrieval) Estimate(c Context) Result {
 		redundantBytes += rep.WasteByte
 		items++
 	}
+	// Everything observed, including image payload, or the share would be
+	// inflated by excluding images from the denominator only.
 	var totalBytes int
 	for _, item := range c.Session.Retrievals {
-		totalBytes += item.Bytes
+		totalBytes += item.ObservedBytes()
 	}
 
 	share := 0.0
@@ -156,24 +158,25 @@ func (RepeatedRetrieval) Estimate(c Context) Result {
 		return r
 	}
 
-	// Carry the redundant copies at the rate they were actually billed.
-	var carrySaved float64
-	redundantHashes := map[string]int{}
+	// The saving is the carry of the second and later copies: the first fetch
+	// would still have happened. Joined on retrieval identity, since most
+	// retrieved content is shell output with no path to match on.
+	redundant := map[int]bool{}
 	for _, rep := range c.Session.Repeats {
-		redundantHashes[rep.Hash] = rep.Count
+		// A repeat always has at least two retrievals in practice, but a
+		// hand-built one may not, and slicing past the end would panic.
+		if len(rep.RetrievalSeqs) < 2 {
+			continue
+		}
+		for _, seq := range rep.RetrievalSeqs[1:] {
+			redundant[seq] = true
+		}
 	}
-	seen := map[string]bool{}
+	var carrySaved float64
 	for _, item := range c.Carry.Items {
-		key := carryKey(item)
-		if redundantHashes[key] == 0 {
-			continue
+		if redundant[item.RetrievalSeq] {
+			carrySaved += item.CarryEIT
 		}
-		if !seen[key] {
-			// The first fetch would still have happened.
-			seen[key] = true
-			continue
-		}
-		carrySaved += item.CarryEIT
 	}
 
 	tokens := estimateTokens(c.Session, redundantBytes)
@@ -186,13 +189,6 @@ func (RepeatedRetrieval) Estimate(c Context) Result {
 			"the saving is the carry of the later copies; the first fetch still happens"),
 	}
 	return r
-}
-
-// carryKey matches a carry item back to a repeat group. Carry items do not
-// keep the hash, so path and tool are used, which is why a repeat with no path
-// contributes nothing here rather than being guessed at.
-func carryKey(item analysis.CarriedItem) string {
-	return item.Path
 }
 
 // OutputCompression estimates shrinking tool output before it enters context.
