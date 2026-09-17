@@ -31,6 +31,11 @@ var groupMembers = map[string][]string{
 		"grep", "rg", "ag", "ack", "find", "fd", "ls", "tree", "du", "df",
 		"wc", "sort", "uniq", "cut", "tr", "xargs", "stat", "file", "diff",
 		"basename", "dirname", "readlink", "realpath", "which", "env",
+		// These print file contents, so their output is routed to file
+		// content when they actually read a file. Group membership is a
+		// separate question: they are POSIX text tools either way, and when
+		// used as pipeline filters they belong here.
+		"cat", "head", "tail", "sed", "awk", "nl", "jq", "yq", "less", "more",
 	},
 	"language toolchains": {
 		"go", "cargo", "npm", "pnpm", "yarn", "pip", "pip3", "poetry", "uv",
@@ -38,7 +43,7 @@ var groupMembers = map[string][]string{
 	},
 	"interpreters": {
 		"python", "python3", "node", "ruby", "perl", "php", "deno", "bun",
-		"osascript", "awk",
+		"osascript",
 	},
 	"containers and orchestration": {
 		"docker", "podman", "kubectl", "helm", "nerdctl", "skaffold", "minikube",
@@ -61,6 +66,12 @@ var groupMembers = map[string][]string{
 func init() {
 	for group, members := range groupMembers {
 		for _, m := range members {
+			if existing, dup := commandGroups[m]; dup {
+				// Two groups claiming one tool would make the answer depend
+				// on map iteration order, so it is a programming error rather
+				// than something to resolve at runtime.
+				panic("tokenamun: " + m + " is in both " + existing + " and " + group)
+			}
 			commandGroups[m] = group
 		}
 	}

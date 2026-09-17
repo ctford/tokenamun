@@ -108,6 +108,7 @@
   .group-label { pointer-events: none; font-size: 12px; font-weight: 600; }
 
   nav#crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 10px; font-size: 13px; }
+  nav#crumbs .depth-total { margin-left: auto; font-variant-numeric: tabular-nums; }
   nav#crumbs button { padding: 3px 9px; font-size: 13px; border-radius: 5px; border: 1px solid var(--rule); background: var(--surface-1); }
   nav#crumbs .sep { color: var(--text-muted); }
   nav#crumbs .here { font-weight: 600; padding: 3px 4px; }
@@ -460,22 +461,33 @@ function render() {
     parts.push(`<rect x="${p.x}" y="${p.y}" width="${Math.max(0, p.w)}" height="${
       Math.max(0, p.h)}" fill="${fill}" rx="2"></rect>`);
 
-    const share = pct(pctOfView(n, here));
     const name = fitLabel(shortName(n.name), p.w);
     if (name && p.h > 16) {
       parts.push(`<text x="${p.x + 6}" y="${p.y + 16}" fill="${ink}" class="name">${
         esc(name)}</text>`);
     }
-    // The share goes on its own line when there is room, so the name is not
-    // truncated to make space for it.
-    const stat = fitLabel(`${share} · ${fmt(value(n))}`, p.w);
+    // Two numbers, because they answer different questions: the share of this
+    // level says how it compares with its siblings, the share of the session
+    // in parentheses says whether it matters at all. At the top level they are
+    // the same number, so the parenthesis is dropped there.
+    const here_is_root = path.length === 0;
+    const shares = here_is_root
+      ? pct(pctOfView(n, here))
+      : `${pct(pctOfView(n, here))} (${pct(pctOfSession(n))} of session)`;
+    const stat = fitLabel(shares, p.w);
     if (stat && p.h > 34) {
       parts.push(`<text x="${p.x + 6}" y="${p.y + 31}" fill="${ink}" class="stat">${
         esc(stat)}</text>`);
     }
-    if (!leaf && p.w > 46 && p.h > 50) {
-      parts.push(`<text x="${p.x + 6}" y="${p.y + 46}" fill="${ink}" class="stat" opacity="0.75">${
-        fmt(n.children.length)} inside</text>`);
+    if (p.h > 50) {
+      const tail = leaf
+        ? fmt(value(n))
+        : `${fmt(value(n))} · ${fmt(n.children.length)} inside`;
+      const line = fitLabel(tail, p.w);
+      if (line) {
+        parts.push(`<text x="${p.x + 6}" y="${p.y + 46}" fill="${
+          ink}" class="stat" opacity="0.75">${esc(line)}</text>`);
+      }
     }
     parts.push(`</g>`);
   }
@@ -537,6 +549,12 @@ function renderCrumbs() {
       parts.push(`<button data-depth="${depth + 1}">${esc(n.name)}</button>`);
     }
   });
+  // Where you are, as a share of the whole session, so drilling never loses
+  // the sense of scale.
+  const here = nodeAt(path);
+  parts.push(`<span class="depth-total muted">${
+    path.length === 0 ? "whole session" : `${pct(pctOfSession(here))} of session`
+  } · ${fmt(value(here))}</span>`);
   crumbs.innerHTML = parts.join("");
   crumbs.querySelectorAll("button[data-depth]").forEach(b => {
     b.onclick = () => goTo(path.slice(0, Number(b.dataset.depth)));

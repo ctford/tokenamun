@@ -471,7 +471,11 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 		// saying so beats inflating CLI output with them: the whole point of
 		// separating CLI output is that git and test runs are not file
 		// reading.
-		if content.IsFileReading(c.CommandBinary) {
+		// A file-printing tool downstream of a pipe is not reading a file: it
+		// is reshaping whatever is upstream. Counting `git log | head -20` as
+		// file content attributed a third of this bucket to files that were
+		// never read.
+		if content.IsFileReading(c.CommandBinary) && !c.PipelineFilter {
 			if c.Path != "" {
 				return "file content", ""
 			}

@@ -406,3 +406,81 @@ func TestTokensThatAreNotCommandNamesAreRejected(t *testing.T) {
 		}
 	}
 }
+
+// A file-printing tool downstream of a pipe is filtering someone else's
+// output, not reading a file. In real sessions head, tail and cat are used
+// that way far more often than as readers, so counting their output as file
+// content attributed it to files that were never read.
+//
+// Where the upstream command is itself recognised -- `git log | head -20` --
+// the earliest matching stage wins and the output is attributed to git, which
+// is the better answer still.
+func TestPipelineFiltersAreDistinguishedFromFileReads(t *testing.T) {
+	// The filter case is when nothing upstream is recognised, so the
+	// file-printing tool is the only thing the transcript can name.
+	filters := []string{
+		`./scripts/report.sh | head -20`,
+		`./bin/report | sed -n '1,20p'`,
+	}
+	for _, cmd := range filters {
+		if !IsPipelineFilter(cmd) {
+			t.Errorf("%q: expected a pipeline filter", cmd)
+		}
+	}
+
+	// When the source is recognised, the content is attributed to it rather
+	// than to the filter downstream.
+	for _, cmd := range []string{
+		"git log --oneline | head -20",
+		"go test ./... 2>&1 | tail -50",
+		"find . -name '*.go' | head",
+	} {
+		if IsPipelineFilter(cmd) {
+			t.Errorf("%q: the upstream command is recognised, so it is the source", cmd)
+		}
+	}
+	if got := CommandBinary("git log --oneline | head -20"); got != "git" {
+		t.Errorf("attribution went to %q, want git", got)
+	}
+
+	readers := []string{
+		`cat internal/pay/charge.go`,
+		`sed -n '1,80p' docs/plan.md`,
+		`cd /repo && head -40 README.md`,
+		`tail -100 /var/log/app.log`,
+	}
+	for _, cmd := range readers {
+		if IsPipelineFilter(cmd) {
+			t.Errorf("%q: expected a file read, not a filter", cmd)
+		}
+	}
+}
+
+// && and ; sequence commands; they do not feed one command's output into the
+// next, so a read after them is still a read.
+func TestOnlyPipesMakeADownstreamFilter(t *testing.T) {
+	for _, cmd := range []string{
+		`cd /repo && cat x.go`,
+		`echo "=== x ===" ; cat x.go`,
+		`make build || cat build.log`,
+	} {
+		if IsPipelineFilter(cmd) {
+			t.Errorf("%q: sequencing is not piping", cmd)
+		}
+	}
+}
+
+// A tool in two groups would make its grouping depend on map iteration order,
+// so the tables must be disjoint. Checked here as well as panicking at init,
+// because a panic at init is a bad way to find out.
+func TestToolGroupsAreDisjoint(t *testing.T) {
+	seen := map[string]string{}
+	for group, members := range groupMembers {
+		for _, m := range members {
+			if other, dup := seen[m]; dup {
+				t.Errorf("%q is in both %q and %q", m, other, group)
+			}
+			seen[m] = group
+		}
+	}
+}

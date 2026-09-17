@@ -59,9 +59,9 @@ var wrappers = map[string]bool{
 // mentioning "git" -- and put the result under the wrong command entirely.
 // It also meant the class and the drill-down path could be derived from
 // different stages of the same command, so they disagreed.
-func matchStage(cmd string) (stage, family string, ok bool) {
+func matchStage(cmd string) (text, family string, piped, ok bool) {
 	for _, candidate := range splitStages(cmd) {
-		fields := strings.Fields(candidate)
+		fields := strings.Fields(candidate.text)
 		for len(fields) > 1 && strings.Contains(fields[0], "=") && !strings.Contains(fields[0], "/") {
 			fields = fields[1:]
 		}
@@ -81,11 +81,24 @@ func matchStage(cmd string) (stage, family string, ok bool) {
 		}
 		for _, cl := range commandClasses {
 			if cl.re.MatchString(probe) {
-				return strings.ToLower(candidate), cl.name, true
+				return strings.ToLower(candidate.text), cl.name, candidate.piped, true
 			}
 		}
 	}
-	return "", "", false
+	return "", "", false, false
+}
+
+// IsPipelineFilter reports whether the command that produced this output was
+// downstream of a pipe, and so was filtering another command's output rather
+// than reading a file.
+//
+// This matters more than it sounds: in real sessions head, tail and cat are
+// overwhelmingly used as filters -- `something | head -20` -- and counting
+// their output as file content attributed most of it to files that were never
+// read. Only sed turned out to be mostly a genuine file reader.
+func IsPipelineFilter(cmd string) bool {
+	_, _, piped, ok := matchStage(cmd)
+	return ok && piped
 }
 
 // fileReadingBinaries print a file's contents. Used to route their output to
@@ -130,12 +143,12 @@ func CommandBinary(cmd string) string {
 // shell parser to fix. The arguments worth seeing are file paths, and those
 // are already recovered separately and attributed as content.
 func CommandPath(cmd string) []string {
-	stage, _, ok := matchStage(cmd)
+	text, _, _, ok := matchStage(cmd)
 	if !ok {
 		return nil
 	}
 	var words []string
-	for _, f := range strings.Fields(stage) {
+	for _, f := range strings.Fields(text) {
 		if strings.HasPrefix(f, "-") || strings.ContainsAny(f, "'\"$=(){}<>`") {
 			continue
 		}
@@ -159,18 +172,42 @@ func CommandPath(cmd string) []string {
 	return out
 }
 
-// splitStages breaks a compound command into independently-executed parts.
-func splitStages(cmd string) []string {
-	var out []string
-	for _, part := range stageSplitter.Split(cmd, -1) {
+// stage is one part of a compound command, and whether it was fed by a pipe.
+//
+// The distinction matters: `cat x.go` reads a file, while `git log | cat`
+// only reformats what git produced. A tool downstream of a pipe is filtering
+// someone else's output, so the content belongs to whatever is upstream.
+type stage struct {
+	text  string
+	piped bool
+}
+
+// splitStages breaks a compound command into independently-executed parts,
+// keeping track of which were fed by a pipe.
+func splitStages(cmd string) []stage {
+	var out []stage
+	piped := false
+	rest := cmd
+	for {
+		loc := stageSplitter.FindStringIndex(rest)
+		var part, sep string
+		if loc == nil {
+			part, sep, rest = rest, "", ""
+		} else {
+			part, sep, rest = rest[:loc[0]], rest[loc[0]:loc[1]], rest[loc[1]:]
+		}
 		if i := strings.IndexAny(part, ">"); i >= 0 {
 			part = part[:i]
 		}
-		if part = strings.TrimSpace(part); part != "" {
-			out = append(out, part)
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, stage{text: trimmed, piped: piped})
 		}
+		if loc == nil {
+			return out
+		}
+		// Only a single pipe feeds the next stage its predecessor's output.
+		piped = sep == "|"
 	}
-	return out
 }
 
 var stageSplitter = regexp.MustCompile(`\|\||&&|[;\n|]`)
@@ -178,7 +215,7 @@ var stageSplitter = regexp.MustCompile(`\|\||&&|[;\n|]`)
 // CommandClass names what a shell command was doing. An unrecognised command
 // is "other shell" rather than being forced into a class it does not fit.
 func CommandClass(cmd string) string {
-	if _, family, ok := matchStage(cmd); ok {
+	if _, family, _, ok := matchStage(cmd); ok {
 		return family
 	}
 	if strings.TrimSpace(cmd) == "" {
