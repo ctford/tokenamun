@@ -77,6 +77,7 @@ func All() []Intervention {
 		RepeatedRetrieval{},
 		OutputCompression{},
 		Caveman{},
+		RTK{},
 		MCPToCLI{},
 	}
 }
