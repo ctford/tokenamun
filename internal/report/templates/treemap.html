@@ -173,7 +173,7 @@
       <tbody></tbody>
     </table>
     <div class="legend" id="legend">
-      <span>Round trips</span>
+      <span>Average round trips</span>
       <span id="ramp-low">1</span>
       <span class="ramp" id="ramp"></span>
       <span id="ramp-high"></span>
@@ -583,7 +583,7 @@ svg.addEventListener("mousemove", e => {
       <dt>bytes</dt><dd>${bytes(n.bytes)}</dd>
       <dt>retrievals</dt><dd>${fmt(n.items)}</dd>
       ${n.unscaled || !n.roundTrips ? "" : `<dt>round trips</dt><dd>${
-        fmt(Math.round(n.roundTrips))}${leaf ? "" : ", on average"}</dd>`}
+        fmt(Math.round(n.roundTrips))}${leaf ? " exactly" : ", on average"}</dd>`}
       ${leaf ? "" : `<dt>contains</dt><dd>${fmt(n.children.length)}</dd>`}
     </dl>
     ${n.unscaled || leaf || !n.roundTrips ? "" : `<div class="muted" style="margin-top:4px">
