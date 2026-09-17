@@ -9,6 +9,10 @@ import (
 
 // commandClasses group shell commands by the job they do. Ordered: the first
 // match wins, so a test command that also mentions git is a test run.
+//
+// Named after the commands rather than the purpose, because the level above
+// is already named by mechanism and two levels reading "file reading" told a
+// reader nothing about which was which.
 var commandClasses = []struct {
 	name string
 	re   *regexp.Regexp
@@ -16,9 +20,9 @@ var commandClasses = []struct {
 	{"tests", regexp.MustCompile(`\b(go test|npm test|pnpm test|yarn test|pytest|jest|vitest|cargo test|mvn test|gradle test|make test|ginkgo|rspec)\b`)},
 	{"build and lint", regexp.MustCompile(`\b(go build|go vet|golangci-lint|npm run build|pnpm build|tsc|make build|cargo build|eslint|ruff|clippy|terraform|docker build)\b`)},
 	{"git", regexp.MustCompile(`\bgit\b`)},
-	{"file reading", regexp.MustCompile(`\b(cat|head|tail|sed|awk|nl|bat|jq|yq)\b`)},
-	{"search", regexp.MustCompile(`\b(rg|grep|ag|ack|find|fd)\b`)},
-	{"listing", regexp.MustCompile(`\b(ls|tree|du|df|stat|wc)\b`)},
+	{"cat / sed / head", regexp.MustCompile(`\b(cat|head|tail|sed|awk|nl|bat|jq|yq)\b`)},
+	{"grep / rg / find", regexp.MustCompile(`\b(rg|grep|ag|ack|find|fd)\b`)},
+	{"ls / tree / du", regexp.MustCompile(`\b(ls|tree|du|df|stat|wc)\b`)},
 	{"package management", regexp.MustCompile(`\b(npm|pnpm|yarn|pip|go mod|cargo|bundle|brew|mise)\b`)},
 	{"containers and cloud", regexp.MustCompile(`\b(docker|kubectl|gcloud|aws|helm)\b`)},
 	{"scripting", regexp.MustCompile(`\b(python3?|node|ruby|perl|bash -c|sh -c)\b`)},

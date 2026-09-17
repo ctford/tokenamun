@@ -33,7 +33,7 @@ func Categories() []Category {
 type Channel string
 
 const (
-	ChanFileRead   Channel = "file reading"
+	ChanFileRead   Channel = "Read tool"
 	ChanShell      Channel = "shell output"
 	ChanWeb        Channel = "web"
 	ChanSubagent   Channel = "subagents"

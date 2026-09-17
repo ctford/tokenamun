@@ -11,10 +11,10 @@ func treeFixture() *model.Session {
 	return &model.Session{
 		Retrievals: []model.RetrievedContent{
 			// Shell output that could be attributed to a file.
-			{Seq: 0, Tool: "Bash", Channel: model.ChanShell, CommandClass: "file reading",
+			{Seq: 0, Tool: "Bash", Channel: model.ChanShell, CommandClass: "cat / sed / head",
 				Category: model.CatADR, Path: "docs/decisions/a.md", Bytes: 4000, Tokens: 1000, InvocationSeq: 0},
 			// The same file again: should collapse into one rectangle.
-			{Seq: 1, Tool: "Bash", Channel: model.ChanShell, CommandClass: "file reading",
+			{Seq: 1, Tool: "Bash", Channel: model.ChanShell, CommandClass: "cat / sed / head",
 				Category: model.CatADR, Path: "docs/decisions/a.md", Bytes: 4000, Tokens: 1000, InvocationSeq: 1},
 			// Shell output with no path.
 			{Seq: 2, Tool: "Bash", Channel: model.ChanShell, CommandClass: "tests",
@@ -48,25 +48,25 @@ func TestTopLevelIsAcquisitionChannel(t *testing.T) {
 	retrieved := child(t, tree, "retrieved content")
 
 	shell := child(t, retrieved, "shell output")
-	if _ = child(t, retrieved, "file reading"); shell.Tokens != 4500 {
+	if _ = child(t, retrieved, "Read tool"); shell.Tokens != 4500 {
 		t.Errorf("shell output tokens = %v, want 4500", shell.Tokens)
 	}
 	// Shell output splits by what the command was doing; "shell output" with
 	// no further structure is the least useful answer available.
-	reading := child(t, shell, "file reading")
+	reading := child(t, shell, "cat / sed / head")
 	child(t, shell, "tests")
 	if reading.Tokens != 2000 {
 		t.Errorf("file reading tokens = %v, want 2000", reading.Tokens)
 	}
 	// Other channels split by content category.
-	direct := child(t, retrieved, "file reading")
+	direct := child(t, retrieved, "Read tool")
 	child(t, direct, string(model.CatSourceCode))
 }
 
 func TestRepeatedFilesCollapseIntoOneRectangle(t *testing.T) {
 	// A treemap of forty identical slivers hides the thing worth seeing.
 	tree := BuildTree(treeFixture(), analysis.CarryReport{})
-	reading := child(t, child(t, child(t, tree, "retrieved content"), "shell output"), "file reading")
+	reading := child(t, child(t, child(t, tree, "retrieved content"), "shell output"), "cat / sed / head")
 
 	if len(reading.Children) != 1 {
 		t.Fatalf("expected the two reads of one file to collapse, got %d rectangles",

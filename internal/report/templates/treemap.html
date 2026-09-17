@@ -487,8 +487,16 @@ function render() {
       ? "Percentages are shares of the session's whole token cost. Click a box to go into it."
       : `${pct(pctOfSession(here))} of the session's token cost. Percentages are shares of this level.`;
   }
+  const levelOf = {
+    root: "how the tokens were spent",
+    bucket: "how the content was obtained",
+    channel: "what the commands were doing",
+    category: "what the content is",
+    command: "which files",
+  };
+  const showing = levelOf[here.kind] ? ` Showing: ${levelOf[here.kind]}.` : "";
   document.getElementById("tm-sub").textContent =
-    `${here.name}: ${fmt(value(here))} ${unit} across ${fmt(here.items)} retrievals. ${scope}`;
+    `${here.name}: ${fmt(value(here))} ${unit} across ${fmt(here.items)} retrievals.${showing} ${scope}`;
 }
 
 function renderCrumbs() {
