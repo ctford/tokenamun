@@ -102,6 +102,7 @@ func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
 	root.Children = append(root.Children, resultsNodes(s, carry)...)
 	root.Children = compact(root.Children)
 	collapseEmptyLevels(root)
+	explainInlinePrograms(root)
 	rollUp(root)
 
 	// Whatever the parts do not account for has to be present. Without it
@@ -146,8 +147,7 @@ func preambleNode(carry analysis.CarryReport) *Node {
 		Carry:  carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryUncachedEIT, Items: 1,
 		RoundTrips: carry.PreambleRoundTrips,
 		tokenCalls: float64(carry.Preamble) * carry.PreambleRoundTrips,
-		Detail: "system prompt, tool schemas, instruction files and skills, carried on " +
-			"every call. Both figures here are lower bounds.",
+		Detail:     "the harness's own prompt, carried on every call.",
 		DetailMore: "It cannot be decomposed: none of its parts are in the transcript. " +
 			"Its round trips and its cost both stop at the first context reset, because " +
 			"compaction can leave a prefix smaller than the first call's prompt and what " +
@@ -192,8 +192,9 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 	// The model writes three kinds of thing: what it says to you, what it
 	// says to tools, and what it says to itself.
 	n := &Node{Name: "model output", Kind: "bucket",
-		Detail: "what the model wrote, priced twice: at the output rate when written, " +
-			"then at the input rate on every later call that re-reads it."}
+		Detail: "what the model wrote, and then kept re-reading.",
+		DetailMore: "Paid for twice: at the output rate when written, then at the " +
+			"input rate on every later call that re-reads it."}
 
 	// The carried figure covers prose and tool arguments together, so it is
 	// apportioned the same way the generation is.
@@ -213,8 +214,7 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 			Tokens: prose, Carry: gen + held, CarryUncached: gen + heldUncached, Items: 1,
 			RoundTrips: carry.AssistantRoundTrips,
 			tokenCalls: prose * carry.AssistantRoundTrips,
-			Detail: fmt.Sprintf("the text it wrote for you to read, as opposed to its "+
-				"thinking or its tool calls: %s to write, %s to keep re-reading",
+			Detail: fmt.Sprintf("%s to write, %s to keep re-reading.",
 				num(int(gen)), num(int(held))),
 		})
 	}
@@ -223,10 +223,10 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		held := carry.AssistantCarryEIT * (1 - proseShare)
 		heldUncached := carry.AssistantCarryUncachedEIT * (1 - proseShare)
 		argNode := &Node{Name: "tool arguments", Kind: "source",
-			Detail: fmt.Sprintf("what it wrote to invoke tools - the command strings, "+
-				"file paths and patch text. The other side of the same calls is CLI "+
-				"output, which is what the tools printed back: %s to write, %s to keep "+
-				"re-reading", num(int(gen)), num(int(held)))}
+			Detail: fmt.Sprintf("the commands and patches it wrote: %s to write, "+
+				"%s to keep re-reading.", num(int(gen)), num(int(held))),
+			DetailMore: "What the tools printed back is the other side of the same " +
+				"calls, under cli output, mcp output or file content."}
 		argNode.Children = byToolArguments(s, carry, gen+held, gen+heldUncached, args)
 		n.Children = append(n.Children, argNode)
 	}
@@ -240,10 +240,10 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 			// the cost is identical in both modes -- this is generation only,
 			// with no residency for caching to discount.
 			Tokens: float64(thinking), Carry: gen, CarryUncached: gen, Items: 1,
-			Detail: "what it wrote for itself, not shown to you. Observed, and priced at " +
-				"the output rate for writing it. Whether it is re-read as input afterwards " +
-				"is not knowable from a transcript: Claude Code records thinking blocks " +
-				"with empty text.",
+			Detail: "what it wrote for itself. Only the writing is priced here.",
+			DetailMore: "Whether thinking is re-read as input afterwards is not " +
+				"knowable from a transcript: Claude Code records thinking blocks with " +
+				"empty text. So its carry is in unattributed, not here.",
 		})
 	}
 	return n
@@ -289,10 +289,8 @@ func byToolArguments(s *model.Session, carry analysis.CarryReport,
 			Items:      callsByTool[name],
 			RoundTrips: trips,
 			tokenCalls: tokens * trips,
-			Detail: fmt.Sprintf("%d calls, %s of arguments. This is what the model "+
-				"wrote to invoke the tool, not what the tool printed back -- that is "+
-				"under cli output, mcp output or file content, depending on the tool.",
-				callsByTool[name], byteStr(b)),
+			Detail: fmt.Sprintf("%s of arguments over %s.",
+				byteStr(b), pluralCalls(callsByTool[name])),
 		})
 	}
 	return out
@@ -688,5 +686,21 @@ func sortTree(n *Node) {
 	})
 	for _, child := range n.Children {
 		sortTree(child)
+	}
+}
+
+// explainInlinePrograms notes why an interpreter did not open up.
+func explainInlinePrograms(n *Node) {
+	for _, c := range n.Children {
+		explainInlinePrograms(c)
+		if note := inlineProgramNote(c); note != "" {
+			// Appended, not assigned: a merged leaf already carries its tool
+			// and residency, and both are worth keeping.
+			if c.Detail == "" {
+				c.Detail = note
+			} else {
+				c.Detail += " · " + note
+			}
+		}
 	}
 }

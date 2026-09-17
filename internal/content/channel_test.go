@@ -120,9 +120,10 @@ func TestOnlyToolsWithSubcommandsOpenUpByTheirSecondWord(t *testing.T) {
 		{"grep air", []string{"grep"}},
 		{"wc -l", []string{"wc"}},
 		{"ls -la", []string{"ls"}},
-		// A target runner's second word is the repository's vocabulary, not
-		// the tool's, so it is deliberately not a level.
-		{"make build", []string{"make"}},
+		// A target runner's target is a level too: it is read off the command
+		// line rather than hardcoded, so it is the same kind of fact as
+		// `git status`.
+		{"make build", []string{"make", "make build"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.cmd, func(t *testing.T) {

@@ -31,6 +31,7 @@ const usage = `tokenamun - a profiler for coding-agent token usage
 
 Usage:
   tokenamun sessions              list the sessions it can see
+  tokenamun doctor                whether either source is set up to record here
   tokenamun profile [session]     where the tokens went, and what they cost
   tokenamun retrieval [session]   what content entered the context, and from where
   tokenamun carry [session]       what it cost to keep content, not to fetch it
@@ -168,6 +169,8 @@ func run(args []string) error {
 	switch cmd {
 	case "interventions":
 		return cmdInterventions(*asJSON)
+	case "doctor":
+		return cmdDoctor(*dir, *asJSON)
 	case "sessions":
 		return cmdSessions(*dir, *source, *asJSON)
 	case "profile":
@@ -357,137 +360,14 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 	return report.RenderCache(os.Stdout, r)
 }
 
-// cmdScan measures code properties without reference to any session.
-func cmdScan(dir, selector string, budget codescan.Budget, asJSON bool) error {
-	root := dir
-	// scan takes a path rather than a session, so a positional argument here
-	// is a directory.
-	if selector != "" && selector != "latest" {
-		root = selector
-	}
-	r, err := codescan.Scan(root, codescan.DefaultOptions())
-	if err != nil {
-		return err
-	}
-	out := report.BuildScan(r)
-	if asJSON {
-		if err := writeJSON(out); err != nil {
-			return err
-		}
-	} else if err := report.RenderScan(os.Stdout, out); err != nil {
-		return err
-	}
-
-	// Budgets turn the report into a check. Printed to stderr and returned as
-	// an error, so this works as a CI gate with or without --json.
-	breaches := codescan.Check(r, budget)
-	if len(breaches) == 0 {
-		return nil
-	}
-	for _, b := range breaches {
-		fmt.Fprintf(os.Stderr, "over budget: %s\n", b)
-	}
-	return fmt.Errorf("%d code budgets exceeded", len(breaches))
-}
-
 // cmdHotspots joins code metrics onto session cost.
 //
-// The tree to scan is a separate input from where the sessions live, because
-// they routinely differ: a session recorded on one branch is profiled from a
-// checkout on another, and then none of its files exist to measure.
-func cmdHotspots(dir, scanDir, source, selector string, asJSON bool) error {
-	s, err := loadSelected(dir, source, selector)
-	if err != nil {
-		return err
-	}
-	if scanDir == "" {
-		scanDir = dir
-	}
-	scan, err := codescan.Scan(scanDir, codescan.DefaultOptions())
-	if err != nil {
-		return err
-	}
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
-	out := report.BuildHotspots(s, analysis.Hotspots(s, scan, carry))
-	if asJSON {
-		return writeJSON(out)
-	}
-	return report.RenderHotspots(os.Stdout, out)
-}
 
 // cmdSeries aggregates previously-emitted profile JSON files.
 //
-// Runs of the same step share a filename prefix up to the last hyphen, so a
-// driver script needs no manifest: step-07-probe-1.json and
-// step-07-probe-2.json are two runs of one step.
-func cmdSeries(files []string, interventionCost float64, asJSON bool) error {
-	if len(files) == 0 {
-		return fmt.Errorf("series needs profile JSON files: tokenamun series step-*.json")
-	}
-	s, err := analysis.LoadSeries(files, interventionCost)
-	if err != nil {
-		return err
-	}
-	out := report.BuildSeries(s)
-	if asJSON {
-		return writeJSON(out)
-	}
-	return report.RenderSeries(os.Stdout, out)
-}
-
-func cmdTreemap(dir, source, selector, title, outPath string, asJSON bool) error {
-	s, err := loadSelected(dir, source, selector)
-	if err != nil {
-		return err
-	}
-	payload := report.BuildTreemapTitled(s,
-		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)), title)
-
-	// --json prints the report's own payload: byte for byte what the HTML
-	// viewer is given. It is the guarantee that the two views cannot diverge,
-	// and it is how something automating this gets the whole hierarchy in one
-	// call instead of walking `tree --at` down every branch.
-	if asJSON {
-		return writeJSON(payload)
-	}
-
-	f, err := os.Create(outPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if err := report.RenderTreemap(f, payload); err != nil {
-		return err
-	}
-	fmt.Printf("wrote %s (%d retrievals)\n", outPath, len(s.Retrievals))
-	fmt.Println("Area is cost-weighted tokens. It is not a picture of the context window.")
-	return nil
-}
 
 // cmdTree serves one level of the drill-down the HTML viewer draws.
 //
-// The viewer needs a browser and a mouse. This is the same tree, reachable by
-// name, so an agent can answer "where did the tokens go" without a person
-// reading a picture to it.
-func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
-	s, err := loadSelected(dir, source, selector)
-	if err != nil {
-		return err
-	}
-	var path []string
-	if at != "" {
-		path = strings.Split(at, "/")
-	}
-	v, err := report.BuildTreeView(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)),
-		path, mode)
-	if err != nil {
-		return err
-	}
-	if asJSON {
-		return writeJSON(v)
-	}
-	return report.RenderTreeView(os.Stdout, v)
-}
 
 // cmdWhatIfAll runs every intervention and prints the summary table, which is
 // the one thing the HTML report showed that no command produced.
@@ -501,27 +381,6 @@ func cmdWhatIfAll(dir, source, selector string, ratio float64, replayWith string
 		return writeJSON(out)
 	}
 	return report.RenderWhatIfAll(os.Stdout, out)
-}
-
-func cmdCompare(dir, source, a, b string, asJSON bool) error {
-	if a == "" || b == "" {
-		return fmt.Errorf("compare needs two sessions: tokenamun compare <a> <b>")
-	}
-	sa, err := loadSelected(dir, source, a)
-	if err != nil {
-		return fmt.Errorf("session a: %w", err)
-	}
-	sb, err := loadSelected(dir, source, b)
-	if err != nil {
-		return fmt.Errorf("session b: %w", err)
-	}
-	out := report.BuildCompare(
-		report.BuildProfile(sa), report.BuildProfile(sb),
-		report.BuildRetrieval(sa), report.BuildRetrieval(sb))
-	if asJSON {
-		return writeJSON(out)
-	}
-	return report.RenderCompare(os.Stdout, out)
 }
 
 // cmdWhatIf takes the intervention name first, then an optional session.
@@ -712,6 +571,59 @@ func (r *repeatable) String() string { return strings.Join(*r, ",") }
 func (r *repeatable) Set(v string) error {
 	*r = append(*r, v)
 	return nil
+}
+
+// cmdDoctor says whether the two sources are set up to record.
+//
+// "No sessions found" was the answer to four different problems, and the
+// difference between them is the whole of what a reader needs.
+func cmdDoctor(dir string, asJSON bool) error {
+	checks := entire.Diagnose(dir)
+	local, localErr := claudecode.DiscoverLocal(dir)
+
+	if asJSON {
+		return writeJSON(map[string]any{
+			"schema_version":    1,
+			"entire":            checks,
+			"local_transcripts": len(local),
+		})
+	}
+
+	fmt.Println("TOKENAMUN  can it read anything here?")
+	fmt.Println()
+	fmt.Printf("Claude Code transcripts   %s\n", localState(local, localErr))
+	fmt.Println("  No setup needed: Claude Code writes these itself. This is the")
+	fmt.Println("  source that works from a cold start.")
+	fmt.Println()
+	fmt.Println("Entire")
+	for _, c := range checks {
+		mark := "x"
+		if c.OK {
+			mark = "ok"
+		}
+		fmt.Printf("  %-4s %-20s %s\n", mark, c.Name, c.Found)
+	}
+	for _, c := range checks {
+		if c.Fix != "" {
+			fmt.Println()
+			fmt.Printf("%s: %s\n", c.Name, c.Fix)
+		}
+	}
+	fmt.Println()
+	return nil
+}
+
+func localState(refs []model.SessionRef, err error) string {
+	switch {
+	case err != nil:
+		return "could not look: " + err.Error()
+	case len(refs) == 0:
+		return "none for this directory"
+	case len(refs) == 1:
+		return "1 session"
+	default:
+		return fmt.Sprintf("%d sessions", len(refs))
+	}
 }
 
 // cmdInterventions lists what can be asked of `what-if`.

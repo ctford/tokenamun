@@ -198,8 +198,6 @@ func TestCommandGroupsAreByToolIdentity(t *testing.T) {
 	cases := map[string]string{
 		"git":     "version control",
 		"gh":      "version control",
-		"grep":    "standard unix tools",
-		"sort":    "standard unix tools",
 		"go":      "language toolchains",
 		"pnpm":    "language toolchains",
 		"python3": "interpreters",
@@ -209,6 +207,13 @@ func TestCommandGroupsAreByToolIdentity(t *testing.T) {
 		"mise":    "task runners",
 		"curl":    "network",
 		"ruff":    "linters and formatters",
+	}
+	// And the POSIX utilities are deliberately ungrouped: see groups.go.
+	// grep is a tool you act on directly, and a heading hid it.
+	for _, ungrouped := range []string{"grep", "sort", "cat", "sed", "find", "wc"} {
+		if got := CommandGroup(ungrouped); got != "" {
+			t.Errorf("CommandGroup(%q) = %q, want no group", ungrouped, got)
+		}
 	}
 	for binary, want := range cases {
 		if got := CommandGroup(binary); got != want {
@@ -375,8 +380,8 @@ func TestWrappersAreNotAlsoGroupMembers(t *testing.T) {
 			t.Errorf("%q is stripped as a wrapper but also grouped under %q", wrapper, g)
 		}
 	}
-	// And the stripping works: the group is the real command's.
-	if got := CommandGroup(CommandBinary("xargs grep -n foo")); got != "standard unix tools" {
-		t.Errorf("xargs grep resolved to %q, want standard unix tools", got)
+	// And the stripping works: the binary is the real command.
+	if got := CommandBinary("xargs grep -n foo"); got != "grep" {
+		t.Errorf("xargs grep resolved to %q, want grep", got)
 	}
 }

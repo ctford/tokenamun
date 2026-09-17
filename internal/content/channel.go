@@ -237,16 +237,40 @@ func CommandPath(cmd string) []string {
 	if len(words) > 1 && hasSubcommands[out[0]] && !strings.ContainsAny(words[1], "/.") {
 		out = append(out, out[0]+" "+words[1])
 	}
+	// An interpreter's first argument is the program it runs, so it is the
+	// most informative thing about the call: a repository that runs
+	// `python3 scripts/migrate.py` twenty times should see the script, not
+	// twenty rows called python3. The path characters excluded above are
+	// exactly what identifies it, so this is a separate case.
+	//
+	// Inline code -- `python3 -c`, `node -e`, a heredoc on stdin -- has no
+	// name to group by, and there is nothing to invent. Those stay as the
+	// bare interpreter, which is why a session written entirely in heredocs
+	// gets one undifferentiated box.
+	if len(words) > 1 && interpreters[out[0]] && strings.ContainsAny(words[1], "/.") {
+		out = append(out, out[0]+" "+words[1])
+	}
 	return out
 }
 
-// hasSubcommands are tools whose first argument names a mode of the tool
-// rather than a thing to operate on.
+// interpreters run a program named by their first argument.
+var interpreters = map[string]bool{
+	"python": true, "python2": true, "python3": true,
+	"node": true, "ts-node": true, "tsx": true, "deno": true, "bun": true,
+	"ruby": true, "perl": true, "php": true, "lua": true, "luajit": true,
+	"julia": true, "elixir": true, "escript": true, "groovy": true,
+	"scala": true, "kotlin": true, "tclsh": true, "rscript": true,
+	"pwsh": true, "powershell": true, "osascript": true, "racket": true,
+	"guile": true, "sbcl": true, "janet": true, "bb": true, "babashka": true,
+	"clojure": true, "clj": true, "swift": true,
+}
+
+// hasSubcommands are tools whose first argument names what the tool is doing
+// rather than a thing to operate on: a subcommand, or a target.
 //
-// Deliberately absent: make, rake, just and the other target runners. Their
-// second word is a target defined by the repository, so opening up by it
-// would be filing output under a project's own vocabulary -- which is the one
-// thing the taxonomy in groups.go refuses to do.
+// Not a list of every subcommand -- `git bisect` opens up the way `git add`
+// does. Only whether the second word means something, which is a property of
+// the tool's interface and the same everywhere.
 var hasSubcommands = map[string]bool{
 	"git": true, "gh": true, "glab": true, "hg": true, "svn": true, "jj": true,
 	"go": true, "cargo": true, "rustup": true, "zig": true,
@@ -278,6 +302,16 @@ var hasSubcommands = map[string]bool{
 	"systemctl": true, "launchctl": true, "service": true,
 	"openssl": true, "sops": true, "age": true,
 	"tsc": true, "bazel": true, "earthly": true, "nx": true, "turbo": true,
+	// Target runners included. The rule that excluded them said their second
+	// word is the repository's vocabulary rather than the tool's, which is
+	// true and turns out not to matter: the taxonomy's rule is against
+	// *hardcoding* a role, and a target read off an observed command line is
+	// no more hardcoded than `git status` is. `make test` against `make
+	// build` is exactly the split a reader wants, and unlike a grep pattern
+	// a repository's targets are a small fixed set.
+	"make": true, "just": true, "task": true, "rake": true, "invoke": true,
+	"doit": true, "mage": true, "gulp": true, "grunt": true, "moon": true,
+	"lage": true, "buck": true, "buck2": true, "pants": true,
 	"osv-scanner": true, "syft": true, "grype": true, "trivy": true,
 	"snyk": true, "semgrep": true,
 }
@@ -395,4 +429,10 @@ func IsFileContent(c model.RetrievedContent) bool {
 	default:
 		return c.Path != ""
 	}
+}
+
+// RunsInlineProgram reports whether a binary is an interpreter, and so may
+// have been handed a program inline rather than by name.
+func RunsInlineProgram(binary string) bool {
+	return interpreters[strings.ToLower(binary)]
 }

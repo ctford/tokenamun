@@ -18,6 +18,12 @@ import "strings"
 //
 // A tool that is not listed stays at the top level of cli output rather than
 // being swept into a catch-all, so an unrecognised tool is visible as itself.
+// That is also why there is no group for the POSIX text and file utilities --
+// grep, find, cat, sed, head, wc. They were "standard unix tools" and the
+// group was doing the opposite of its job: it hid the biggest of them, grep,
+// behind a heading, when grep is a tool you act on directly and the others
+// are mostly incidental. The unix utilities are the one family where the
+// members are more informative than the category.
 //
 // Wrappers such as env and xargs are deliberately absent: they are stripped
 // before a command is identified, since `xargs grep foo` is a grep, so any
@@ -30,21 +36,6 @@ var groupMembers = map[string][]string{
 	"version control": {
 		"git", "hg", "svn", "jj", "bzr", "fossil", "cvs", "p4",
 		"gh", "glab", "tea",
-	},
-	"standard unix tools": {
-		// POSIX and near-POSIX text, file and search utilities, plus the
-		// modern replacements that do the same job.
-		"grep", "rg", "ag", "ack", "find", "fd", "ls", "tree", "du", "df",
-		"wc", "sort", "uniq", "cut", "tr", "stat", "file", "diff", "comm",
-		"join", "paste", "split", "rev", "column", "fold", "expand", "tee",
-		"xxd", "od", "hexdump", "strings", "basename", "dirname", "readlink",
-		"realpath", "which", "sd", "gron", "dasel", "delta", "choose",
-		// These print file contents, so their output is routed to file
-		// content when they actually read a file. Group membership is a
-		// separate question: they are POSIX text tools either way, and when
-		// used as pipeline filters they belong here.
-		"cat", "bat", "head", "tail", "sed", "awk", "nl", "jq", "yq",
-		"less", "more",
 	},
 	"language toolchains": {
 		// Project-level build and dependency tools, by language. Compilers
@@ -97,8 +88,6 @@ var groupMembers = map[string][]string{
 		"corepack",
 	},
 	"task runners": {
-		// Their second word is a target the repository defines, which is why
-		// none of them opens up by it: see hasSubcommands.
 		"make", "just", "mise", "task", "rake", "invoke", "doit", "mage",
 		"nx", "turbo", "moon", "lage", "gulp", "grunt",
 		"bazel", "buck", "buck2", "pants", "earthly",

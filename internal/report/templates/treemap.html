@@ -14,12 +14,21 @@
     --text-secondary: #52514e;
     --text-muted: #6f6e69;
     --rule: #e3e2dd;
-    /* Sequential blue, light -> dark. One hue: the measure is magnitude. */
-    --seq-100: #cde2fb; --seq-200: #9ec5f4; --seq-300: #6da7ec;
-    --seq-400: #3987e5; --seq-500: #256abf; --seq-600: #184f95;
-    --seq-700: #0d366b;
-    --bar: #2a78d6;
+    /* Sequential oxide, light -> dark. One hue, because the measure is
+       magnitude, and lightness is strictly monotonic: 0.922 down to 0.349 in
+       OKLab, which is what makes the steps comparable by eye. Chroma peaks in
+       the middle and falls off at both ends, the same shape the blue it
+       replaced had, so a pale step still reads as the same colour. */
+    --seq-100: #f6e0d7; --seq-200: #eabfae; --seq-300: #d99a82;
+    --seq-400: #c37356; --seq-500: #a5553a; --seq-600: #803f2b;
+    --seq-700: #5a2b1d;
+    --bar: #b5624a;
     --de-emphasis: #b9b8b1;
+    /* The other scheme, for the toggle: a button that names where it takes
+       you should look like where it takes you. */
+    --other-surface: #1a1a19;
+    --other-ink: #f4f3ef;
+    --other-rule: #37362f;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -45,11 +54,16 @@
     --text-secondary: #c3c2b7;
     --text-muted: #9c9b91;
     --rule: #37362f;
-    --seq-100: #104281; --seq-200: #184f95; --seq-300: #1c5cab;
-    --seq-400: #256abf; --seq-500: #3987e5; --seq-600: #6da7ec;
-    --seq-700: #9ec5f4;
-    --bar: #3987e5;
+    /* The same hue against a dark surface, so it runs the other way: 0.309
+       up to 0.778. Selected steps rather than an automatic inversion. */
+    --seq-100: #4a2418; --seq-200: #5a2b1d; --seq-300: #6d3624;
+    --seq-400: #803f2b; --seq-500: #a5553a; --seq-600: #c37356;
+    --seq-700: #e0a892;
+    --bar: #c37356;
     --de-emphasis: #57564f;
+    --other-surface: #fcfcfb;
+    --other-ink: #0b0b0b;
+    --other-rule: #e3e2dd;
   }
 
   * { box-sizing: border-box; }
@@ -72,6 +86,11 @@
     font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 6px;
     border: 1px solid var(--rule); background: var(--surface-1);
     color: var(--text-primary); cursor: pointer;
+  }
+  /* A preview of what you would get, so the label and the swatch agree. */
+  #toggle-theme {
+    background: var(--other-surface); color: var(--other-ink);
+    border-color: var(--other-rule);
   }
   button[aria-pressed="true"] { border-color: var(--bar); color: var(--bar); font-weight: 600; }
   button:focus-visible { outline: 2px solid var(--bar); outline-offset: 2px; }
@@ -167,7 +186,7 @@
     <button id="mode-uncached" aria-pressed="false">Token cost (no caching)</button>
     <span style="flex:1"></span>
     <button id="toggle-table" aria-pressed="false">Table view</button>
-    <button id="toggle-theme">Dark / light</button>
+    <button id="toggle-theme"></button>
   </div>
 
 
@@ -597,9 +616,7 @@ svg.addEventListener("mousemove", e => {
       <dt>share of session</dt><dd>${pct(pctOfSession(n))}</dd>
       ${path.length === 0 ? "" : `<dt>share of ${
         esc(shortName(parent.name))}</dt><dd>${pct(pctOfView(n, parent))}</dd>`}
-      <dt>cost as billed</dt><dd>${fmt(n.carry)}</dd>
-      ${n.unscaled ? "" : `<dt>if nothing cached</dt><dd>${fmt(n.carryUncached)}</dd>
-      <dt>caching saved</dt><dd>${pct(100 * cacheSaving(n))}</dd>`}
+      ${n.unscaled ? "" : `<dt>caching saved</dt><dd>${pct(100 * cacheSaving(n))}</dd>`}
       <dt>bytes</dt><dd>${bytes(n.bytes)}</dd>
       <dt>retrievals</dt><dd>${fmt(n.items)}</dd>
       ${n.unscaled || !n.roundTrips ? "" : `<dt>round trips</dt><dd>${
@@ -672,10 +689,20 @@ function applyViewMode() {
   tableBtn.textContent = tableMode ? "Boxes" : "Table view";
 }
 
-document.getElementById("toggle-theme").onclick = () => {
+/* The button names where it takes you, not what it does, and it wears the
+   colours of the scheme it would switch to. A control labelled "Dark / light"
+   makes you work out which half you are in. */
+const themeBtn = document.getElementById("toggle-theme");
+themeBtn.onclick = () => {
   document.documentElement.setAttribute("data-theme", darkMode() ? "light" : "dark");
+  labelTheme();
   render(); // the ramp inverts, so the label ink has to be re-chosen
 };
+
+function labelTheme() {
+  themeBtn.textContent = darkMode() ? "Light" : "Dark";
+}
+labelTheme();
 
 applyViewMode();
 goTo([], true);

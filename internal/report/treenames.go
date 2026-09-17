@@ -99,8 +99,7 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 // levelDetail explains a level whose name cannot carry its own meaning.
 func levelDetail(level string) string {
 	if level == "unidentified files" {
-		return "real file reading, with the file unknown: the command was compound or " +
-			"the path was in a variable."
+		return "real file reading, with the file unknown."
 	}
 	return ""
 }
@@ -108,19 +107,15 @@ func levelDetail(level string) string {
 func kindDetail(kind string) string {
 	switch kind {
 	case "file content":
-		return "the contents of files, however they arrived: the Read tool, cat and sed, or a " +
-			"tool that returned a document."
+		return "the contents of files, however they arrived."
 	case "web content":
-		return "what came back from fetching a page or running a search. Not the URL you " +
-			"asked for, which is under model output."
+		return "fetched pages and search results."
 	case "cli output":
-		return "what command-line tools reported: git, test runners, builds, searches, listings."
+		return "what command-line tools printed back."
 	case "harness output":
-		return "what Claude Code's own tools returned: plan mode, skills, questions, " +
-			"tool search. Not commands you ran."
+		return "what Claude Code's own tools returned, not commands you ran."
 	case "mcp output":
-		return "what MCP servers returned. Compare its size with cli output when weighing " +
-			"whether to put a server behind a CLI."
+		return "what MCP servers returned."
 	default:
 		return ""
 	}
@@ -128,12 +123,9 @@ func kindDetail(kind string) string {
 
 func leafDetail(c model.RetrievedContent, it analysis.CarriedItem) string {
 	d := c.Tool
-	if c.CommandClass != "" {
-		d += " · " + c.CommandClass
-	}
-	d += " · entered at call " + itoa(c.InvocationSeq)
+	d += " · call " + itoa(c.InvocationSeq)
 	if it.ResidentFor > 0 {
-		d += ", resident for " + itoa(it.ResidentFor) + " calls"
+		d += " · " + itoa(it.ResidentFor) + " round trips"
 	}
 	if c.Partial {
 		d += " · partial read"
@@ -145,6 +137,19 @@ func leafDetail(c model.RetrievedContent, it analysis.CarriedItem) string {
 		d += " · " + itoa(c.Images) + " image(s), tokens not estimated"
 	}
 	return d
+}
+
+// inlineProgramNote explains an interpreter that did not open up.
+//
+// 2.7% of one session sat in a single box called python3, and the reason is
+// worth stating where it is seen: the calls were heredocs, so there is no
+// program name to group them by. Saying nothing invites the question of
+// whether the tool simply failed to split them.
+func inlineProgramNote(n *Node) string {
+	if !content.RunsInlineProgram(n.Name) || len(n.Children) > 0 || n.Items < 2 {
+		return ""
+	}
+	return "inline code, so there is no program name to group by."
 }
 
 func pluralRetrievals(n int) string {
@@ -192,10 +197,7 @@ func byteStr(n int) string {
 // same text in `tokenamun tree --at unattributed` is exactly what somebody
 // asking has asked for.
 func unattributedDetail() string {
-	return "the bill is bigger than the parts that can be named, and this is the " +
-		"difference: tokens that were certainly charged but cannot be pinned to any " +
-		"one piece of content. Mostly the model re-reading its own thinking, and the " +
-		"reminders the harness adds to every call."
+	return "charged, but not attributable to any one piece of content."
 }
 
 // unattributedMore computes what the two largest candidates would come to.
@@ -234,4 +236,11 @@ func nonZero(v float64) float64 {
 		return 1
 	}
 	return v
+}
+
+func pluralCalls(n int) string {
+	if n == 1 {
+		return "1 call"
+	}
+	return itoa(n) + " calls"
 }

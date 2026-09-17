@@ -92,8 +92,13 @@ func TestThinkingIsSplitOutOfOutputButNotCarried(t *testing.T) {
 	if thinking.Tokens != 300 {
 		t.Errorf("thinking tokens = %v, want the observed 300", thinking.Tokens)
 	}
-	if thinking.Detail == "" || !contains(thinking.Detail, "not knowable") {
-		t.Errorf("thinking must say its carry is unknowable, got %q", thinking.Detail)
+	// The tooltip says only the writing is priced; why is in the long form,
+	// where there is room for it.
+	if !contains(thinking.Detail, "writing is priced") {
+		t.Errorf("thinking must say only the writing is priced, got %q", thinking.Detail)
+	}
+	if !contains(thinking.DetailMore, "not knowable") {
+		t.Errorf("thinking must say its carry is unknowable, got %q", thinking.DetailMore)
 	}
 	// Prose and tool arguments each combine what they cost to write with what
 	// they cost to keep, since they are the same text.
@@ -493,9 +498,10 @@ func TestBranchesAreNamedForWhatCameBackNotForTheSource(t *testing.T) {
 func TestTooltipsStaySomethingAPersonWillRead(t *testing.T) {
 	// A paragraph on a box you are hovering over competes with the box for
 	// your attention, and loses. The remainder's tooltip was 547 characters
-	// and nobody read it. The argument belongs in `tokenamun tree`, where a
-	// reader has asked for it.
-	const limit = 280
+	// and nobody read it. The bar is "what you typed, carried for the rest of
+	// the session" -- one clause. The argument belongs in `tokenamun tree`,
+	// where a reader has asked for it.
+	const limit = 120
 	tree := built(t)
 	var walk func(*Node)
 	walk = func(n *Node) {
