@@ -131,11 +131,15 @@ func TestFileContentBreaksDownByFile(t *testing.T) {
 }
 
 // git is tool invocation, not file reading, and CLI is separated from MCP
-// because that is the axis the MCP-versus-CLI argument turns on.
+// because that is the axis the MCP-versus-CLI argument turns on. Tool groups
+// are by identity, which is industry-stable, never by role in a project,
+// which is not.
 func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 	tree := built(t)
 	cli := child(t, tree, "CLI output")
-	child(t, cli, "git")
+	// Tools are grouped by what they are -- git is version control in every
+	// codebase -- and the binary is a level inside that.
+	child(t, child(t, cli, "version control"), "git")
 	child(t, tree, "MCP output")
 
 	// File content must not be filed under CLI output.
@@ -149,7 +153,7 @@ func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 // "If it's possible to drill down from git to git status, that'd be great."
 func TestCLIOutputOpensUpBySubcommand(t *testing.T) {
 	tree := built(t)
-	git := child(t, child(t, tree, "CLI output"), "git")
+	git := child(t, child(t, child(t, tree, "CLI output"), "version control"), "git")
 
 	// The compound command was `cd /repo && git status -sb`, so the level is
 	// the git subcommand, not cd and not the flag.

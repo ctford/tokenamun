@@ -257,6 +257,11 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 			levels := []string{sub}
 			if kind == "CLI output" {
 				if p := content.CommandPath(commands[c.ToolID]); len(p) > 0 {
+					// Inside a group the binary is its own level; where the
+					// group name already is the binary, do not repeat it.
+					if sub != p[0] {
+						levels = append(levels, p[0])
+					}
 					levels = append(levels, p[1:]...)
 				}
 			}
@@ -352,10 +357,18 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 		}
 		// Grouped by the tool that ran, not by a purpose category: "which
 		// CLI" is a question about tools.
-		if c.CommandBinary != "" {
-			return "CLI output", c.CommandBinary
+		if !content.LooksLikeCommand(c.CommandBinary) {
+			// A token that is not plausibly a command name came from an
+			// unparsed heredoc. Saying so beats inventing a tool called
+			// s1-tail-unserviceable.json.
+			return "CLI output", "unattributed commands"
 		}
-		return "CLI output", "other shell"
+		if g := content.CommandGroup(c.CommandBinary); g != "" {
+			return "CLI output", g
+		}
+		// An unrecognised tool stays visible as itself rather than being
+		// swept into a catch-all.
+		return "CLI output", c.CommandBinary
 	}
 
 	// What is left is the harness's own tools: plan mode, skills, questions,

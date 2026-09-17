@@ -352,3 +352,57 @@ func TestUnrecognisedCommandsAreNotForced(t *testing.T) {
 		t.Errorf("empty command should have no class, got %q", got)
 	}
 }
+
+// Tool groups encode identity, which is stable across the industry: git is
+// version control everywhere, sed is a POSIX text tool everywhere. They must
+// not encode role, which varies per repository.
+func TestCommandGroupsAreByToolIdentity(t *testing.T) {
+	cases := map[string]string{
+		"git":     "version control",
+		"gh":      "version control",
+		"grep":    "standard tools",
+		"sort":    "standard tools",
+		"go":      "language toolchains",
+		"pnpm":    "language toolchains",
+		"python3": "interpreters",
+		"node":    "interpreters",
+		"kubectl": "containers and orchestration",
+		"gcloud":  "cloud and infrastructure",
+		"mise":    "task runners",
+		"curl":    "network",
+		"ruff":    "linters and formatters",
+	}
+	for binary, want := range cases {
+		if got := CommandGroup(binary); got != want {
+			t.Errorf("CommandGroup(%q) = %q, want %q", binary, got, want)
+		}
+	}
+}
+
+func TestUnrecognisedToolsAreNotSweptIntoAGroup(t *testing.T) {
+	// An unknown tool should stay visible as itself rather than being filed
+	// under a guess.
+	for _, binary := range []string{"the reference repository", "my-custom-thing", ""} {
+		if got := CommandGroup(binary); got != "" {
+			t.Errorf("CommandGroup(%q) = %q, want no group", binary, got)
+		}
+	}
+}
+
+// Output from an unparsed heredoc used to be filed under a "binary" called
+// s1-tail-unserviceable.json, which is real output under a nonsense name.
+func TestTokensThatAreNotCommandNamesAreRejected(t *testing.T) {
+	for _, bad := range []string{
+		"s1-tail-unserviceable.json", "services/spine/main.go", "2", "",
+		"FOO=bar", "$var", "'quoted",
+	} {
+		if LooksLikeCommand(bad) {
+			t.Errorf("LooksLikeCommand(%q) = true", bad)
+		}
+	}
+	for _, good := range []string{"git", "grep", "python3", "golangci-lint"} {
+		if !LooksLikeCommand(good) {
+			t.Errorf("LooksLikeCommand(%q) = false", good)
+		}
+	}
+}
