@@ -175,6 +175,7 @@
       <span class="ramp" id="ramp"></span>
       <span>high</span>
       <span class="muted" id="ramp-caption"></span>
+      <span class="muted">· grey = no attributable token count, so the ramp does not apply</span>
     </div>
   </div>
 
@@ -198,14 +199,10 @@
   </div>
 
   <footer>
-    <p id="foot-est"></p>
-    <p><strong>This is not a picture of the context window.</strong> Area is the
-    observed size of content that entered the context, or the derived cost of
-    carrying it. Neither is the same as the tokens billed for a request, and this
-    view does not reconstruct what was resident at any moment.</p>
-    <p>Retrieved-content tokens and billed tokens are different quantities and are
-    never added together. Token counts are estimates unless a real tokenizer was
-    used; the estimator is stated above.</p>
+    <p><strong>What this is not.</strong> It does not reconstruct the context window
+    at any moment. Costs are what each token class was billed at, attributed to the
+    content resident when it was sent.</p>
+    <p id="foot-est" class="muted"></p>
   </footer>
 </div>
 
@@ -436,7 +433,8 @@ function render() {
     // A branch gets a neutral fill and a header strip: colouring it the same
     // way as its contents made the nesting invisible. The ramp carries meaning
     // only on the smallest rectangles, which is what it is measuring.
-    const fill = leaf ? `var(${RAMP[stepFor(n)]})` : "var(--plane)";
+    const fill = n.unscaled ? "var(--de-emphasis)"
+      : leaf ? `var(${RAMP[stepFor(n)]})` : "var(--plane)";
     parts.push(`<g class="cell${leaf ? " leaf" : ""}" data-path="${p.index}">`);
     parts.push(`<rect x="${p.x}" y="${p.y}" width="${Math.max(0, p.w)}" height="${
       Math.max(0, p.h)}" fill="${fill}" rx="2" stroke="var(--rule)"></rect>`);
@@ -453,7 +451,8 @@ function render() {
         parts.push(`<g class="cell mini${isLeaf ? " leaf" : ""}" data-path="${
           p.index}.${q.index}">`);
         parts.push(`<rect x="${q.x}" y="${q.y}" width="${Math.max(0, q.w)}" height="${
-          Math.max(0, q.h)}" fill="var(${RAMP[stepFor(q.node)]})" rx="1"
+          Math.max(0, q.h)}" fill="${q.node.unscaled ? "var(--de-emphasis)"
+            : `var(${RAMP[stepFor(q.node)]})`}" rx="1"
           stroke="var(--surface-1)" stroke-width="1.5"></rect>`);
         const share = pct(pctOfView(q.node, n));
         const lbl = q.h > 18 ? fitLabel(`${shortName(q.node.name)} · ${share}`, q.w) : "";
@@ -468,7 +467,8 @@ function render() {
     const heading = fitLabel(
       `${n.name} · ${pct(pctOfView(n, here))} · ${fmt(value(n))}`, p.w);
     if (heading) {
-      const ink = leaf ? inkFor(stepFor(n)) : "var(--text-primary)";
+      const ink = n.unscaled ? "var(--text-primary)"
+        : leaf ? inkFor(stepFor(n)) : "var(--text-primary)";
       parts.push(`<text class="group-label" x="${p.x + 4}" y="${p.y + 13}" fill="${
         ink}">${esc(heading)}</text>`);
     }
@@ -582,8 +582,8 @@ svg.addEventListener("mousemove", e => {
       <dt>share of session</dt><dd>${pct(pctOfSession(n))}</dd>
       <dt>share of ${esc(shortName(parent.name))}</dt><dd>${pct(pctOfView(n, parent))}</dd>
       <dt>cost as billed</dt><dd>${fmt(n.carry)} cwt</dd>
-      <dt>if nothing cached</dt><dd>${fmt(n.carryUncached)} cwt</dd>
-      <dt>caching saved</dt><dd>${pct(100 * cacheSaving(n))}</dd>
+      ${n.unscaled ? "" : `<dt>if nothing cached</dt><dd>${fmt(n.carryUncached)} cwt</dd>
+      <dt>caching saved</dt><dd>${pct(100 * cacheSaving(n))}</dd>`}
       <dt>bytes</dt><dd>${bytes(n.bytes)}</dd>
       <dt>retrievals</dt><dd>${fmt(n.items)}</dd>
       ${leaf ? "" : `<dt>contains</dt><dd>${fmt(n.children.length)}</dd>`}

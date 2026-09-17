@@ -30,6 +30,11 @@ type Node struct {
 	// CarryPerToken drives the colour ramp: how expensive this content was to
 	// keep relative to its size.
 	CarryPerToken float64 `json:"carryPerToken"`
+	// Unscaled marks a node the colour ramp does not apply to: it has cost but
+	// no attributable token count, so a carry-per-token rate is undefined
+	// rather than low. Rendering it at the palest step would read as "cheap to
+	// keep", which is a claim we cannot make.
+	Unscaled bool `json:"unscaled,omitempty"`
 	// Detail is shown in the tooltip for leaves.
 	Detail   string  `json:"detail,omitempty"`
 	Children []*Node `json:"children,omitempty"`
@@ -155,7 +160,7 @@ func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryRepor
 
 	if carry.PreambleCarryEIT > 0 {
 		root.Children = append(root.Children, &Node{
-			Name: "session preamble", Kind: "bucket",
+			Name: "session preamble", Kind: "bucket", Unscaled: true,
 			Carry: carry.PreambleCarryEIT, CarryUncached: carry.PreambleCarryEIT, Items: 1,
 			Detail: "system prompt, tool schemas, instruction files and skills, carried on " +
 				"every call. Not decomposable: none of it is in the transcript.",
@@ -165,7 +170,7 @@ func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryRepor
 	rest := carry.PromptCostEIT - retrievalCarry - carry.PreambleCarryEIT
 	if rest > 0 {
 		root.Children = append(root.Children, &Node{
-			Name: "conversation and overhead", Kind: "bucket",
+			Name: "conversation and overhead", Kind: "bucket", Unscaled: true,
 			Carry: rest, CarryUncached: rest, Items: 1,
 			Detail: "user prompts, assistant text, thinking tokens, system reminders and " +
 				"per-call envelope, carried on every later call. Not decomposable.",
@@ -175,7 +180,7 @@ func addNonRetrievalCost(root *Node, s *model.Session, carry analysis.CarryRepor
 	w := cost.For(firstModel(s))
 	if out := w.OutputCost(s.Usage()); out > 0 {
 		root.Children = append(root.Children, &Node{
-			Name: "output generated", Kind: "bucket",
+			Name: "output generated", Kind: "bucket", Unscaled: true,
 			Carry: out, CarryUncached: out, Items: 1,
 			Detail: "tokens the model wrote, priced at the output rate. Observed.",
 		})

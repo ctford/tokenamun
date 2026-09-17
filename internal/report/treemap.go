@@ -88,12 +88,7 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 		Session: treemapSession{
 			ID: s.Ref.ID, Calls: len(s.Invocations), Origin: string(s.Ref.Origin),
 		},
-		EstimatorNote: "Token counts: " + s.Estimator.Method + ".",
-	}
-	if s.Estimator.Calibrated {
-		p.EstimatorNote += fmt.Sprintf(
-			" %.2f bytes per token, %.0f tokens of fixed overhead per call, %.0f%% of observed growth unattributed.",
-			s.Estimator.BytesPerToken, s.Estimator.PerCallOverhead, s.Estimator.Residual*100)
+		EstimatorNote: estimatorNote(s),
 	}
 
 	p.Tiles = []treemapTile{
@@ -156,6 +151,18 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 	// treemap.
 	sort.SliceStable(p.Items, func(i, j int) bool { return p.Items[i].Tokens > p.Items[j].Tokens })
 	return p
+}
+
+// estimatorNote says in one line how content tokens were counted, since every
+// area in the view depends on it.
+func estimatorNote(s *model.Session) string {
+	if !s.Estimator.Calibrated {
+		return "Content token counts are estimated: " + s.Estimator.Method + "."
+	}
+	return fmt.Sprintf(
+		"Content token counts are estimated at %.2f bytes per token, calibrated against this "+
+			"session's own observed prompt growth. Token-class costs are observed.",
+		s.Estimator.BytesPerToken)
 }
 
 // carryItemKey identifies a carried item well enough to join it back to the

@@ -477,10 +477,15 @@ func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 		t.Error("the data placeholder was not substituted")
 	}
 
-	// The disclaimer is the point: area is observed retrieved size, not a
-	// reconstruction of the context window.
-	if !strings.Contains(html, "not a picture of the context window") {
-		t.Error("the report must say what it is not")
+	// The disclaimer is the point: the view does not reconstruct the context
+	// window. Asserted on the claim rather than the exact wording.
+	if !strings.Contains(html, "reconstruct the context window") {
+		t.Error("the report must state that it does not reconstruct the context window")
+	}
+	// And it must say how content tokens were counted, since every area
+	// depends on that estimate.
+	if !strings.Contains(html, "estimated") {
+		t.Error("the report must state how content tokens were counted")
 	}
 	// Ten categories all carry meaning, so the numbers must also exist as text.
 	if !strings.Contains(html, "<table>") {
