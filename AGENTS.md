@@ -96,6 +96,12 @@ accounting, you change that document in the same commit.
   Everything downstream consumes `internal/model` types. New format knowledge
   goes in `assumptions.go` with a note on how we detect it breaking.
 * **Stream, don't slurp.** Transcripts reach 9 MB. Nothing loads a whole one.
+* **Nothing is viewer-only.** The HTML report and the CLI answer the same
+  questions: `tree` is the drill-down, `what-if --all` is the interventions
+  table, `treemap --json` is the payload the HTML is handed. A test asserts
+  they cannot diverge. This tool is meant to be driven by an agent, and a
+  finding only a browser can show is a finding the agent has to ask a human to
+  read out.
 * **The checks are gates, not reports.** `scripts/checks.sh` enforces a
   coverage floor (80%), a file-length, function-complexity and duplication
   budget measured by the tool's own scanner, and a dead-code check. The

@@ -499,7 +499,7 @@ func TestTreemapRampScalesToWhatTheViewerCanDraw(t *testing.T) {
 	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
 	p := BuildTreemap(s, carry)
 
-	if p.MaxCarryPerToken <= 0 {
+	if p.RampMax <= 0 {
 		t.Fatal("the colour ramp needs a maximum to scale against")
 	}
 	// The ramp is topped out by a node the viewer draws, not by something off
@@ -507,7 +507,7 @@ func TestTreemapRampScalesToWhatTheViewerCanDraw(t *testing.T) {
 	var found bool
 	var walk func(*Node)
 	walk = func(n *Node) {
-		if !n.Unscaled && n.CarryPerToken == p.MaxCarryPerToken {
+		if !n.Unscaled && n.ResidentCalls == p.RampMax {
 			found = true
 		}
 		for _, c := range n.Children {
@@ -521,7 +521,7 @@ func TestTreemapRampScalesToWhatTheViewerCanDraw(t *testing.T) {
 	// And no drawable node may exceed it, or it would clamp off the top.
 	var over int
 	walk = func(n *Node) {
-		if !n.Unscaled && n.CarryPerToken > p.MaxCarryPerToken {
+		if !n.Unscaled && n.ResidentCalls > p.RampMax {
 			over++
 		}
 		for _, c := range n.Children {

@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/ctford/tokenamun/internal/model"
@@ -168,6 +169,140 @@ func RenderCompare(w io.Writer, c Compare) error {
 	b.WriteString("\n")
 	for _, n := range c.Notes {
 		fmt.Fprintf(b, "  %s\n", wrap(n, 72, "  "))
+	}
+	b.WriteString("\n")
+
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// WhatIfAll is every intervention's bottom line, side by side.
+//
+// The HTML report has always shown this table; no command produced it, so an
+// agent could ask about one intervention at a time but could not see which of
+// them was worth asking about. That made the ranking a thing only a human
+// with a browser could see.
+type WhatIfAll struct {
+	SchemaVersion int                `json:"schema_version"`
+	Session       SessionInfo        `json:"session"`
+	Rows          []WhatIfSummaryRow `json:"interventions"`
+	Notes         []string           `json:"notes"`
+}
+
+// WhatIfSummaryRow is one intervention, summarised.
+type WhatIfSummaryRow struct {
+	Name    string `json:"name"`
+	Targets string `json:"targets"`
+	// Applicable is false when the evidence for this one is not in the data.
+	// Such a row is not a zero: see NotMeasurable for why.
+	Applicable bool `json:"applicable"`
+	// Effect is the intervention's own nominated bottom line, in EIT.
+	// Negative is a saving.
+	Effect *model.Quantity `json:"effect,omitempty"`
+	// Share is Effect against the session's whole token cost.
+	Share *model.Quantity `json:"share_of_session,omitempty"`
+	// Caveat is the thing to know before quoting Effect. Never empty on an
+	// applicable row with an effect; the interventions are validated on that.
+	Caveat        string `json:"caveat,omitempty"`
+	NotMeasurable string `json:"not_measurable,omitempty"`
+	// Detail is the command that shows the full four-section result.
+	Detail string `json:"detail_command"`
+}
+
+// BuildWhatIfAll runs every intervention over one session.
+func BuildWhatIfAll(s *model.Session, ctx whatif.Context) WhatIfAll {
+	out := WhatIfAll{
+		SchemaVersion: SchemaVersion,
+		Session:       sessionInfo(s),
+		Notes: []string{
+			"Each row is computed against this session, not quoted from a vendor. Negative is a saving.",
+			"These are counterfactuals: they assume the agent would have behaved identically, and none of them can see whether the work still came out right.",
+			"A row that is not applicable is not a zero. The evidence for it is not in this data, and why is in not_measurable.",
+			"Rows are not additive. Two interventions that shrink the same content do not each save what they claim.",
+			"Read the caveat before quoting the effect, and the full result for what it cannot know.",
+		},
+	}
+
+	total := ctx.Carry.PromptCostEIT + ctx.Weights.OutputCost(s.Usage())
+	for _, i := range whatif.All() {
+		r := i.Estimate(ctx)
+		row := WhatIfSummaryRow{
+			Name: r.Intervention, Targets: r.Description,
+			Applicable: r.Applicable, Caveat: r.Caveat, NotMeasurable: r.NotMeasurable,
+			Detail: fmt.Sprintf("tokenamun what-if %s %s", r.Intervention, s.Ref.ID),
+		}
+		if r.Headline != nil && r.Headline.Quantity != nil {
+			q := *r.Headline.Quantity
+			row.Effect = &q
+			if q.Unit != model.Ratio && total > 0 {
+				share := model.Quantity{
+					Value: q.Value / total, Unit: model.Ratio, Prov: q.Prov,
+				}
+				row.Share = &share
+			} else if q.Unit == model.Ratio {
+				row.Share = &q
+				row.Effect = nil
+			}
+		}
+		out.Rows = append(out.Rows, row)
+	}
+
+	// Biggest saving first: the ranking is the point of showing them together.
+	sort.SliceStable(out.Rows, func(i, j int) bool {
+		return summaryRank(out.Rows[i]) < summaryRank(out.Rows[j])
+	})
+	return out
+}
+
+// summaryRank sorts by share, with unmeasurable rows last. They are last
+// rather than at zero because zero is a claim, and "we cannot tell" is not.
+func summaryRank(r WhatIfSummaryRow) float64 {
+	if !r.Applicable {
+		return 1e9
+	}
+	if r.Share != nil {
+		return r.Share.Value
+	}
+	return 0
+}
+
+// RenderWhatIfAll writes the summary table.
+func RenderWhatIfAll(w io.Writer, r WhatIfAll) error {
+	b := &strings.Builder{}
+	b.WriteString("TOKENAMUN  would an optimisation have helped?\n\n")
+	fmt.Fprintf(b, "Session %s, %s API calls\n\n", r.Session.ID, num(r.Session.Calls))
+
+	fmt.Fprintf(b, "%-22s %14s %9s  %s\n", "INTERVENTION", "EFFECT (EIT)", "SESSION", "TARGETS")
+	for _, row := range r.Rows {
+		effect, share := "not measurable", "--"
+		if row.Applicable {
+			effect = "--"
+			if row.Effect != nil {
+				effect = num(int(row.Effect.Value))
+			}
+			if row.Share != nil {
+				share = pctStr(row.Share.Value)
+			}
+		}
+		fmt.Fprintf(b, "%-22s %14s %9s  %s\n",
+			trunc(row.Name, 22), effect, share, trunc(row.Targets, 60))
+	}
+	b.WriteString("\n")
+
+	for _, row := range r.Rows {
+		reason := row.Caveat
+		if !row.Applicable {
+			reason = row.NotMeasurable
+		}
+		if reason == "" {
+			continue
+		}
+		fmt.Fprintf(b, "%s\n  %s\n  %s\n\n", row.Name,
+			wrap(reason, 72, "  "), row.Detail)
+	}
+
+	for _, n := range r.Notes {
+		fmt.Fprintf(b, "%s\n", wrap(n, 74, ""))
 	}
 	b.WriteString("\n")
 

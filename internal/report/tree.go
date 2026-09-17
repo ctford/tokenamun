@@ -30,9 +30,25 @@ type Node struct {
 	CarryUncached float64 `json:"carryUncached"`
 	Bytes         int     `json:"bytes"`
 	Items         int     `json:"items"`
-	// CarryPerToken drives the colour ramp: how expensive this content was to
-	// keep relative to its size.
+	// CarryPerToken is the node's cost divided by its size. Kept for the
+	// payload; nothing displays it, because a price over a size needs a
+	// paragraph and ResidentCalls says the same thing in calls.
 	CarryPerToken float64 `json:"carryPerToken"`
+	// ResidentCalls is how many calls this content sat through, averaged over
+	// its tokens. It drives the colour ramp.
+	//
+	// The ramp used to be CarryPerToken, which is a price ratio and needed a
+	// paragraph to explain. This is the thing that causes it: the model has no
+	// memory, so content still in the context is sent again on every call and
+	// billed again each time. Arriving early and staying is what makes content
+	// expensive; being large is not. A number of calls says that without a
+	// caption.
+	ResidentCalls float64 `json:"residentCalls,omitempty"`
+	// tokenCalls is the accumulator behind ResidentCalls: the sum over
+	// retrievals of tokens x calls resident. Weighted by tokens, so a big file
+	// carried briefly does not read the same as a small one carried
+	// throughout. Unexported: it is scaffolding, not a finding.
+	tokenCalls float64
 	// Unscaled marks a node the colour ramp does not apply to: it has cost but
 	// no attributable token count, so a carry-per-token rate is undefined
 	// rather than low. Rendering it at the palest step would read as "cheap to
@@ -290,10 +306,12 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 			Name: leafName, Kind: "item",
 			Tokens: c.Tokens, Carry: it.CarryEIT, CarryUncached: it.CarryUncachedEIT,
 			Bytes: c.ObservedBytes(), Items: 1,
-			Detail: leafDetail(c, it),
+			Detail:     leafDetail(c, it),
+			tokenCalls: c.Tokens * float64(it.ResidentFor),
 		}
 		if c.Tokens > 0 {
 			leaf.CarryPerToken = it.CarryEIT / c.Tokens
+			leaf.ResidentCalls = float64(it.ResidentFor)
 		}
 		parent.Children = append(parent.Children, leaf)
 	}
@@ -616,6 +634,7 @@ func collapseByName(grp *Node) *Node {
 		m.CarryUncached += leaf.CarryUncached
 		m.Bytes += leaf.Bytes
 		m.Items += leaf.Items
+		m.tokenCalls += leaf.tokenCalls
 	}
 	out := &Node{Name: grp.Name, Kind: grp.Kind, Detail: grp.Detail}
 	for _, name := range order {
@@ -625,6 +644,7 @@ func collapseByName(grp *Node) *Node {
 		}
 		if m.Tokens > 0 {
 			m.CarryPerToken = m.Carry / m.Tokens
+			m.ResidentCalls = m.tokenCalls / m.Tokens
 		}
 		out.Children = append(out.Children, m)
 	}
@@ -644,6 +664,7 @@ func rollUp(n *Node) {
 		return
 	}
 	n.Tokens, n.Carry, n.CarryUncached, n.Bytes, n.Items = 0, 0, 0, 0, 0
+	n.tokenCalls = 0
 	for _, child := range n.Children {
 		rollUp(child)
 		n.Tokens += child.Tokens
@@ -651,9 +672,11 @@ func rollUp(n *Node) {
 		n.CarryUncached += child.CarryUncached
 		n.Bytes += child.Bytes
 		n.Items += child.Items
+		n.tokenCalls += child.tokenCalls
 	}
 	if n.Tokens > 0 {
 		n.CarryPerToken = n.Carry / n.Tokens
+		n.ResidentCalls = n.tokenCalls / n.Tokens
 	}
 }
 

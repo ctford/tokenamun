@@ -147,9 +147,31 @@ Experimental and partly built. Working today, against both sources:
 | `tokenamun scan` | code properties: size, complexity, duplication |
 | `tokenamun hotspots` | those properties joined against what the session cost |
 | `tokenamun compare` | two sessions side by side |
+| `tokenamun tree` | where the tokens went, one level at a time; `--at` drills in |
+| `tokenamun interventions` | what `what-if` can be asked, built-in and installed |
 | `tokenamun what-if` | would an optimisation have helped, and by how much |
+| `tokenamun what-if --all` | every intervention's bottom line, ranked |
 | `tokenamun treemap` | standalone HTML viewer, drilling down from channel to file |
 | `tokenamun series` | experiment probe runs: median, range, payback |
+
+### The CLI shows what the picture shows
+
+The HTML viewer needs a browser and a mouse. `tokenamun tree` is the same
+hierarchy reachable by name — the same two percentages, the same two cost
+modes, the same per-node explanations the viewer puts in its tooltips — and
+every level prints the command that goes one deeper. `tokenamun what-if --all`
+is the interventions table, and `tokenamun treemap --json` prints the viewer's
+own payload, byte for byte what the HTML is handed.
+
+That is deliberate, and a test enforces it. Anything the picture can show and
+the CLI cannot is a question this tool can only answer to a human, and an agent
+driving it would have to ask someone to read the screen.
+
+```
+tokenamun tree --json                          # where did it go?
+tokenamun tree --at "CLI output/version control"   # and inside that?
+tokenamun what-if --all                        # what would have helped?
+```
 
 Every milestone in [`docs/plan.md`](docs/plan.md) is implemented. Activity
 classification is deliberately excluded: it is inferred, and the observed

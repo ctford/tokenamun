@@ -173,11 +173,12 @@
       <tbody></tbody>
     </table>
     <div class="legend" id="legend">
-      <span id="ramp-low">Shade: what a token of it cost</span>
+      <span>Shade: calls it sat through</span>
+      <span id="ramp-low">1</span>
       <span class="ramp" id="ramp"></span>
       <span id="ramp-high"></span>
       <span class="muted" id="ramp-caption"></span>
-      <span class="muted">· grey = nothing to divide by, so there is no rate to shade</span>
+      <span class="muted">· grey = no token count to weight by, so there is nothing to shade</span>
     </div>
   </div>
 
@@ -336,8 +337,8 @@ function inkFor(step) {
   return fillIsDark ? "#ffffff" : "var(--text-primary)";
 }
 function stepFor(n) {
-  const t = DATA.maxCarryPerToken > 0
-    ? Math.min(1, (n.carryPerToken || 0) / DATA.maxCarryPerToken) : 0;
+  const t = DATA.rampMax > 0
+    ? Math.min(1, (n.residentCalls || 0) / DATA.rampMax) : 0;
   return Math.min(RAMP.length - 1, Math.floor(Math.sqrt(t) * RAMP.length));
 }
 
@@ -459,15 +460,15 @@ function render() {
   document.getElementById("tm-title").textContent =
     mode === "uncached" ? `${here.name} — without caching` : here.name;
 
-  // The shade is carry cost divided by content size: what a single token of
-  // this content ended up costing, on the same scale the areas use. Said as a
-  // multiple, because a multiple is the part a reader can act on -- it is how
-  // many times over you paid for content you fetched once.
-  document.getElementById("ramp-high").textContent =
-    `up to ${fmt(Math.round(DATA.maxCarryPerToken))}\u00d7`;
+  // Both ends carry their value, so which end is "a lot" does not depend on
+  // reading a caption or on which theme you are in -- the dark end inverts to
+  // the bright end in dark mode, and a legend that says "darker" is then
+  // wrong.
+  document.getElementById("ramp-high").textContent = fmt(Math.round(DATA.rampMax));
   document.getElementById("ramp-caption").textContent =
-    "— content that arrived on the last call was paid for about once. Content that "
-    + "arrived early was re-sent on every call after it, and each of those paid again.";
+    "— the model has no memory between calls, so content still in the context is sent "
+    + "again on every call and billed again each time. Arriving early and staying is "
+    + "what makes content expensive; being large is not.";
 
   // What each level means is already on the node itself, in the tooltip. A
   // second copy up here was a guess keyed off node kind, and it went stale.

@@ -38,11 +38,16 @@ Usage:
   tokenamun scan [path]           code properties: size, complexity, duplication
   tokenamun hotspots [session]    code properties joined against session cost
   tokenamun compare <a> <b>       two sessions side by side
+  tokenamun tree [session]        where the tokens went, one level at a time;
+                                  drill in with --at. The HTML viewer as text.
   tokenamun interventions         what what-if can be asked, built-in and installed
   tokenamun what-if <name> [session]
                                   would an optimisation have helped, and by how much
+  tokenamun what-if --all [session]
+                                  every intervention's bottom line, ranked
   tokenamun treemap [session]     standalone HTML viewer: drill down from how
-                                  content was obtained to the individual files
+                                  content was obtained to the individual files.
+                                  --json prints the viewer's own payload.
   tokenamun series <file>...      probe runs from an experiment: median, range, payback
   tokenamun version
 
@@ -64,6 +69,11 @@ Flags:
                   instead of assuming a ratio; C reads stdin, writes stdout
   -o FILE         output file (treemap; default tokenamun-treemap.html)
   --title TEXT    heading for the treemap, e.g. "Hyper Agentic App"
+  --at PATH       which node of the tree to show, e.g. "CLI output/version control".
+                  Names come from the level above; matching is case-insensitive.
+  --mode MODE     tree pricing: carry (as billed) | uncached (as if nothing
+                  cached). The difference is what prompt caching was worth.
+  --all           what-if: run every intervention and rank them
   --cost N        measured intervention cost in EIT, for series payback
   --scan PATH     tree to scan for code metrics (hotspots; default --dir).
                   Point this at a checkout of the branch the session ran on.
@@ -105,6 +115,9 @@ func run(args []string) error {
 	title := fs.String("title", "", "heading for the treemap report")
 	var extraInterventions repeatable
 	fs.Var(&extraInterventions, "intervention", "path to an intervention script (repeatable)")
+	at := fs.String("at", "", "drill to a node in the tree, e.g. \"CLI output/git\"")
+	mode := fs.String("mode", "carry", "cost mode for the tree: carry | uncached")
+	all := fs.Bool("all", false, "run every intervention and summarise")
 	maxFileLines := fs.Int("max-file-lines", 0, "fail the scan on a file longer than this")
 	maxComplexity := fs.Int("max-complexity", 0, "fail the scan on a function above this complexity")
 	maxDuplication := fs.Float64("max-duplication", 0, "fail the scan above this % of duplicated code lines")
@@ -166,9 +179,14 @@ func run(args []string) error {
 		return cmdCompare(*dir, *source, selector, second, *asJSON)
 	case "series":
 		return cmdSeries(positional, *interventionCost, *asJSON)
+	case "tree":
+		return cmdTree(*dir, *source, selector, *at, *mode, *asJSON)
 	case "treemap":
-		return cmdTreemap(*dir, *source, selector, *title, *out)
+		return cmdTreemap(*dir, *source, selector, *title, *out, *asJSON)
 	case "what-if", "whatif":
+		if *all {
+			return cmdWhatIfAll(*dir, *source, selector, *ratio, *replayWith, *asJSON)
+		}
 		return cmdWhatIf(*dir, *source, selector, second, *ratio, *replayWith, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
@@ -384,13 +402,21 @@ func cmdSeries(files []string, interventionCost float64, asJSON bool) error {
 	return report.RenderSeries(os.Stdout, out)
 }
 
-func cmdTreemap(dir, source, selector, title, outPath string) error {
+func cmdTreemap(dir, source, selector, title, outPath string, asJSON bool) error {
 	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
 	payload := report.BuildTreemapTitled(s,
 		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)), title)
+
+	// --json prints the report's own payload: byte for byte what the HTML
+	// viewer is given. It is the guarantee that the two views cannot diverge,
+	// and it is how something automating this gets the whole hierarchy in one
+	// call instead of walking `tree --at` down every branch.
+	if asJSON {
+		return writeJSON(payload)
+	}
 
 	f, err := os.Create(outPath)
 	if err != nil {
@@ -403,6 +429,45 @@ func cmdTreemap(dir, source, selector, title, outPath string) error {
 	fmt.Printf("wrote %s (%d retrievals)\n", outPath, len(s.Retrievals))
 	fmt.Println("Area is cost-weighted tokens. It is not a picture of the context window.")
 	return nil
+}
+
+// cmdTree serves one level of the drill-down the HTML viewer draws.
+//
+// The viewer needs a browser and a mouse. This is the same tree, reachable by
+// name, so an agent can answer "where did the tokens go" without a person
+// reading a picture to it.
+func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
+	s, err := loadSelected(dir, source, selector)
+	if err != nil {
+		return err
+	}
+	var path []string
+	if at != "" {
+		path = strings.Split(at, "/")
+	}
+	v, err := report.BuildTreeView(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)),
+		path, mode)
+	if err != nil {
+		return err
+	}
+	if asJSON {
+		return writeJSON(v)
+	}
+	return report.RenderTreeView(os.Stdout, v)
+}
+
+// cmdWhatIfAll runs every intervention and prints the summary table, which is
+// the one thing the HTML report showed that no command produced.
+func cmdWhatIfAll(dir, source, selector string, ratio float64, replayWith string, asJSON bool) error {
+	s, ctx, err := whatIfContext(dir, source, selector, ratio, replayWith)
+	if err != nil {
+		return err
+	}
+	out := report.BuildWhatIfAll(s, ctx)
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderWhatIfAll(os.Stdout, out)
 }
 
 func cmdCompare(dir, source, a, b string, asJSON bool) error {
@@ -439,21 +504,37 @@ func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith str
 	if err != nil {
 		return err
 	}
+	s, ctx, err := whatIfContext(dir, source, selector, ratio, replayWith)
+	if err != nil {
+		return err
+	}
+
+	out := report.BuildWhatIf(s, intervention.Estimate(ctx))
+	if asJSON {
+		return writeJSON(out)
+	}
+	return report.RenderWhatIf(os.Stdout, out)
+}
+
+// whatIfContext assembles the evidence every intervention reasons over. One
+// place, so a single intervention and the whole summary cannot be computed
+// against different inputs.
+func whatIfContext(dir, source, selector string, ratio float64, replayWith string) (
+	*model.Session, whatif.Context, error) {
 	if selector == "" {
 		selector = "latest"
 	}
-
 	refs, err := discover(dir, source)
 	if err != nil {
-		return err
+		return nil, whatif.Context{}, err
 	}
 	ref, err := selectSession(refs, selector)
 	if err != nil {
-		return err
+		return nil, whatif.Context{}, err
 	}
 	s, err := ingest.Load(ref)
 	if err != nil {
-		return err
+		return nil, whatif.Context{}, err
 	}
 
 	cache := analysis.Cache(s, analysis.TTL5m)
@@ -475,7 +556,7 @@ func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith str
 		toolOutput, toolErr := whatif.Replay(ref, replayWith)
 		files, fileErr := whatif.ReplayFiles(ref, replayWith)
 		if toolErr != nil && fileErr != nil {
-			return fmt.Errorf("replay failed: %w", toolErr)
+			return nil, whatif.Context{}, fmt.Errorf("replay failed: %w", toolErr)
 		}
 		if toolErr == nil {
 			ctx.Replay = toolOutput
@@ -484,12 +565,7 @@ func cmdWhatIf(dir, source, name, selector string, ratio float64, replayWith str
 			ctx.FileReplay = files
 		}
 	}
-
-	out := report.BuildWhatIf(s, intervention.Estimate(ctx))
-	if asJSON {
-		return writeJSON(out)
-	}
-	return report.RenderWhatIf(os.Stdout, out)
+	return s, ctx, nil
 }
 
 // loadSelected resolves a selector and parses the transcript it names.

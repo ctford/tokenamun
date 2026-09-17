@@ -407,3 +407,156 @@ esac
 		t.Error("the listing should say which file an intervention came from")
 	}
 }
+
+func TestTreeIsNavigableWithoutABrowser(t *testing.T) {
+	// The whole point: an agent must be able to learn what the HTML viewer
+	// shows a person. That means reaching every level by name.
+	repo := localFixture(t, "carry.jsonl")
+
+	out, err := capture(t, "tree", "--dir", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "At session") {
+		t.Errorf("the root level should say where it is:\n%s", out)
+	}
+
+	// The JSON form is what an agent reads, and it has to be navigable rather
+	// than merely readable: every branch carries the value for --at.
+	var v struct {
+		Path     []string `json:"path"`
+		Children []struct {
+			Name     string `json:"name"`
+			At       string `json:"at"`
+			Children int    `json:"children"`
+		} `json:"children"`
+		Drill []string `json:"drill_in"`
+	}
+	jsonOut, err := capture(t, "tree", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &v); err != nil {
+		t.Fatalf("the tree JSON is what an agent reads: %v", err)
+	}
+	if len(v.Children) == 0 {
+		t.Fatal("the fixture session has content")
+	}
+
+	// Walk in using only what the previous level said, which is exactly what
+	// an agent has to do.
+	var walked int
+	for _, c := range v.Children {
+		if c.Children == 0 {
+			continue
+		}
+		if _, err := capture(t, "tree", "--dir", repo, "--at", c.At, "--json"); err != nil {
+			t.Errorf("--at %q, taken from the level above, failed: %v", c.At, err)
+		}
+		walked++
+	}
+	if walked == 0 {
+		t.Skip("the fixture has no branches to walk into")
+	}
+}
+
+func TestTreeRejectsAnUnknownNodeAndAnUnknownMode(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+	_, err := capture(t, "tree", "--dir", repo, "--at", "nowhere")
+	if err == nil {
+		t.Fatal("an unknown node must be an error, not the root")
+	}
+	if !strings.Contains(err.Error(), "it contains:") {
+		t.Errorf("the error is how a caller discovers the real names: %v", err)
+	}
+	if _, err := capture(t, "tree", "--dir", repo, "--mode", "sideways"); err == nil {
+		t.Error("an unknown cost mode must be an error, not silently priced as billed")
+	}
+}
+
+func TestTreeUncachedModeIsReachableFromTheCLI(t *testing.T) {
+	// The viewer has two cost buttons. If only one of them is reachable here,
+	// what caching was worth is a question only a human can ask.
+	repo := localFixture(t, "carry.jsonl")
+	billed, err := capture(t, "tree", "--dir", repo, "--mode", "carry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	uncached, err := capture(t, "tree", "--dir", repo, "--mode", "uncached")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if billed == uncached {
+		t.Error("the two cost modes produced identical output")
+	}
+	if !strings.Contains(uncached, "nothing cached") {
+		t.Errorf("the uncached mode must say what it is showing:\n%s", uncached)
+	}
+}
+
+func TestWhatIfAllRanksEveryInterventionInOneCall(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+	out, err := capture(t, "what-if", "--all", "--dir", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "INTERVENTION") {
+		t.Errorf("the summary should be a table:\n%s", out)
+	}
+
+	var doc struct {
+		Rows []struct {
+			Name       string `json:"name"`
+			Applicable bool   `json:"applicable"`
+			Detail     string `json:"detail_command"`
+		} `json:"interventions"`
+		Notes []string `json:"notes"`
+	}
+	jsonOut, err := capture(t, "what-if", "--all", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Rows) < 8 {
+		t.Errorf("expected every intervention, got %d", len(doc.Rows))
+	}
+	for _, r := range doc.Rows {
+		if r.Detail == "" {
+			t.Errorf("%s does not say how to see the full result", r.Name)
+		}
+	}
+}
+
+func TestTreemapJSONIsTheViewersOwnPayload(t *testing.T) {
+	// The strongest parity guarantee available: --json prints what the HTML is
+	// given, so nothing can reach the picture without reaching the CLI.
+	repo := localFixture(t, "carry.jsonl")
+	jsonOut, err := capture(t, "treemap", "--dir", repo, "--json", "--title", "T")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Title         string  `json:"title"`
+		Tree          any     `json:"tree"`
+		Interventions []any   `json:"interventions"`
+		RampMax       float64 `json:"rampMax"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("--json must print the payload: %v", err)
+	}
+	if payload.Title != "T" || payload.Tree == nil || len(payload.Interventions) == 0 {
+		t.Errorf("the payload is missing pieces the viewer draws: %+v", payload)
+	}
+
+	// And --json must not also write a file: an agent asking for data has not
+	// asked for an artefact on disk.
+	path := filepath.Join(t.TempDir(), "should-not-exist.html")
+	if _, err := capture(t, "treemap", "--dir", repo, "--json", "-o", path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("--json wrote an HTML file as well")
+	}
+}

@@ -34,9 +34,9 @@ type TreemapPayload struct {
 	Session       treemapSession  `json:"session"`
 	Interventions []treemapWhatIf `json:"interventions"`
 	Tree          *Node           `json:"tree"`
-	// MaxCarryPerToken is the top of the colour ramp. Taken from the tree, so
-	// the scale covers exactly what the viewer can draw.
-	MaxCarryPerToken float64 `json:"maxCarryPerToken"`
+	// RampMax is the top of the colour ramp, in calls resident. Taken from the
+	// tree, so the scale covers exactly what the viewer can draw.
+	RampMax float64 `json:"rampMax"`
 }
 
 // treemapWhatIf is one intervention's bottom line, for the summary table.
@@ -76,24 +76,24 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 	}
 	p.Interventions = interventionTable(s, carry)
 	p.Tree = BuildTree(s, carry)
-	p.MaxCarryPerToken = maxCarryPerToken(p.Tree)
+	p.RampMax = maxResidentCalls(p.Tree)
 	return p
 }
 
-// maxCarryPerToken is the top of the colour ramp. It comes from the tree
+// maxResidentCalls is the top of the colour ramp. It comes from the tree
 // rather than from the flat retrieval list, so the scale covers exactly the
 // nodes the viewer can draw and no others: a ramp topped out by something
 // off-screen would make every visible rectangle look pale.
-func maxCarryPerToken(n *Node) float64 {
+func maxResidentCalls(n *Node) float64 {
 	if n == nil {
 		return 0
 	}
 	max := 0.0
 	if !n.Unscaled {
-		max = n.CarryPerToken
+		max = n.ResidentCalls
 	}
 	for _, c := range n.Children {
-		if m := maxCarryPerToken(c); m > max {
+		if m := maxResidentCalls(c); m > max {
 			max = m
 		}
 	}
