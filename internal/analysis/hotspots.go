@@ -131,7 +131,7 @@ func Hotspots(s *model.Session, scan codescan.Report, carry CarryReport) Hotspot
 
 // matchMetrics resolves a retrieval path against the scan.
 //
-// Retrieval paths come from tool arguments and shell command lines, so they
+// Retrieval paths come from tool inputs and shell command lines, so they
 // may be absolute while the scan is relative to its root. Matching on a path
 // suffix handles that without pretending to resolve symlinks or build systems.
 func matchMetrics(metrics map[string]codescan.FileMetrics, path string) (codescan.FileMetrics, bool) {

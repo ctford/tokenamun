@@ -100,16 +100,16 @@ func TestThinkingIsSplitOutOfOutputButNotCarried(t *testing.T) {
 	if !contains(thinking.DetailMore, "not knowable") {
 		t.Errorf("thinking must say its carry is unknowable, got %q", thinking.DetailMore)
 	}
-	// Prose and tool arguments each combine what they cost to write with what
+	// Prose and tool inputs each combine what they cost to write with what
 	// they cost to keep, since they are the same text.
-	child(t, out, "replies to you")
-	child(t, out, "tool arguments")
+	child(t, out, "replies")
+	child(t, out, "tool inputs")
 }
 
 // "In tool calls, I expected to see which tools."
 func TestToolArgumentsBreakDownByTool(t *testing.T) {
 	tree := built(t)
-	args := child(t, child(t, tree, "model output"), "tool arguments")
+	args := child(t, child(t, tree, "model output"), "tool inputs")
 
 	bash := child(t, args, "Bash")
 	child(t, args, "Read")
@@ -232,7 +232,7 @@ func TestEveryLevelIsSortedLargestFirst(t *testing.T) {
 func TestOnlyBlocksWithNoRoundTripFigureAreOffTheRamp(t *testing.T) {
 	// Grey means one thing: we cannot say how many round trips this content
 	// made. It does not mean "leaf", and it does not mean "no cost" --
-	// conflating those was what made a drillable "tool arguments" box grey.
+	// conflating those was what made a drillable "tool inputs" box grey.
 	//
 	// The preamble, what you typed and the model's own words all have
 	// observable residency, so all three are on the ramp. Thinking is not:
@@ -421,12 +421,12 @@ func TestToolArgumentsAreSeparateFromWhatToolsPrintedBack(t *testing.T) {
 	// arguments beside cli output would group by "anything to do with tools"
 	// and cross the authorship axis the top level is built on.
 	tree := built(t)
-	args := child(t, child(t, tree, "model output"), "tool arguments")
+	args := child(t, child(t, tree, "model output"), "tool inputs")
 	cli := child(t, tree, "cli output")
 
 	for _, c := range cli.Children {
-		if c.Name == "tool arguments" {
-			t.Error("tool arguments belong to the model, not to the environment")
+		if c.Name == "tool inputs" {
+			t.Error("tool inputs belong to the model, not to the environment")
 		}
 	}
 	if args.Tokens <= 0 || cli.Tokens <= 0 {
@@ -449,7 +449,7 @@ func TestEachToolsArgumentsCarryTheirOwnResidency(t *testing.T) {
 	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
 	tree := BuildTree(s, carry)
 
-	args := child(t, child(t, tree, "model output"), "tool arguments")
+	args := child(t, child(t, tree, "model output"), "tool inputs")
 	if len(args.Children) < 2 {
 		t.Skip("the fixture uses fewer than two tools")
 	}
@@ -541,5 +541,42 @@ func TestTheArgumentSurvivesBeingMovedOutOfTheTooltip(t *testing.T) {
 	if strings.Contains(string(raw), "detailMore") ||
 		strings.Contains(string(raw), "DetailMore") {
 		t.Error("the long form should not be serialised into the viewer's payload")
+	}
+}
+
+func TestShellArgumentsOpenUpByCommand(t *testing.T) {
+	// A shell call's arguments are a command, so they open up the same way
+	// its output does. Without this, Bash arguments are one opaque box --
+	// 15% of a team's week on one reference repository -- and the obvious
+	// question about it, whether the content is a pattern or different every
+	// time, has no answer in the tool.
+	s := treeFixture()
+	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	tree := BuildTree(s, carry)
+
+	args := child(t, child(t, tree, "model output"), "tool inputs")
+	bash := child(t, args, "Bash")
+	if len(bash.Children) == 0 {
+		t.Fatal("shell arguments should open up by command")
+	}
+	// The split apportions the tool's own cost, so it must reconcile.
+	var sum float64
+	for _, c := range bash.Children {
+		sum += c.Carry
+		if c.RoundTrips <= 0 {
+			t.Errorf("%s has no round-trip figure", c.Name)
+		}
+	}
+	if diff := sum - bash.Carry; diff > 0.001 || diff < -0.001 {
+		t.Errorf("the commands sum to %.4f but Bash costs %.4f", sum, bash.Carry)
+	}
+
+	// A tool whose calls carry no command line stays a leaf: there is nothing
+	// to split it by, and inventing a level would be worse than not having
+	// one.
+	for _, c := range args.Children {
+		if c.Name == "Read" && len(c.Children) > 0 {
+			t.Error("Read takes no command line, so it has nothing to open up into")
+		}
 	}
 }

@@ -1,254 +1,150 @@
 # Tokenamun
 
-**A profiler for coding-agent token usage.**
+A token profiler for coding agents. It answers **where the tokens went, and
+what they actually cost** — for the Claude Code session you are in, or for a
+whole team's recorded history.
 
-> **Experimental.** Tokenamun is an experiment, not a product. The data model, the
-> CLI surface, the JSON schema and the analyses will change without notice or
-> migration. Nothing here is stable, supported, or suitable for anything you
-> depend on. It exists to find out whether this kind of measurement is useful at
-> all.
+> **Experimental, and vibed rather than rigorous.** Built in a few sittings to
+> find out whether this kind of measurement is useful at all. Several numbers
+> were wrong the first time and were only caught by an independent recount of
+> the raw transcripts; assume more are. Every figure is labelled with where it
+> came from — `[observed]`, `[derived]`, `[counterfactual]` — so you can tell
+> which ones to lean on. The CLI, the JSON and the analyses will change without
+> notice.
 
-Tokenamun uses agent session data to show where tokens go, what work they
-support, and whether proposed optimisations might actually help.
+## It only works with Claude Code, and optionally Entire
 
-Ask questions like:
+This is not a general LLM cost tool. It reads two specific formats and prices
+them with Anthropic's published prompt-caching economics. Nothing here
+transfers to another provider.
 
-* Where did my tokens go?
-* How much did I spend exploring code?
-* How much content came from ADRs?
-* What did verification cost?
-* What did I retrieve repeatedly?
-* Would compressing tool output have helped?
-* Would moving an MCP server behind a CLI have helped?
+- **Claude Code's own transcripts**, under `~/.claude/projects/`. No setup:
+  they are already on disk. This is the cold-start path — work in a repo, then
+  profile it.
+- **[Entire](https://entire.io)'s recordings**, when a repository uses it:
+  either `.entire/metadata/` on your machine, or the transcripts inside
+  Entire's checkpoint commits. The second is how you profile a *team* — a
+  clone carries everybody's checkpoints.
 
-Tokenamun provides evidence. You decide what to optimise.
+```sh
+go build ./cmd/tokenamun            # or: brew install ctford/tap/tokenamun, once released
+```
 
-## It reads Entire's data. That is a hard dependency.
+## Start here
 
-Tokenamun is **not** a session recorder. It has no hooks, no proxy, no wrapper,
-no instrumentation of its own. It reads data that
-Entire has already written to disk, and
-if Entire wasn't recording, Tokenamun has nothing to say.
+```sh
+tokenamun doctor            # can it read anything in this repo?
+tokenamun profile current   # the session you are in right now
+tokenamun tree current      # where the tokens went, one level at a time
+```
 
-Concretely, v0.1 requires a repository where Entire is installed and active, and
-reads two things from it:
+Run `doctor` first: "no sessions found" has four different causes and it tells
+you which one you have.
 
-| Source | What it gives us |
-| --- | --- |
-| `.entire/metadata/<session-id>/full.jsonl` | The native Claude Code transcript — per-API-call token usage, tool calls, tool results |
-| `refs/entire/checkpoints/**` (git refs) | Checkpoint metadata: commit attribution, files touched, transcript offsets, skill events |
+## It is meant to be driven by an agent
 
-This has consequences worth being explicit about:
+The intent is that you interrogate your own usage in conversation and your
+agent answers with real numbers. Every command takes `--json`, every figure
+carries its provenance, and every level of the drill-down prints the command
+that goes one deeper — so an agent can navigate without guessing at names.
 
-* **No Entire, no profile.** There is no fallback path that reads Claude Code's
-  own `~/.claude/projects/` transcripts. Adding one is plausible later; it isn't
-  here.
-* **Retrospective only.** Tokenamun profiles sessions that already happened. It
-  cannot profile a session in flight and it cannot change one.
-* **Entire's format is not a stable API.** The layout above was read off Entire
-  CLI `0.10.2` by inspecting real data. It is versioned behind an adapter
-  (`internal/entire`) and documented in
-  [`docs/research-entire.md`](docs/research-entire.md), including the fields we
-  found to be unreliable. Expect breakage when Entire moves.
-* **Claude Code only, for now.** Entire supports other agents; the internal model
-  is designed for them, but no other adapter is implemented or tested.
+> *"Where did my tokens go this week?"*
+> → `tokenamun tree all --since 7d`
+>
+> *"What's inside that cli output box?"*
+> → `tokenamun tree all --at "cli output"`, then `--at "cli output/git"`
+>
+> *"What would halving the shell output be worth?"*
+> → `tokenamun optimise --at "cli output" --optimise 0.5 --why "..."`
 
-## What Tokenamun cannot measure
+Selectors are `all`, `current`, `latest`, or an id prefix. `--since` and
+`--until` take a date or an age, so "profile last week" is `--since 7d`.
 
-This matters more than the feature list. Tokenamun labels every number as
-**observed**, **derived**, **inferred** or **counterfactual**, and refuses to
-present the last three as measurements. The limits that produce those labels:
+## The one idea worth knowing
 
-**The transcript is not the request.** `full.jsonl` records what the agent did,
-not what was sent to the API. It contains no system prompt, no tool schemas, no
-skill definitions, no `CLAUDE.md`/`AGENTS.md` expansion. We can see the *total*
-prompt size of every API call — that is observed, and it is the ground truth we
-anchor to — but we cannot decompose the first ~30K tokens of it into
-"system prompt vs tool schemas vs your instruction files". Any tool that claims
-to break that down from a transcript is guessing.
+**Volume is not cost.** Raw token counts overstate the bill by 6–8× on real
+sessions. The model has no memory between calls, so everything still in the
+context is sent again every time — and almost all of that is cache reads,
+priced at a tenth of fresh input.
 
-**This means MCP and tool-schema analyses are bounded, not measured.** The
-opportunity from deferred tool loading, tool search, or putting an MCP server
-behind a CLI all live in the schema overhead we cannot see. Tokenamun can bound
-it (the observed session preamble is a ceiling) and count which tools were
-actually used versus available, but it will not hand you a schema-token figure
-it cannot observe.
+So Tokenamun reports **cost-weighted tokens**: every class on one scale where 1
+is a full-price input token (cache read 0.1, 5-minute write 1.25, 1-hour write
+2.0, output 5.0). The reordering is the point. On one session the largest
+retrieval by bytes was a 53 KB document, but the most expensive content was a
+10,557-token file that sat through 620 later calls.
 
-**Volume is not cost, and reporting volume as cost would be the easiest way to
-make this tool misleading.** Anthropic prompt caching means most of what moves
-through the context is billed at a tenth of list price, while the cache *writes*
-that are 6% of the volume are 43% of the cost. On the reference dataset, raw
-prompt volume overstates cost by 6.0×. Tokenamun therefore ranks everything in
-cache-weighted effective input-equivalents and never calls a retrieval expensive
-on volume alone — see [`METHODOLOGY.md`](METHODOLOGY.md#3-volume-is-not-cost).
+The unit is relative to one model's input price, so a total spanning two
+differently-priced models adds different-sized things. Reports say when that
+applies.
 
-**Retrieved tokens are not billed tokens, and the gap is enormous.** On our
-reference dataset, ~711K tokens of unique tool-result content sat behind ~856M
-tokens of billed input. Content is cheap to retrieve and expensive to *carry*:
-every token that enters the context is re-sent on every subsequent API call. A
-treemap of retrieved content is a map of what was fetched, not of what was paid
-for. Tokenamun reports both, separately, and never adds them together.
+## What it cannot measure
 
-**There is no semantic classification of content.** An earlier version
-declared categories -- ADRs, specifications, plans -- per repository. It was
-removed: a directory layout already carries that, so retrieved content nests
-by directory instead, which needs no configuration and cannot be wrong about
-your project. See [`docs/plan.md`](docs/plan.md) for what that trades away.
+Up front, because a profiler that hides its blind spots is worse than none.
 
-**Activity attribution is inferred.** "Planning" and "debugging" are not
-recorded anywhere. They are a classifier's opinion over tool-call patterns, and
-the classifier prefers `other` to a confident guess.
+- **Tool schemas** are not in the transcript, so every MCP and tool-loading
+  question is *bounded* by the preamble rather than measured.
+- **Thinking that gets re-read.** Claude Code records thinking blocks with
+  empty text. It is generated and billed, but whether it goes round again is
+  unknowable — a large part of the `unattributed` box.
+- **Content token counts** are estimated from bytes, at a ratio calibrated
+  against the session's own prompt growth. `tiktoken` is not Claude's
+  tokenizer and is not used.
+- **Subagent-internal spend** was absent from every session examined, despite
+  `Agent` being called.
+- **Whether the work came out right.** An agent that fails a task consumes the
+  fewest tokens of all, so a reduction is not automatically an improvement.
 
-**Counterfactuals are counterfactuals.** If Tokenamun says compressing tool
-output would have saved 400K tokens, that is arithmetic on observed content
-under a stated compression model. It is not a claim about what the session would
-have cost, because the agent would have behaved differently — possibly better,
-possibly by re-reading everything it just lost. Every what-if result carries an
-explicit `unknown` section, and it is not there for decoration.
-
-**Subagent work may be invisible.** Sidechain transcripts were absent from every
-session in our reference dataset even though the `Agent` tool was called. Where
-subagent token usage is not in the transcript, Tokenamun reports it as missing
-rather than folding it into the parent.
-
-**Checkpoint token totals cannot be summed.** Entire's per-checkpoint
-`token_usage` is cumulative-from-session-start in some checkpoints and a delta in
-others, with no field distinguishing them. Tokenamun derives all token
-accounting from the transcript and uses checkpoints only for slicing and git
-attribution. See [`docs/research-entire.md`](docs/research-entire.md#the-double-counting-trap).
+Details in [`METHODOLOGY.md`](METHODOLOGY.md).
 
 ## Not a leaderboard
 
-Tokenamun is a sensor, not a judge. It is built to support findings like
-"changes in this subsystem require 2.3× more exploration than comparable ones",
-not "this developer uses 2.3× more tokens than that one". Treating token spend
-as a productivity metric is a known anti-pattern and this tool is not an
-instrument for it.
+Token spend is an input, not an outcome. Reporting it per person is the
+lines-of-code vanity metric with a new unit, and it has already produced gamed
+internal leaderboards and budgets burnt a third of the way through the year.
 
-## How the numbers are computed
+Filtering by whose sessions you look at is fine — that is how you help
+somebody. Ranking people is not, so no command has a developer dimension.
 
-[**`METHODOLOGY.md`**](METHODOLOGY.md) is the document to read before making a
-decision from this tool's output. It defines the provenance labels, the
-cache-weighted cost model, how context carry is attributed, how cache expiry is
-detected and what it cost on real sessions, and the limits of every
-counterfactual.
-
-## Status
-
-Experimental and partly built. Working today, against both sources:
+## Commands
 
 | command | what it answers |
 | --- | --- |
-| `tokenamun sessions` | what transcripts it can see |
-| `tokenamun profile` | where the tokens went, and what they cost |
-| `tokenamun retrieval` | what content entered the context, and from where |
-| `tokenamun carry` | what it cost to *keep* content, not to fetch it |
-| `tokenamun cache` | why the prompt cache was rebuilt, and what that cost |
-| `tokenamun scan` | code properties: size, complexity, duplication |
-| `tokenamun hotspots` | those properties joined against what the session cost |
-| `tokenamun compare` | two sessions side by side |
-| `tokenamun tree` | where the tokens went, one level at a time; `--at` drills in |
-| `tokenamun doctor` | whether either source is set up to record here |
-| `tokenamun optimise` | what a hypothetical optimisation of part of the tree would be worth |
-| `tokenamun treemap` | standalone HTML viewer, drilling down from channel to file |
-| `tokenamun series` | experiment probe runs: median, range, payback |
+| `doctor` | whether either source is set up to record here |
+| `sessions` | what transcripts it can see |
+| `profile` | where the tokens went, and what they cost |
+| `tree` | the same, one level at a time; `--at` drills in |
+| `treemap` | a standalone HTML viewer of the same tree |
+| `carry` | what it cost to *keep* content, not to fetch it |
+| `cache` | why the prompt cache was rebuilt, and what that cost |
+| `retrieval` | what content entered the context, and from where |
+| `optimise` | what a hypothetical change to part of the tree is worth |
+| `scan` | code properties: size, complexity, duplication |
+| `hotspots` | those properties joined against session cost |
+| `compare` | two sessions side by side |
+| `series` | experiment probe runs: median, range, payback |
 
-### The CLI shows what the picture shows
+## No catalogue of techniques
 
-The HTML viewer needs a browser and a mouse. `tokenamun tree` is the same
-hierarchy reachable by name — the same two percentages, the same two cost
-modes, the same per-node explanations the viewer puts in its tooltips — and
-every level prints the command that goes one deeper. `tokenamun what-if --all`
-is the interventions table, and `tokenamun treemap --json` prints the viewer's
-own payload, byte for byte what the HTML is handed.
+There were once built-in estimates for named optimisations — Caveman, RTK,
+MCP-to-CLI and the rest. They are gone. Everything that shrinks content does
+the same two things: pick a part of the session and make it smaller, and the
+answer is the product of that part's share and the change. A named
+intervention added nothing but a vendor's name and a default ratio, plus the
+false impression that this tool knew something about that vendor.
 
-That is deliberate, and a test enforces it. Anything the picture can show and
-the CLI cannot is a question this tool can only answer to a human, and an agent
-driving it would have to ask someone to read the screen.
+So `optimise` measures the part and you supply the change, with `--why`
+required. [`docs/interventions.md`](docs/interventions.md) is the catalogue in
+prose: what people try, which part of a session each acts on, and which can be
+checked against evidence at all.
 
-### Profiling a team, and a period
+Cache behaviour is the exception, and stays modelled because every input to it
+is observed: which TTL each call used, which misses were expiry, the gap
+lengths, the published multipliers. `tokenamun cache` prices a TTL change with
+no assumed parameter in it anywhere.
 
-`all` is a session selector, alongside `latest` and `current`. With Entire it
-means the whole team's recorded history, because that is what Entire is for —
-profiling one session is the special case, not the shape of the thing.
+## Also here
 
-`--since` and `--until` take a date, a date and time, or an age (`7d`), and
-scope any command to the sessions active in that window.
-
-```
-tokenamun tree all --since 7d                    # the team's last week
-tokenamun tree all --since 2026-09-16            # after we changed the thing
-tokenamun tree all --until 2026-09-16            # before
-tokenamun treemap all --since 7d -o week.html --title "Last week"
-```
-
-On one reference repository that is 259 sessions and 36,281 API calls from ten
-people, and every level, percentage and drill-in works exactly as it does over
-a single session.
-
-Whole sessions, never halves. Cost is attributed by residency *within* a
-session, so truncating one would leave content that entered before the window
-being carried through it with no honest way to split the bill. A session that
-straddles the boundary is in or out.
-
-And the sums are of results, not of sessions: each session is analysed on its
-own and the costs added. Cost is additive across sessions; residency is not,
-because each session has its own context.
-
-```
-tokenamun tree --json                          # where did it go?
-tokenamun tree --at "cli output/version control"   # and inside that?
-tokenamun optimise --at "cli output" --optimise 0.5 \
-  --why "Vendor figure, not measured here."    # what would that be worth?
-```
-
-### One hypothetical, not a catalogue of techniques
-
-There used to be a table of named interventions — cache TTL, Caveman, RTK,
-MCP-to-CLI and the rest. They are gone, and the deletion was the finding.
-
-Everything that shrinks content does the same two things: pick a part of the
-session, and make it smaller. The answer is always the product of that part's
-share and the change — Amdahl's law with a token bill instead of a runtime. So
-a named intervention adds nothing but a vendor's name and a default ratio, and
-it adds one thing it should not: the appearance that this tool knows something
-about that vendor. Caveman's published figures span 8.5% to 65%, an eight-fold
-spread. A row reporting 13% looked like evidence and was an assumption with a
-logo on it.
-
-What the tool does instead is measure the part exactly and let you name the
-change:
-
-```
-Applies to             mcp output
-Its cost                8,829,745   [observed]
-Addressable                  7.1%   [derived]
-Optimisation                  50%   [given]
-Impact                      96.4%   [counterfactual]
-```
-
-`--why` is required, because you are the only one who knows why the figure is
-plausible, and the unknown section always prints. See
-[`docs/interventions.md`](docs/interventions.md) for which published claims are
-checkable at all — that analysis is still worth having, it just is not
-something the tool should pretend to compute.
-
-Every milestone in [`docs/plan.md`](docs/plan.md) is implemented. Activity
-classification is deliberately excluded: it is inferred, and the observed
-answers are the ones worth trusting. See
-[`docs/experiments.md`](docs/experiments.md) for using `series` in a
-before/after experiment.
-
-```
-go build ./cmd/tokenamun && ./tokenamun profile current
-```
-
-The research and plan are:
-
-* [`METHODOLOGY.md`](METHODOLOGY.md) — how every number is computed and labelled
-* [`SPEC.md`](SPEC.md) — what we're building and why
-* [`docs/research-entire.md`](docs/research-entire.md) — what Entire's data actually contains, measured
-* [`docs/plan.md`](docs/plan.md) — architecture and v0.1 implementation plan
-* [`docs/interventions.md`](docs/interventions.md) — what people try to optimise, which part of a session each acts on, and which can be checked at all
-* [`docs/optimisation-claims.md`](docs/optimisation-claims.md) — survey of what the tools and techniques claim, and how good the evidence is
-* [`docs/experiments.md`](docs/experiments.md) — using it for before/after experiments, and what it can't do for you
+- [`METHODOLOGY.md`](METHODOLOGY.md) — how every number is computed and labelled
+- [`AGENTS.md`](AGENTS.md) — conventions and the quality gates
+- [`docs/research-entire.md`](docs/research-entire.md) — what Entire's data contains, measured
+- [`docs/experiments.md`](docs/experiments.md) — using `series` for before/after

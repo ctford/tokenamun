@@ -76,7 +76,7 @@ func TestUnattributableOutputIsAccountedForRatherThanDropped(t *testing.T) {
 }
 
 func TestAbsolutePathsMatchTheRelativeScan(t *testing.T) {
-	// Retrieval paths come from tool arguments and command lines, so they are
+	// Retrieval paths come from tool inputs and command lines, so they are
 	// often absolute while the scan is relative to its root.
 	s := &model.Session{Retrievals: []model.RetrievedContent{
 		{Path: "/Users/x/repo/internal/payment/charge.go", Tool: "Read", Bytes: 100, Tokens: 30},

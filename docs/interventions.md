@@ -251,7 +251,7 @@ measurement rather than an observation of the session.
 
 The pattern it targets *is* detectable: large intermediate payloads that arrive
 in context and are then echoed back out in a subsequent tool input. Tool inputs
-are observed — `model output / tool arguments` is 16% to 48% of the sessions
+are observed — `model output / tool inputs` is 16% to 48% of the sessions
 here — so the round trip is visible. Sizing the fix needs a counterfactual
 about code the agent never wrote.
 

@@ -125,9 +125,9 @@ type Session struct {
 	// PromptEntries record each user prompt's size and where it entered, so
 	// what you typed can be carried like anything else.
 	PromptEntries []PromptEntry `json:"prompt_entries"`
-	// ProseBytes is assistant text, excluding thinking and tool arguments.
+	// ProseBytes is assistant text, excluding thinking and tool inputs.
 	// Output tokens are observed in total but not broken down, so the split
-	// between prose and tool arguments is apportioned by these byte counts.
+	// between prose and tool inputs is apportioned by these byte counts.
 	ProseBytes int       `json:"prose_bytes"`
 	Branch     string    `json:"branch,omitempty"`
 	CWD        string    `json:"cwd,omitempty"`

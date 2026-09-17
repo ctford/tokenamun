@@ -78,7 +78,7 @@ type Node struct {
 //	├─ your prompts                 you did
 //	├─ model output                 the model wrote it, then re-read it
 //	│  ├─ replies to you            what it said to you
-//	│  ├─ tool arguments            what it said to tools → by tool
+//	│  ├─ tool inputs            what it said to tools → by tool
 //	│  └─ thinking                  what it said to itself; carry not knowable
 //	├─ file content                 the environment answered → by file
 //	├─ cli output                   → by command family → by subcommand
@@ -181,7 +181,7 @@ func promptNode(s *model.Session, carry analysis.CarryReport) *Node {
 // there is one block per kind of output, with the split in its detail.
 //
 // Output totals are observed and thinking is observed within them; the
-// remainder is apportioned between prose and tool arguments by byte share,
+// remainder is apportioned between prose and tool inputs by byte share,
 // which is the only split available since the API reports one output number
 // per call.
 func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
@@ -196,7 +196,7 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		DetailMore: "Paid for twice: at the output rate when written, then at the " +
 			"input rate on every later call that re-reads it."}
 
-	// The carried figure covers prose and tool arguments together, so it is
+	// The carried figure covers prose and tool inputs together, so it is
 	// apportioned the same way the generation is.
 	proseShare := 0.0
 	if prose+args > 0 {
@@ -210,7 +210,7 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		held := carry.AssistantCarryEIT * proseShare
 		heldUncached := carry.AssistantCarryUncachedEIT * proseShare
 		n.Children = append(n.Children, &Node{
-			Name: "replies to you", Kind: "source",
+			Name: "replies", Kind: "source",
 			Tokens: prose, Carry: gen + held, CarryUncached: gen + heldUncached, Items: 1,
 			RoundTrips: carry.AssistantRoundTrips,
 			tokenCalls: prose * carry.AssistantRoundTrips,
@@ -222,7 +222,13 @@ func modelOutputNode(s *model.Session, carry analysis.CarryReport) *Node {
 		gen := args * w.Output
 		held := carry.AssistantCarryEIT * (1 - proseShare)
 		heldUncached := carry.AssistantCarryUncachedEIT * (1 - proseShare)
-		argNode := &Node{Name: "tool arguments", Kind: "source",
+		// "tool inputs" rather than "tool arguments" because it is the wire's
+		// own word -- the transcript field is tool_use.input -- and because it
+		// pairs with the output branches, making the two sides of one call
+		// visible in the names. Not "tool invocations": that names the whole
+		// call, and a reader would expect the result to be in it, when the
+		// result is under cli output, mcp output or file content.
+		argNode := &Node{Name: "tool inputs", Kind: "source",
 			Detail: fmt.Sprintf("the commands and patches it wrote: %s to write, "+
 				"%s to keep re-reading.", num(int(gen)), num(int(held))),
 			DetailMore: "What the tools printed back is the other side of the same " +
@@ -282,7 +288,7 @@ func byToolArguments(s *model.Session, carry analysis.CarryReport,
 		if b > 0 {
 			trips = tripBytesByTool[name] / float64(b)
 		}
-		out = append(out, &Node{
+		node := &Node{
 			Name: name, Kind: "tool",
 			Tokens: tokens,
 			Carry:  totalCost * share, CarryUncached: totalCostUncached * share,
@@ -291,6 +297,69 @@ func byToolArguments(s *model.Session, carry analysis.CarryReport,
 			tokenCalls: tokens * trips,
 			Detail: fmt.Sprintf("%s of arguments over %s.",
 				byteStr(b), pluralCalls(callsByTool[name])),
+		}
+		// A shell call's arguments are a command, so they open up the same way
+		// its output does. Without this, Bash arguments are one opaque box --
+		// 15% of a team's week on one reference repository -- and the obvious
+		// question about it, whether the content is a pattern or different
+		// every time, has no answer in the tool. It is a pattern: on that
+		// repository 62% of those bytes are inline python3 programs.
+		node.Children = byCommandArguments(s, carry, name,
+			node.Carry, node.CarryUncached, node.Tokens, b)
+		out = append(out, node)
+	}
+	return out
+}
+
+// byCommandArguments splits one tool's arguments by the command they ran.
+//
+// Only meaningful for a tool that takes a command line, so the split is
+// keyed on whether the calls recorded one at all. Apportioned by argument
+// bytes within the tool, the same way the tool's own share was apportioned
+// out of the model's output.
+func byCommandArguments(s *model.Session, carry analysis.CarryReport, tool string,
+	toolCost, toolCostUncached, toolTokens float64, toolBytes int) []*Node {
+	bytesBy := map[string]int{}
+	callsBy := map[string]int{}
+	tripBytesBy := map[string]float64{}
+	var total int
+	for _, tc := range s.ToolCalls {
+		if tc.Name != tool || tc.InputBytes == 0 || tc.Command == "" {
+			continue
+		}
+		key := content.CommandBinary(tc.Command)
+		if key == "" || !content.LooksLikeCommand(key) {
+			key = "unattributed commands"
+		}
+		bytesBy[key] += tc.InputBytes
+		callsBy[key]++
+		tripBytesBy[key] += float64(tc.InputBytes) *
+			float64(carry.RoundTripsByCall[tc.InvocationSeq])
+		total += tc.InputBytes
+	}
+	// Below this there is nothing to split: the calls carried no command, so
+	// the tool is a leaf as it was before.
+	if total == 0 || len(bytesBy) < 2 {
+		return nil
+	}
+
+	var out []*Node
+	for name, b := range bytesBy {
+		share := float64(b) / float64(total)
+		tokens := toolTokens * share
+		trips := 0.0
+		if b > 0 {
+			trips = tripBytesBy[name] / float64(b)
+		}
+		out = append(out, &Node{
+			Name: name, Kind: "command",
+			Tokens: tokens,
+			Carry:  toolCost * share, CarryUncached: toolCostUncached * share,
+			Items:      callsBy[name],
+			RoundTrips: trips,
+			tokenCalls: tokens * trips,
+			Detail: fmt.Sprintf("%s of command text over %s.",
+				byteStr(b), pluralCalls(callsBy[name])),
 		})
 	}
 	return out
@@ -574,7 +643,7 @@ func outputCost(s *model.Session) float64 {
 	return out
 }
 
-// apportion splits non-thinking output between prose and tool arguments by
+// apportion splits non-thinking output between prose and tool inputs by
 // byte share, since the API reports one output number per call.
 func apportion(s *model.Session, rest int64) (prose, args float64) {
 	var argBytes int
