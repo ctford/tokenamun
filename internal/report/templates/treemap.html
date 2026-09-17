@@ -98,6 +98,11 @@
   .bars .val { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
   svg { display: block; width: 100%; height: auto; }
+  /* `svg { display: block }` outranks the user agent's `[hidden]` rule on
+     specificity, so hiding the treemap did nothing and the table view
+     appeared underneath the boxes instead of replacing them. Any element
+     carrying `hidden` is hidden, whatever else is said about it. */
+  [hidden] { display: none !important; }
   .cell rect { stroke: var(--surface-1); stroke-width: 2; }
   .cell:hover rect { stroke: var(--text-primary); stroke-width: 2; }
   .cell.leaf:hover rect { stroke: var(--rule); }
@@ -634,10 +639,20 @@ tableBtn.onclick = () => {
   applyViewMode();
 };
 
+/* `hidden` is an HTMLElement property. An <svg> is an SVGElement, so
+   `svg.hidden = true` sets a JavaScript expando and no content attribute:
+   it reads back as true, no CSS selector ever matches it, and the boxes
+   stay on screen. Setting the attribute works on both. */
+function setHidden(id, on) {
+  const el = document.getElementById(id);
+  if (on) el.setAttribute("hidden", "");
+  else el.removeAttribute("hidden");
+}
+
 function applyViewMode() {
-  document.getElementById("treemap").hidden = tableMode;
-  document.getElementById("legend").hidden = tableMode;
-  document.getElementById("level-table").hidden = !tableMode;
+  setHidden("treemap", tableMode);
+  setHidden("legend", tableMode);
+  setHidden("level-table", !tableMode);
   tableBtn.setAttribute("aria-pressed", String(tableMode));
   tableBtn.textContent = tableMode ? "Boxes" : "Table view";
 }

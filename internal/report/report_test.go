@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -487,6 +488,20 @@ func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 	if !strings.Contains(html, "renderLevelTable") {
 		t.Error("the table must be rendered from the same level as the boxes")
 	}
+	// The table replaces the boxes, so the boxes have to actually go away.
+	// `hidden` is an HTMLElement property and the treemap is an SVGElement:
+	// `svg.hidden = true` sets a JavaScript expando, reads back as true, and
+	// hides nothing. The attribute form works on both.
+	if strings.Contains(code(html), ".hidden = ") {
+		t.Error("use setAttribute(\"hidden\") -- the .hidden property does nothing on an <svg>")
+	}
+	if !strings.Contains(html, `setAttribute("hidden"`) {
+		t.Error("the view toggle must hide by attribute")
+	}
+	// And a stylesheet rule must not outrank it. `svg { display: block }` did.
+	if !strings.Contains(html, "[hidden] { display: none !important; }") {
+		t.Error("hidden must beat any display rule in this stylesheet")
+	}
 	// Dark mode is selected, under both the OS setting and the explicit toggle.
 	if !strings.Contains(html, "prefers-color-scheme: dark") ||
 		!strings.Contains(html, `:root[data-theme="dark"]`) {
@@ -544,3 +559,12 @@ func TestTreemapFailsLoudlyIfTheTemplateLosesItsPlaceholder(t *testing.T) {
 		t.Fatal("the embedded template must carry the data placeholder")
 	}
 }
+
+// commentPattern matches a /* ... */ or <!-- ... --> block and a // line, so
+// that assertions about what the template does are neither satisfied nor
+// broken by a comment explaining why it does it. The first version of this
+// stripped by line prefix and missed the second line of a block comment,
+// which is exactly where the offending text was.
+var commentPattern = regexp.MustCompile(`(?s)/\*.*?\*/|<!--.*?-->|(?m)^\s*//.*$`)
+
+func code(html string) string { return commentPattern.ReplaceAllString(html, "") }
