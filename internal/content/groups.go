@@ -16,7 +16,7 @@ import "strings"
 // guessing at them in library code is how a taxonomy starts lying about
 // somebody else's project.
 //
-// A tool that is not listed stays at the top level of CLI output rather than
+// A tool that is not listed stays at the top level of cli output rather than
 // being swept into a catch-all, so an unrecognised tool is visible as itself.
 //
 // Wrappers such as env and xargs are deliberately absent: they are stripped
@@ -31,7 +31,7 @@ var groupMembers = map[string][]string{
 		"git", "hg", "svn", "jj", "bzr", "fossil", "cvs", "p4",
 		"gh", "glab", "tea",
 	},
-	"standard tools": {
+	"standard unix tools": {
 		// POSIX and near-POSIX text, file and search utilities, plus the
 		// modern replacements that do the same job.
 		"grep", "rg", "ag", "ack", "find", "fd", "ls", "tree", "du", "df",

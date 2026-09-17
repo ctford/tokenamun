@@ -169,7 +169,7 @@ driving it would have to ask someone to read the screen.
 
 ```
 tokenamun tree --json                          # where did it go?
-tokenamun tree --at "CLI output/version control"   # and inside that?
+tokenamun tree --at "cli output/version control"   # and inside that?
 tokenamun what-if --all                        # what would have helped?
 ```
 

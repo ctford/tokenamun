@@ -198,8 +198,8 @@ func TestCommandGroupsAreByToolIdentity(t *testing.T) {
 	cases := map[string]string{
 		"git":     "version control",
 		"gh":      "version control",
-		"grep":    "standard tools",
-		"sort":    "standard tools",
+		"grep":    "standard unix tools",
+		"sort":    "standard unix tools",
 		"go":      "language toolchains",
 		"pnpm":    "language toolchains",
 		"python3": "interpreters",
@@ -376,7 +376,7 @@ func TestWrappersAreNotAlsoGroupMembers(t *testing.T) {
 		}
 	}
 	// And the stripping works: the group is the real command's.
-	if got := CommandGroup(CommandBinary("xargs grep -n foo")); got != "standard tools" {
-		t.Errorf("xargs grep resolved to %q, want standard tools", got)
+	if got := CommandGroup(CommandBinary("xargs grep -n foo")); got != "standard unix tools" {
+		t.Errorf("xargs grep resolved to %q, want standard unix tools", got)
 	}
 }

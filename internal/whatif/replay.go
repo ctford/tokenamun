@@ -124,7 +124,7 @@ func replay(ref model.SessionRef, command, scope string,
 }
 
 // eligible mirrors the estimator's eligibility: content that classifies as
-// tool or MCP output. A shell command that read a file is excluded, because
+// tool or mcp output. A shell command that read a file is excluded, because
 // the estimator classifies that as source rather than output, and a ratio
 // measured over a different set than the saving is applied to would be
 // quietly wrong.

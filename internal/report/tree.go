@@ -81,8 +81,8 @@ type Node struct {
 //	│  ├─ tool arguments            what it said to tools → by tool
 //	│  └─ thinking                  what it said to itself; carry not knowable
 //	├─ file content                 the environment answered → by file
-//	├─ CLI output                   → by command family → by subcommand
-//	├─ MCP output                   → by tool
+//	├─ cli output                   → by command family → by subcommand
+//	├─ mcp output                   → by tool
 //	├─ web content                  → by tool
 //	└─ subagent reports
 //
@@ -291,7 +291,7 @@ func byToolArguments(s *model.Session, carry analysis.CarryReport,
 			tokenCalls: tokens * trips,
 			Detail: fmt.Sprintf("%d calls, %s of arguments. This is what the model "+
 				"wrote to invoke the tool, not what the tool printed back -- that is "+
-				"under CLI output, MCP output or file content, depending on the tool.",
+				"under cli output, mcp output or file content, depending on the tool.",
 				callsByTool[name], byteStr(b)),
 		})
 	}
@@ -328,10 +328,10 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 		}
 		parent := g
 		if sub != "" {
-			// CLI output opens up command by command: git, then git checkout,
+			// cli output opens up command by command: git, then git checkout,
 			// then git checkout AGENTS.md.
 			levels := []string{sub}
-			if kind == "CLI output" {
+			if kind == "cli output" {
 				if p := content.CommandPath(commands[c.ToolID]); len(p) > 0 {
 					// Inside a group the binary is its own level; where the
 					// group name already is the binary, do not repeat it.
@@ -482,7 +482,7 @@ func nestByDirectory(n *Node) {
 // it is worth a level of its own.
 //
 // A group's whole job is to stop a handful of small rows crowding out a big
-// one: "standard tools" holds grep, find, head, tail, ls, wc and which, and
+// one: "standard unix tools" holds grep, find, head, tail, ls, wc and which, and
 // hoisting all seven would bury git. Three rows is not a crowd. Below this
 // many members the group costs a click and saves nothing -- "language
 // toolchains" holding pnpm, go and npm is a word you have to click through to

@@ -75,7 +75,7 @@ func TestTopLevelIsWhoPutTheTokensThere(t *testing.T) {
 	// rather than nested under an authorship parent.
 	for _, name := range []string{
 		"preamble", "your prompts", "model output",
-		"file content", "CLI output",
+		"file content", "cli output",
 	} {
 		child(t, tree, name)
 	}
@@ -169,15 +169,15 @@ func names(n *Node) []string {
 // which is not.
 func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 	tree := built(t)
-	cli := child(t, tree, "CLI output")
+	cli := child(t, tree, "cli output")
 	// Tools are grouped by what they are -- git is version control in every
 	// codebase -- and the binary is a level inside that. This fixture runs
 	// only git, so its group holds one tool and is collapsed away; the
 	// grouping itself is covered by TestALevelThatTeachesNothingIsRemoved.
 	child(t, cli, "git")
-	child(t, tree, "MCP output")
+	child(t, tree, "mcp output")
 
-	// File content must not be filed under CLI output.
+	// File content must not be filed under cli output.
 	for _, c := range cli.Children {
 		if c.Name == "file content" {
 			t.Error("file content is its own mechanism, not a CLI command family")
@@ -188,7 +188,7 @@ func TestCLIAndMCPOutputAreSeparateMechanisms(t *testing.T) {
 // "If it's possible to drill down from git to git status, that'd be great."
 func TestCLIOutputOpensUpBySubcommand(t *testing.T) {
 	tree := built(t)
-	git := child(t, child(t, tree, "CLI output"), "git")
+	git := child(t, child(t, tree, "cli output"), "git")
 
 	// The compound command was `cd /repo && git status -sb`, so the level is
 	// the git subcommand, not cd and not the flag.
@@ -305,13 +305,13 @@ func TestAGroupWithTooFewToolsIsHoistedAway(t *testing.T) {
 	// A group's job is to stop a handful of small rows crowding out a big
 	// one. Three rows is not a crowd: "language toolchains" holding pnpm, go
 	// and npm was a word you clicked through to learn that you ran pnpm.
-	root := &Node{Name: "CLI output", Kind: "mechanism", Children: []*Node{
+	root := &Node{Name: "cli output", Kind: "mechanism", Children: []*Node{
 		{Name: "language toolchains", Kind: "group", Children: []*Node{
 			{Name: "pnpm", Kind: "command", Carry: 7, Items: 1},
 			{Name: "go", Kind: "command", Carry: 3, Items: 1},
 			{Name: "npm", Kind: "command", Carry: 1, Items: 1},
 		}},
-		{Name: "standard tools", Kind: "group", Children: []*Node{
+		{Name: "standard unix tools", Kind: "group", Children: []*Node{
 			{Name: "grep", Kind: "command", Carry: 5, Items: 1},
 			{Name: "find", Kind: "command", Carry: 4, Items: 1},
 			{Name: "head", Kind: "command", Carry: 3, Items: 1},
@@ -326,12 +326,12 @@ func TestAGroupWithTooFewToolsIsHoistedAway(t *testing.T) {
 	}
 	// The small group's members are hoisted; the group that earns its place
 	// survives whole.
-	want := []string{"pnpm", "go", "npm", "standard tools"}
+	want := []string{"pnpm", "go", "npm", "standard unix tools"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Errorf("got %v, want %v", names, want)
 	}
 	if got := len(root.Children[3].Children); got != 4 {
-		t.Errorf("standard tools should keep its four tools, got %d", got)
+		t.Errorf("standard unix tools should keep its four tools, got %d", got)
 	}
 	// Nothing is lost by hoisting: the members are still there, at the level
 	// above, and the branch still totals what its leaves do.
@@ -349,14 +349,14 @@ func TestALevelThatTeachesNothingIsRemoved(t *testing.T) {
 	// already knew, and it pushes the drill-down that matters -- git, then
 	// git status -- one click further away.
 	root := &Node{Name: "session", Kind: "root", Children: []*Node{{
-		Name: "CLI output", Kind: "mechanism", Children: []*Node{
+		Name: "cli output", Kind: "mechanism", Children: []*Node{
 			{Name: "version control", Kind: "group", Children: []*Node{
 				{Name: "git", Kind: "command", Carry: 10, Children: []*Node{
 					{Name: "status", Kind: "command", Carry: 4, Items: 1},
 					{Name: "log", Kind: "command", Carry: 6, Items: 1},
 				}},
 			}},
-			{Name: "standard tools", Kind: "group", Children: []*Node{
+			{Name: "standard unix tools", Kind: "group", Children: []*Node{
 				{Name: "grep", Kind: "command", Carry: 3, Items: 1},
 				{Name: "sed", Kind: "command", Carry: 2, Items: 1},
 			}},
@@ -394,7 +394,7 @@ func TestALevelThatTeachesNothingIsRemoved(t *testing.T) {
 
 	// The other kind: a node whose only child repeats its name is the same
 	// row twice, not a hierarchy.
-	dup := &Node{Name: "CLI output", Kind: "mechanism", Children: []*Node{
+	dup := &Node{Name: "cli output", Kind: "mechanism", Children: []*Node{
 		{Name: "git add", Kind: "command", Children: []*Node{
 			{Name: "git add", Kind: "item", Carry: 9, Items: 73},
 		}},
@@ -413,11 +413,11 @@ func TestToolArgumentsAreSeparateFromWhatToolsPrintedBack(t *testing.T) {
 	// Two sides of the same tool call, and they are different token pools.
 	// What the model wrote to invoke a tool is generated at the output rate
 	// and then re-read; what the tool printed back is input only. Filing the
-	// arguments beside CLI output would group by "anything to do with tools"
+	// arguments beside cli output would group by "anything to do with tools"
 	// and cross the authorship axis the top level is built on.
 	tree := built(t)
 	args := child(t, child(t, tree, "model output"), "tool arguments")
-	cli := child(t, tree, "CLI output")
+	cli := child(t, tree, "cli output")
 
 	for _, c := range cli.Children {
 		if c.Name == "tool arguments" {
@@ -461,7 +461,7 @@ func TestEachToolsArgumentsCarryTheirOwnResidency(t *testing.T) {
 }
 
 func TestBranchesAreNamedForWhatCameBackNotForTheSource(t *testing.T) {
-	// "CLI output" rather than "CLI", because the branch holds one half of a
+	// "cli output" rather than "CLI", because the branch holds one half of a
 	// tool call: what the tool printed. The command that caused it is the
 	// model's, and it is under model output. A branch named for the source
 	// would claim both halves.
@@ -470,10 +470,10 @@ func TestBranchesAreNamedForWhatCameBackNotForTheSource(t *testing.T) {
 	// name what came back without one. It is that the name must not be the
 	// name of the thing that produced it.
 	sources := map[string]string{
-		"CLI":           "CLI output",
+		"CLI":           "cli output",
 		"web":           "web content",
 		"harness tools": "harness output",
-		"MCP":           "MCP output",
+		"MCP":           "mcp output",
 		"subagents":     "subagent reports",
 	}
 	tree := built(t)

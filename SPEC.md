@@ -102,7 +102,7 @@ Classify observed retrieved content into useful categories such as:
 * documentation
 * plans
 * tool output
-* MCP output
+* mcp output
 * instructions/guides
 * other
 
@@ -369,7 +369,7 @@ Prioritize:
 2. Correct parsing and token accounting.
 3. Retrieved-content classification.
 4. Conservative activity attribution.
-5. Useful CLI output.
+5. Useful cli output.
 6. JSON output.
 7. Tests against real/representative Entire sessions.
 

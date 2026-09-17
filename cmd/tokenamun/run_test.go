@@ -566,7 +566,7 @@ func TestAdHocInterventionNeedsNoVendorSupport(t *testing.T) {
 	// away. Everything that shrinks content is that shape, so an agent can
 	// ask about a technique this tool has never heard of.
 	repo := localFixture(t, "carry.jsonl")
-	out, err := capture(t, "what-if", "--dir", repo, "--at", "CLI output",
+	out, err := capture(t, "what-if", "--dir", repo, "--at", "cli output",
 		"--cut", "0.5", "--name", "some-proxy", "--why", "Vendor figure, not measured.")
 	if err != nil {
 		t.Fatal(err)
@@ -582,8 +582,8 @@ func TestAdHocInterventionNeedsNoVendorSupport(t *testing.T) {
 	// plausible, or what it applies to.
 	for _, args := range [][]string{
 		{"what-if", "--dir", repo, "--cut", "0.5", "--why", "x."},
-		{"what-if", "--dir", repo, "--at", "CLI output", "--cut", "0.5"},
-		{"what-if", "--dir", repo, "--at", "CLI output", "--cut", "9", "--why", "x."},
+		{"what-if", "--dir", repo, "--at", "cli output", "--cut", "0.5"},
+		{"what-if", "--dir", repo, "--at", "cli output", "--cut", "9", "--why", "x."},
 	} {
 		if _, err := capture(t, args...); err == nil {
 			t.Errorf("%v should have been refused", args[3:])

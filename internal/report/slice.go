@@ -34,7 +34,7 @@ type Slice struct {
 	// tool has no idea what the parameters are meant to represent.
 	Label string
 	// At is the node path, in the same form the tree command takes:
-	// "CLI output", or "CLI output/git".
+	// "cli output", or "cli output/git".
 	At []string
 	// Cut is the fraction of that node's cost the intervention removes.
 	// 0.5 halves it. Negative would be an increase, which is allowed: not
@@ -163,7 +163,7 @@ func ParseSlice(at string, cut float64, label, why string) (Slice, error) {
 	return Slice{Label: label, At: splitPath(at), Cut: cut, Why: why}, nil
 }
 
-// splitPath turns "CLI output/git" into the levels the tree resolves.
+// splitPath turns "cli output/git" into the levels the tree resolves.
 func splitPath(at string) []string {
 	if at == "" {
 		return nil

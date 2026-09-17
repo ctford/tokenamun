@@ -113,11 +113,11 @@ does not.
 So you do not need the tool to know about your compressor:
 
 ```
-tokenamun what-if --at "CLI output" --cut 0.5   --name caveman --why "Vendor figure, not measured here."
+tokenamun what-if --at "cli output" --cut 0.5   --name caveman --why "Vendor figure, not measured here."
 ```
 
 `--at` takes any node `tokenamun tree` can show you, at any depth
-(`"CLI output/git"`). `--why` is required and capped at 64 characters,
+(`"cli output/git"`). `--why` is required and capped at 64 characters,
 because the agent supplying a fraction is the only thing that knows why the
 fraction is plausible, and a row without that is a number somebody will
 quote. The result ranks in `what-if --all` alongside the built-ins with

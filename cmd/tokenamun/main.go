@@ -69,7 +69,7 @@ Flags:
                   instead of assuming a ratio; C reads stdin, writes stdout
   -o FILE         output file (treemap; default tokenamun-treemap.html)
   --title TEXT    heading for the treemap, e.g. "Hyper Agentic App"
-  --at PATH       which node of the tree to show, e.g. "CLI output/version control".
+  --at PATH       which node of the tree to show, e.g. "cli output/version control".
                   Names come from the level above; matching is case-insensitive.
   --mode MODE     tree pricing: carry (as billed) | uncached (as if nothing
                   cached). The difference is what prompt caching was worth.
@@ -79,7 +79,7 @@ Flags:
                   intervention that shrinks content is a slice and a
                   fraction, so you can ask about one without the tool
                   knowing the vendor:
-                    tokenamun what-if --at "CLI output" --cut 0.5 \
+                    tokenamun what-if --at "cli output" --cut 0.5 \
                       --name caveman --why "Vendor figure, not measured here."
   --why TEXT      caveat for --cut, required, max 64 characters
   --name TEXT     what to call a --cut intervention in the report
@@ -124,7 +124,7 @@ func run(args []string) error {
 	title := fs.String("title", "", "heading for the treemap report")
 	var extraInterventions repeatable
 	fs.Var(&extraInterventions, "intervention", "path to an intervention script (repeatable)")
-	at := fs.String("at", "", "drill to a node in the tree, e.g. \"CLI output/git\"")
+	at := fs.String("at", "", "drill to a node in the tree, e.g. \"cli output/git\"")
 	mode := fs.String("mode", "carry", "cost mode for the tree: carry | uncached")
 	all := fs.Bool("all", false, "run every intervention and summarise")
 	cut := fs.Float64("cut", 0, "fraction of --at to remove, for an ad-hoc intervention")

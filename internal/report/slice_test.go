@@ -27,7 +27,7 @@ func TestSliceIsAnInterventionLikeAnyOther(t *testing.T) {
 	// The point of the generic form: everything that shrinks content is a
 	// slice of the tree and a fraction, so an agent can ask about one
 	// without the tool modelling the vendor.
-	sl, err := ParseSlice("CLI output", 0.5, "caveman", "Vendor figure, not measured here.")
+	sl, err := ParseSlice("cli output", 0.5, "caveman", "Vendor figure, not measured here.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,14 +39,14 @@ func TestSliceIsAnInterventionLikeAnyOther(t *testing.T) {
 	c := sliceContext(t)
 	r := i.Estimate(c)
 	if !r.Applicable {
-		t.Fatalf("CLI output has cost in this fixture: %+v", r)
+		t.Fatalf("cli output has cost in this fixture: %+v", r)
 	}
 	if r.Acts != whatif.AxisVolume {
 		t.Errorf("a slice removes content, so it acts on volume, got %q", r.Acts)
 	}
 	// Amdahl: the answer is the slice's share times the cut, and it has to
 	// agree with the tree the viewer draws.
-	node, _, err := resolve(BuildTree(c.Session, c.Carry), []string{"CLI output"})
+	node, _, err := resolve(BuildTree(c.Session, c.Carry), []string{"cli output"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,10 +77,10 @@ func TestSliceRefusesParametersThatWouldProduceAnUnquotableNumber(t *testing.T) 
 		wants    string
 	}{
 		{name: "no node", at: "", cut: 0.5, why: "x.", wants: "--at is required"},
-		{name: "no cut", at: "CLI output", cut: 0, why: "x.", wants: "--cut must be"},
-		{name: "cut over one", at: "CLI output", cut: 1.5, why: "x.", wants: "--cut must be"},
-		{name: "no caveat", at: "CLI output", cut: 0.5, why: "  ", wants: "--why is required"},
-		{name: "essay for a caveat", at: "CLI output", cut: 0.5,
+		{name: "no cut", at: "cli output", cut: 0, why: "x.", wants: "--cut must be"},
+		{name: "cut over one", at: "cli output", cut: 1.5, why: "x.", wants: "--cut must be"},
+		{name: "no caveat", at: "cli output", cut: 0.5, why: "  ", wants: "--why is required"},
+		{name: "essay for a caveat", at: "cli output", cut: 0.5,
 			why:   strings.Repeat("x", whatif.CaveatLimit+1),
 			wants: "is a column in a table"},
 	}
@@ -114,16 +114,16 @@ func TestSliceNamesWhatIsThereWhenTheNodeIsWrong(t *testing.T) {
 }
 
 func TestSliceCanAddressADeepNode(t *testing.T) {
-	// "CLI output/git" rather than only top-level branches: the whole value
+	// "cli output/git" rather than only top-level branches: the whole value
 	// of naming the slice after the tree is that you can point at any level
 	// the viewer can.
 	c := sliceContext(t)
 	tree := BuildTree(c.Session, c.Carry)
-	cli, _, err := resolve(tree, []string{"CLI output"})
+	cli, _, err := resolve(tree, []string{"cli output"})
 	if err != nil || len(cli.Children) == 0 {
-		t.Skip("the fixture has no nested CLI output")
+		t.Skip("the fixture has no nested cli output")
 	}
-	deep := "CLI output/" + cli.Children[0].Name
+	deep := "cli output/" + cli.Children[0].Name
 
 	sl, err := ParseSlice(deep, 0.25, "n", "Made up.")
 	if err != nil {
@@ -142,7 +142,7 @@ func TestSliceCanAddressADeepNode(t *testing.T) {
 }
 
 func TestSliceUnitsAreLabelledHonestly(t *testing.T) {
-	sl, _ := ParseSlice("CLI output", 0.5, "n", "Made up.")
+	sl, _ := ParseSlice("cli output", 0.5, "n", "Made up.")
 	r := sl.Estimate(sliceContext(t))
 	for _, f := range r.Counterfact {
 		if f.Quantity != nil && f.Quantity.Prov != model.Counterfactual {

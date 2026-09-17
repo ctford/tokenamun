@@ -18,7 +18,7 @@ import (
 // evidence of this file's history, is often.
 
 // Under file content the name is the file, because that is what the payload
-// is. Under CLI output it must be the command: naming a command's report
+// is. Under cli output it must be the command: naming a command's report
 // after the file it was about -- `git log` of a plan, `wc` of a document --
 // made a report look like the document's contents.
 func leafNameFor(kind string, c model.RetrievedContent) string {
@@ -50,7 +50,7 @@ func leafNameFor(kind string, c model.RetrievedContent) string {
 func resultKind(c model.RetrievedContent) (kind, sub string) {
 	switch c.Channel {
 	case model.ChanMCP:
-		return "MCP output", c.Tool
+		return "mcp output", c.Tool
 	case model.ChanWeb:
 		return "web content", c.Tool
 	case model.ChanSubagent:
@@ -68,8 +68,8 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 			return "file content", ""
 		}
 		// Read through a compound shell command, so the content is real file
-		// reading with the file unknown. Saying so beats inflating CLI output
-		// with it: the point of separating CLI output is that git and test
+		// reading with the file unknown. Saying so beats inflating cli output
+		// with it: the point of separating cli output is that git and test
 		// runs are not file reading.
 		return "file content", "unidentified files"
 	}
@@ -81,14 +81,14 @@ func resultKind(c model.RetrievedContent) (kind, sub string) {
 			// A token that is not plausibly a command name came from an
 			// unparsed heredoc. Saying so beats inventing a tool called
 			// s1-tail-unserviceable.json.
-			return "CLI output", "unattributed commands"
+			return "cli output", "unattributed commands"
 		}
 		if g := content.CommandGroup(c.CommandBinary); g != "" {
-			return "CLI output", g
+			return "cli output", g
 		}
 		// An unrecognised tool stays visible as itself rather than being
 		// swept into a catch-all.
-		return "CLI output", c.CommandBinary
+		return "cli output", c.CommandBinary
 	}
 
 	// What is left is what the harness's own tools returned: plan mode,
@@ -113,13 +113,13 @@ func kindDetail(kind string) string {
 	case "web content":
 		return "what came back from fetching a page or running a search. Not the URL you " +
 			"asked for, which is under model output."
-	case "CLI output":
+	case "cli output":
 		return "what command-line tools reported: git, test runners, builds, searches, listings."
 	case "harness output":
 		return "what Claude Code's own tools returned: plan mode, skills, questions, " +
 			"tool search. Not commands you ran."
-	case "MCP output":
-		return "what MCP servers returned. Compare its size with CLI output when weighing " +
+	case "mcp output":
+		return "what MCP servers returned. Compare its size with cli output when weighing " +
 			"whether to put a server behind a CLI."
 	default:
 		return ""

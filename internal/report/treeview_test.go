@@ -231,7 +231,7 @@ func TestCLIAndViewerCannotDiverge(t *testing.T) {
 				c.Name, c.RoundTrips, n.RoundTrips)
 		}
 		if c.Detail != n.Detail {
-			t.Errorf("%s: the tooltip text is not in the CLI output", c.Name)
+			t.Errorf("%s: the tooltip text is not in the cli output", c.Name)
 		}
 		if c.Unscaled != n.Unscaled {
 			t.Errorf("%s: one view greys this out and the other does not", c.Name)

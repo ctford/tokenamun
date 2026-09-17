@@ -9,7 +9,7 @@ func TestTheTaxonomyIsInternallyConsistent(t *testing.T) {
 
 	// 1. Every binary whose output is routed to file content is also a tool
 	// with a group. `bat` was not, so it appeared at the top level of CLI
-	// output while cat, head and sed were under standard tools.
+	// output while cat, head and sed were under standard unix tools.
 	for binary := range fileReadingBinaries {
 		if CommandGroup(binary) == "" {
 			t.Errorf("%q prints file contents but has no tool group", binary)
