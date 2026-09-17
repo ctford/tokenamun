@@ -26,17 +26,54 @@ publish:
 * **No identifiers from private work.** No real session UUIDs, no checkpoint
   ULIDs, no file paths from private repositories, no branch names, no commit
   SHAs, no author names or email addresses beyond this repo's own git history.
-* **Aggregate measurements are fine; the content behind them is not.** "8
-  sessions totalled 856M billed input tokens" is a finding. The transcript that
-  produced it is someone's private work.
+  **Never name a profiled project**, in code, in documentation, in a test
+  fixture, or in a commit message.
+* **Never attribute a measurement to a project.** A number measured from
+  private work does not become publishable by being an aggregate. "131
+  sessions and 1.5B cost-weighted tokens" is that team's week, and naming the
+  repository beside it hands over their volume, their headcount and their
+  bill. What survives is the lesson without the measurement: "a repository
+  had a fraction of its checkpoints locally and the rest on the remote" says
+  everything the version with the counts in it said.
+* **Measurements from this repository's own sessions are fine**, and they are
+  what most of the reasoning in the history rests on. The distinction is
+  whose data it is, not how big the number is.
 * **No credentials.** No API keys, no tokens, no `.env`. `--tokenizer=api` reads
   from the environment and nothing else.
+
+Commit messages are committed content. They were the worst leak this
+repository has had: no transcript was ever committed, and seven messages named
+client repositories and quoted their figures, because every check only ever
+looked at files.
 
 `.gitignore` blocks the obvious accidents (`.entire/`, `*.jsonl` outside
 `testdata/`, `.env`), but it is a backstop, not the control. Check `git diff
 --staged` before committing, and if something private has already been
 committed, say so immediately rather than layering a fix on top — it needs
 history rewriting before any push.
+
+### The guard, and why the names are not in it
+
+`scripts/leakscan.sh` scans tracked file contents *and* every commit message.
+Two rules about its own construction:
+
+* **It contains no private names.** A public repository carrying a denylist of
+  client project names publishes the list it exists to protect. The built-in
+  patterns are generic shapes — a real home directory, a relative path up and
+  out into a named sibling checkout — and specific names live in
+  `.private-names`, one extended regex per
+  line, gitignored and local. The guard fails if that file is ever tracked.
+  Without it the generic rules still run.
+* **It never prints what it matched.** A failure names the file, the line and
+  the rule. Echoing the offending line would copy the secret into the CI log,
+  which is the leak with extra steps.
+
+`scripts/test-leak-guard.sh` runs it against strings it must catch and strings
+it must not. That test is not optional decoration: the guard has shipped
+broken twice — once with Perl syntax BSD `grep` ignores, once splitting its
+rules on `|` in patterns that use `|` — and both times it passed while a
+deliberately leaking file sat in the tree. A guard that matches nothing
+reports success.
 
 ### Test fixtures must be anonymised
 

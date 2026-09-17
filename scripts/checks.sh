@@ -58,6 +58,34 @@ while IFS= read -r f; do
   fi
 done < <(git ls-files '*.jsonl')
 
+# Names and paths, in file contents and in commit messages.
+#
+# The filename checks above were the whole of this step for a while, and they
+# missed the leak that actually happened: no transcript was ever committed,
+# but four source comments and a usage example named the client repositories
+# this tool was built by measuring, and one scratch script had a sibling path
+# to one of them hard-coded. Commit messages were worse, because nothing had
+# ever looked at them at all.
+#
+# Two rules this check has to obey, or it becomes the leak it prevents.
+#
+# First, no client name appears in it. A public repository cannot carry a
+# denylist of private project names -- that publishes exactly the list it is
+# meant to protect. So the built-in patterns are generic shapes that give
+# nothing away, and specific names come from .private-names, which is
+# gitignored and local. Without that file the generic checks still run.
+#
+# Second, it never echoes what it matched. Printing the offending line into a
+# CI log would move the secret from the source into the build output, so
+# failures name the file, the line number and the rule, and stop there. You
+# open the file to see it.
+step "no leaked names or local paths"
+# shellcheck source=scripts/leakscan.sh
+source "$(dirname "$0")/leakscan.sh"
+scan_tracked
+scan_private_names
+bash "$(dirname "$0")/test-leak-guard.sh" || bad "the leak guard does not catch what it claims to"
+
 # Dead code. Pinned as a tool dependency rather than fetched at @latest, so a
 # new release of the analyser cannot change what this check says about an
 # unchanged commit. It is a tool dependency, not a runtime one: nothing in the

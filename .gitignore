@@ -17,3 +17,6 @@ tool-results/
 .env.*
 .tokenamun.yml
 /.cache/
+
+# Local-only denylist for the private-data check — never commit it
+.private-names
