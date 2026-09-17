@@ -317,6 +317,10 @@ at least one AI budget exhausted a third of the way through the year.
 It is also the failure mode this tool is closest to. A profiler that reported
 "tokens per developer" would be worse than no profiler. Hence:
 
+* **Filtering by developer is fine; reporting by developer is not.** Analysing
+  your own sessions, or a colleague's at their request, is how you help. A
+  column comparing people is how a leaderboard starts. The line is between
+  choosing whose work to look at and publishing a ranking of it.
 * No developer dimension in any command's output, including `hotspots`.
 * Findings are framed against the engineering system — subsystems, file
   properties, retrieval patterns — never against people.

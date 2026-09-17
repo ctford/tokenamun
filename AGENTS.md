@@ -114,6 +114,10 @@ accounting, you change that document in the same commit.
   Code comments are the exception and stay as long as they need to be: they
   explain decisions to whoever changes them next, and nobody is reading them
   on a chart.
+* **Filter by developer, never report by developer.** Scoping an analysis to
+  whose sessions you are looking at is legitimate and useful -- it is how you
+  help somebody. A dimension that ranks people is the failure mode this tool
+  is closest to. Selecting is not the same as comparing.
 * **Measure; do not model.** The tool reports what a session cost and where it
   went. It does not model named techniques: a vendor's figure applied to your
   session is that vendor's claim wearing this tool's authority. The one
