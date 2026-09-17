@@ -42,6 +42,12 @@ type Hotspot struct {
 // HotspotReport ranks files by what they cost to carry.
 type HotspotReport struct {
 	Hotspots []Hotspot `json:"hotspots"`
+	// Matched and Missing count files the scan could and could not speak to.
+	// A file retrieved by the session but absent from the tree is the normal
+	// consequence of profiling a session that ran on another branch, and it
+	// has to be said rather than shown as a blank column.
+	Matched int `json:"files_in_scanned_tree"`
+	Missing int `json:"files_not_in_scanned_tree"`
 	// Unmatched counts retrievals with no path, which on auto-mode sessions is
 	// most of them: shell output cannot be attributed to a file.
 	UnmatchedRetrievals int     `json:"unmatched_retrievals"`
@@ -107,6 +113,11 @@ func Hotspots(s *model.Session, scan codescan.Report, carry CarryReport) Hotspot
 	}
 
 	for _, h := range byPath {
+		if h.Scanned {
+			r.Matched++
+		} else {
+			r.Missing++
+		}
 		r.Hotspots = append(r.Hotspots, *h)
 	}
 	sort.SliceStable(r.Hotspots, func(i, j int) bool {

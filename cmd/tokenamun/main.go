@@ -64,6 +64,8 @@ Flags:
                   instead of assuming a ratio; C reads stdin, writes stdout
   -o FILE         output file (treemap; default tokenamun-treemap.html)
   --cost N        measured intervention cost in EIT, for series payback
+  --scan PATH     tree to scan for code metrics (hotspots; default --dir).
+                  Point this at a checkout of the branch the session ran on.
 `
 
 func main() {
@@ -88,6 +90,7 @@ func run(args []string) error {
 	replayWith := fs.String("replay-with", "", "command to replay content through")
 	out := fs.String("o", "tokenamun-treemap.html", "output file for the treemap")
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
+	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
 	// Go's flag package stops parsing at the first positional argument, which
 	// would make `tokenamun profile current --json` silently ignore --json.
 	// For a CLI agents invoke, silently dropping a flag is the worst failure
@@ -119,7 +122,7 @@ func run(args []string) error {
 	case "scan":
 		return cmdScan(*dir, selector, *asJSON)
 	case "hotspots":
-		return cmdHotspots(*dir, *source, selector, *asJSON)
+		return cmdHotspots(*dir, *scanDir, *source, selector, *asJSON)
 	case "compare":
 		return cmdCompare(*dir, *source, selector, second, *asJSON)
 	case "series":
@@ -283,12 +286,20 @@ func cmdScan(dir, selector string, asJSON bool) error {
 	return report.RenderScan(os.Stdout, out)
 }
 
-func cmdHotspots(dir, source, selector string, asJSON bool) error {
+// cmdHotspots joins code metrics onto session cost.
+//
+// The tree to scan is a separate input from where the sessions live, because
+// they routinely differ: a session recorded on one branch is profiled from a
+// checkout on another, and then none of its files exist to measure.
+func cmdHotspots(dir, scanDir, source, selector string, asJSON bool) error {
 	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return err
 	}
-	scan, err := codescan.Scan(dir, codescan.DefaultOptions())
+	if scanDir == "" {
+		scanDir = dir
+	}
+	scan, err := codescan.Scan(scanDir, codescan.DefaultOptions())
 	if err != nil {
 		return err
 	}

@@ -181,6 +181,7 @@ type Hotspots struct {
 	SchemaVersion int             `json:"schema_version"`
 	Session       SessionInfo     `json:"session"`
 	Files         []HotspotRow    `json:"files"`
+	Coverage      CoverageReport  `json:"coverage"`
 	Unmatched     UnmatchedReport `json:"unmatched"`
 	Warnings      []model.Warning `json:"warnings,omitempty"`
 	Notes         []string        `json:"notes"`
@@ -197,6 +198,13 @@ type HotspotRow struct {
 	RetrievedBytes  model.Quantity   `json:"retrieved_bytes"`
 	CarryCost       model.Quantity   `json:"carry_cost"`
 	Scanned         bool             `json:"scanned"`
+}
+
+// CoverageReport says how much of the session the code scan could speak to.
+type CoverageReport struct {
+	InTree   model.Quantity `json:"files_in_scanned_tree"`
+	NotFound model.Quantity `json:"files_not_in_scanned_tree"`
+	Note     string         `json:"note,omitempty"`
 }
 
 // UnmatchedReport accounts for the retrievals no file could claim.
@@ -226,6 +234,18 @@ func BuildHotspots(s *model.Session, h analysis.HotspotReport) Hotspots {
 			"Code properties come from the working tree as it is now, which may have changed since the session ran.",
 			"There is no developer dimension here, deliberately. Tokenamun is a sensor, not a judge.",
 		},
+	}
+
+	out.Coverage = CoverageReport{
+		InTree:   model.Obs(float64(h.Matched), model.Calls),
+		NotFound: model.Obs(float64(h.Missing), model.Calls),
+	}
+	if h.Missing > 0 {
+		out.Coverage.Note = fmt.Sprintf(
+			"%d of the %d files this session retrieved are not in the scanned tree, so they "+
+				"have no code metrics. The session recorded branch %q; a tree on a different "+
+				"branch will not contain the code the session worked on.",
+			h.Missing, h.Matched+h.Missing, s.Branch)
 	}
 
 	for i, f := range h.Hotspots {
@@ -280,6 +300,13 @@ func RenderHotspots(w io.Writer, h Hotspots) error {
 				num(int(f.Retrievals.Value)), bytesStr(f.RetrievedBytes.Value), lines, cplx)
 		}
 		b.WriteString("  LINES and CPLX are '-' where the file is not in the scanned tree.\n\n")
+		b.WriteString("Code-scan coverage\n")
+		line(b, "  In the scanned tree", h.Coverage.InTree)
+		line(b, "  Not found", h.Coverage.NotFound)
+		if h.Coverage.Note != "" {
+			fmt.Fprintf(b, "  %s\n", wrap(h.Coverage.Note, 72, "  "))
+		}
+		b.WriteString("\n")
 	}
 
 	b.WriteString("Unattributed\n")
