@@ -521,7 +521,7 @@ func cmdDoctor(dir string, asJSON bool) error {
 
 	if asJSON {
 		return writeJSON(map[string]any{
-			"schema_version":    1,
+			"schema_version":    report.SchemaVersion,
 			"entire":            checks,
 			"local_transcripts": len(local),
 		})
