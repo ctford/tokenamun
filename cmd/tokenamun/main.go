@@ -97,7 +97,8 @@ exceeded, which is how it is used as a CI gate:
   --max-complexity N        fail on a function above complexity N
   --max-duplication PCT     fail above PCT% of duplicated code lines
   --skip-duplicates-in S    exclude paths containing S from the duplication
-                            measure, repeatable
+                            measure, in the report as well as the check;
+                            repeatable
 `
 
 func main() {
@@ -172,11 +173,10 @@ func run(args []string) error {
 	case "cache":
 		return cmdCache(*dir, *source, selector, *asJSON)
 	case "scan":
-		return cmdScan(*dir, selector, codescan.Budget{
+		return cmdScan(*dir, selector, skipDuplicatesIn, codescan.Budget{
 			MaxFileLines:          *maxFileLines,
 			MaxFunctionComplexity: *maxComplexity,
 			MaxDuplicationPercent: *maxDuplication,
-			SkipDuplicatesIn:      skipDuplicatesIn,
 		}, *asJSON)
 	case "hotspots":
 		return cmdHotspots(*dir, *scanDir, *source, selector, *asJSON)

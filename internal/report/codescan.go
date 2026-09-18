@@ -19,7 +19,10 @@ type Scan struct {
 	Largest       []ScanFile      `json:"largest_files"`
 	MostComplex   []ScanFile      `json:"most_complex_files"`
 	Duplicates    []ScanDuplicate `json:"duplicates"`
-	Notes         []string        `json:"notes"`
+	// DuplicatesSkippedIn is what the duplication measure left out, so the
+	// figure is not read as being over the whole tree.
+	DuplicatesSkippedIn []string `json:"duplicates_skipped_in,omitempty"`
+	Notes               []string `json:"notes"`
 }
 
 // ScanTotals summarises the tree.
@@ -52,7 +55,8 @@ type ScanDuplicate struct {
 
 // BuildScan computes the scan report.
 func BuildScan(r codescan.Report) Scan {
-	out := Scan{SchemaVersion: SchemaVersion, Root: r.Root}
+	out := Scan{SchemaVersion: SchemaVersion, Root: r.Root,
+		DuplicatesSkippedIn: r.DuplicatesSkippedIn}
 
 	var lines, code, large, dupLines int
 	for _, f := range r.Files {
@@ -140,6 +144,12 @@ func RenderScan(w io.Writer, s Scan) error {
 	line(b, "  Large files", s.Totals.LargeFiles)
 	line(b, "  Duplicate runs", s.Totals.DuplicateRuns)
 	line(b, "  Duplicated lines", s.Totals.DuplicateLines)
+	// A duplication figure over a subset of the tree has to say so, or the
+	// number invites a comparison it cannot support.
+	if len(s.DuplicatesSkippedIn) > 0 {
+		fmt.Fprintf(b, "  Duplication excludes paths containing %s.\n",
+			strings.Join(s.DuplicatesSkippedIn, ", "))
+	}
 	b.WriteString("\n")
 
 	if len(s.MostComplex) > 0 {

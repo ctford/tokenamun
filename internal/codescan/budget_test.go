@@ -74,7 +74,7 @@ func TestDuplicationBudgetIsAShareAndCountsExtraCopies(t *testing.T) {
 			},
 		}},
 	}
-	dup, code := duplicationShare(r, nil)
+	dup, code := duplicationShare(r)
 	if dup != 20 {
 		t.Errorf("three occurrences of a 10-line block is 20 duplicated lines, got %d", dup)
 	}
@@ -99,6 +99,7 @@ func TestDuplicationSkipsExcludedPathsOnBothSidesOfTheRatio(t *testing.T) {
 	// from the numerator but not the denominator would understate the share,
 	// which is the subtler way to get this wrong.
 	r := Report{
+		DuplicatesSkippedIn: []string{"_test.go"},
 		Files: []FileMetrics{
 			{Path: "a.go", CodeLines: 100},
 			{Path: "a_test.go", CodeLines: 900},
@@ -117,7 +118,7 @@ func TestDuplicationSkipsExcludedPathsOnBothSidesOfTheRatio(t *testing.T) {
 			},
 		}},
 	}
-	dup, code := duplicationShare(r, []string{"_test.go"})
+	dup, code := duplicationShare(r)
 	if dup != 4 {
 		t.Errorf("only the non-test duplication counts, got %d", dup)
 	}
@@ -126,14 +127,15 @@ func TestDuplicationSkipsExcludedPathsOnBothSidesOfTheRatio(t *testing.T) {
 	}
 	// 4 of 100 is 4%: over a 3% limit, even though it is well under 3% of
 	// everything including the tests.
-	if got := Check(r, Budget{MaxDuplicationPercent: 3, SkipDuplicatesIn: []string{"_test.go"}}); len(got) != 1 {
+	if got := Check(r, Budget{MaxDuplicationPercent: 3}); len(got) != 1 {
 		t.Errorf("expected the non-test duplication to breach, got %v", got)
 	}
 }
 
 func TestDuplicationIgnoresARunThatOnlySurvivesInSkippedFiles(t *testing.T) {
 	r := Report{
-		Files: []FileMetrics{{Path: "a.go", CodeLines: 100}},
+		DuplicatesSkippedIn: []string{"_test.go"},
+		Files:               []FileMetrics{{Path: "a.go", CodeLines: 100}},
 		Duplicates: []Duplicate{{
 			Lines: 40,
 			Occurrences: []Location{
@@ -144,7 +146,7 @@ func TestDuplicationIgnoresARunThatOnlySurvivesInSkippedFiles(t *testing.T) {
 	}
 	// One occurrence left after the exclusion, so nothing is duplicated: a
 	// block appearing once is not a copy of anything.
-	if dup, _ := duplicationShare(r, []string{"_test.go"}); dup != 0 {
+	if dup, _ := duplicationShare(r); dup != 0 {
 		t.Errorf("a single surviving occurrence is not duplication, got %d", dup)
 	}
 }

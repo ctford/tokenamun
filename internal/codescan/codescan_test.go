@@ -302,3 +302,47 @@ func mustScan(t *testing.T, root string) Report {
 	}
 	return r
 }
+
+// The excluded paths have to leave the report, not just the verdict. They did
+// not: the flag filtered the budget check alone, so `scan --max-duplication 3
+// --skip-duplicates-in _test.go` printed one duplication figure and passed or
+// failed on a different, invisible one.
+func TestExcludedPathsLeaveTheDuplicationReportAndNotOnlyTheCheck(t *testing.T) {
+	block := `func handle(a int) int {
+	total := 0
+	for i := 0; i < a; i++ {
+		total += i * 2
+	}
+	if total > 100 {
+		total = 100
+	}
+	return total
+}`
+	root := write(t, map[string]string{
+		"a_test.go": "package x\n\n" + block + "\n",
+		"b_test.go": "package y\n\nvar pad = 1\n\n" + block + "\n",
+		"c.go":      "package z\n\nvar only = 1\n",
+	})
+	opts := DefaultOptions()
+	opts.SkipDuplicatesIn = []string{"_test.go"}
+	r, err := Scan(root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Duplicates) != 0 {
+		t.Errorf("the report still lists excluded duplicates: %+v", r.Duplicates)
+	}
+	// The files themselves are still measured; it is only the duplication
+	// measure they are out of.
+	if len(r.Files) != 3 {
+		t.Errorf("excluded files should still be sized and scored, got %d", len(r.Files))
+	}
+	// And the report carries the exclusion, so the check needs no second copy
+	// of it and cannot disagree with what was printed.
+	if len(r.DuplicatesSkippedIn) != 1 {
+		t.Errorf("the report must record what it excluded, got %v", r.DuplicatesSkippedIn)
+	}
+	if got := Check(r, Budget{MaxDuplicationPercent: 1}); len(got) != 0 {
+		t.Errorf("nothing is duplicated, so nothing should breach: %v", got)
+	}
+}

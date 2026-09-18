@@ -26,12 +26,11 @@ type Budget struct {
 	// MaxDuplicationPercent fails when duplicated lines exceed this share of
 	// code lines. A share rather than a count, so the limit does not tighten
 	// every time the codebase grows.
+	//
+	// Which paths the measure excludes is not a budget: it is part of the
+	// measurement, and the scan records it on the report so that the printed
+	// figure and the verdict are the same number. See Options.SkipDuplicatesIn.
 	MaxDuplicationPercent float64
-	// SkipDuplicatesIn drops paths containing any of these substrings from
-	// the duplication measurement. Table-driven tests repeat their own shape
-	// by design, and counting that as duplication trains people to ignore the
-	// number.
-	SkipDuplicatesIn []string
 }
 
 // Breach is one limit that was exceeded, phrased so that the message says what
@@ -96,7 +95,7 @@ func Check(r Report, b Budget) []Breach {
 	}
 
 	if b.MaxDuplicationPercent > 0 {
-		dup, code := duplicationShare(r, b.SkipDuplicatesIn)
+		dup, code := duplicationShare(r)
 		if code > 0 {
 			share := 100 * float64(dup) / float64(code)
 			if share > b.MaxDuplicationPercent {
@@ -114,9 +113,14 @@ func Check(r Report, b Budget) []Breach {
 
 // duplicationShare totals duplicated lines and the code lines they are a share
 // of, both with the skipped paths excluded so the ratio is over one population.
-func duplicationShare(r Report, skip []string) (duplicated, codeLines int) {
+//
+// The scan has already kept the skipped files out of the numerator by not
+// offering them to duplicate detection. The denominator still has to be
+// narrowed here: excluding files from the numerator but not from what it is a
+// share of understates the result, which is the subtler way to get this wrong.
+func duplicationShare(r Report) (duplicated, codeLines int) {
 	skipped := func(path string) bool {
-		for _, frag := range skip {
+		for _, frag := range r.DuplicatesSkippedIn {
 			if strings.Contains(path, frag) {
 				return true
 			}

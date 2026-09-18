@@ -23,6 +23,16 @@ type Options struct {
 	LargeFileLines int
 	// Skip are path fragments excluded from the scan.
 	Skip []string
+	// SkipDuplicatesIn are path fragments excluded from duplicate detection
+	// but still measured for everything else. Table-driven tests repeat their
+	// own shape by design, and counting that as duplication trains people to
+	// ignore the number.
+	//
+	// Applied here rather than when a budget is checked, so that the printed
+	// report and the pass/fail verdict are the same measurement. They were
+	// not: the flag filtered the check alone, and the report beside it listed
+	// the duplicates it claimed to have excluded.
+	SkipDuplicatesIn []string
 }
 
 // DefaultOptions are deliberately conservative.
@@ -82,6 +92,10 @@ type Report struct {
 	Files      []FileMetrics `json:"files"`
 	Duplicates []Duplicate   `json:"duplicates"`
 	Skipped    int           `json:"skipped_files"`
+	// DuplicatesSkippedIn records what duplicate detection left out, so a
+	// reader of the report -- and the budget check -- can see that the
+	// duplication figure is over a subset.
+	DuplicatesSkippedIn []string `json:"duplicates_skipped_in,omitempty"`
 }
 
 // Scan walks root and measures every file it recognises.
@@ -94,6 +108,7 @@ func Scan(root string, opts Options) (Report, error) {
 		opts.LargeFileLines = DefaultOptions().LargeFileLines
 	}
 
+	r.DuplicatesSkippedIn = opts.SkipDuplicatesIn
 	corpus := newCorpus(opts.MinDuplicateLines)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -124,7 +139,9 @@ func Scan(root string, opts Options) (Report, error) {
 		}
 		m := measure(rel, lang, string(src), opts)
 		r.Files = append(r.Files, m)
-		corpus.add(rel, lang, string(src))
+		if !skipped(rel, opts.SkipDuplicatesIn) {
+			corpus.add(rel, lang, string(src))
+		}
 		return nil
 	})
 	if err != nil {

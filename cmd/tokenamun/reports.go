@@ -111,14 +111,17 @@ func cmdSeries(files []string, interventionCost float64, asJSON bool) error {
 }
 
 // cmdScan measures code properties without reference to any session.
-func cmdScan(dir, selector string, budget codescan.Budget, asJSON bool) error {
+func cmdScan(dir, selector string, skipDuplicatesIn []string, budget codescan.Budget,
+	asJSON bool) error {
 	root := dir
 	// scan takes a path rather than a session, so a positional argument here
 	// is a directory.
 	if selector != "" && selector != "latest" {
 		root = selector
 	}
-	r, err := codescan.Scan(root, codescan.DefaultOptions())
+	opts := codescan.DefaultOptions()
+	opts.SkipDuplicatesIn = skipDuplicatesIn
+	r, err := codescan.Scan(root, opts)
 	if err != nil {
 		return err
 	}
