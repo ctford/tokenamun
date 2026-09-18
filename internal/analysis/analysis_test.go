@@ -306,6 +306,27 @@ func TestRebuildAfterCompactionIsAttributedToTheCompaction(t *testing.T) {
 	}
 }
 
+// Seq is a label on an invocation, not its position in the slice. Stepping
+// back twice used to pass the first result's Seq where an index was wanted,
+// which is correct only for as long as ingest keeps numbering invocations by
+// position. Numbered from ten, the old code indexed past the end.
+func TestCompactionIsFoundWhenSeqIsNotTheSliceIndex(t *testing.T) {
+	s := session(
+		inv(10, 0, "claude-opus-5", "2.1.246", "high", 1, 100_000, 500),
+		inv(11, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 6_000, 0),
+		inv(12, 90*time.Second, "claude-opus-5", "2.1.246", "high", 1, 400, 6_100),
+	)
+	r := Cache(s, TTL5m)
+	for _, m := range r.Misses {
+		if m.Seq == 12 && m.Cause != CauseCompaction {
+			t.Errorf("cause = %q, want compaction", m.Cause)
+		}
+	}
+	if r.ByCause[CauseUnexplained].Calls != 0 {
+		t.Error("nothing should be left unexplained here")
+	}
+}
+
 func TestMergeAddsCostsAndReconcilesTheTTL(t *testing.T) {
 	// Cost is additive across sessions: each report was computed against its
 	// own session's weights and its own gaps, so the totals add.

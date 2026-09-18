@@ -244,11 +244,11 @@ func causeOf(prev, cur model.ModelInvocation, prompt int64, gap, ttl time.Durati
 // followsReset reports whether the previous real call was the one where the
 // prompt collapsed, which is the signature of a compaction.
 func followsReset(invs []model.ModelInvocation, i int) bool {
-	prev, ok := lastRealCall(invs, i)
+	prev, at, ok := lastRealCallAt(invs, i)
 	if !ok {
 		return false
 	}
-	before, ok := lastRealCall(invs, prev.Seq)
+	before, _, ok := lastRealCallAt(invs, at)
 	if !ok {
 		return false
 	}
@@ -259,12 +259,25 @@ func followsReset(invs []model.ModelInvocation, i int) bool {
 // stepping over error entries. The cache state the current call met was left
 // by that request, not by a placeholder.
 func lastRealCall(invs []model.ModelInvocation, i int) (model.ModelInvocation, bool) {
+	inv, _, ok := lastRealCallAt(invs, i)
+	return inv, ok
+}
+
+// lastRealCallAt also returns where it found it, so a caller stepping back
+// twice has an index to step from.
+//
+// Walking back a second time used to pass the first result's Seq as the
+// index. That works only because ingest happens to number invocations by
+// their position, which is an invariant of another package established three
+// packages away -- and an off-by-one waiting for the day something drops an
+// invocation after numbering it.
+func lastRealCallAt(invs []model.ModelInvocation, i int) (model.ModelInvocation, int, bool) {
 	for k := i - 1; k >= 0; k-- {
 		if invs[k].IsRealCall() {
-			return invs[k], true
+			return invs[k], k, true
 		}
 	}
-	return model.ModelInvocation{}, false
+	return model.ModelInvocation{}, 0, false
 }
 
 // gapBetween is the start-to-start interval, which is what the TTL clock
