@@ -49,10 +49,12 @@ answers with measurements. Every command takes `--json`, and each level of the
 drill-down prints the command that goes one deeper, so an agent can navigate
 without guessing at names.
 
-Figures that are not plain measurements say so. `profile`, `carry`, `cache`
-and `scan` label each one `[observed]` or `[derived]`, and the two commands
-that answer a what-if label it `[counterfactual]`: `cache` for a TTL change,
-`optimise` for a part of the tree.
+Figures that are not plain measurements say so. Every command that prints a
+table of figures labels each one — `[observed]`, `[derived]`, or
+`[derived-approx]` where a stated estimator is involved — and the two that
+answer a what-if label that `[counterfactual]`: `cache` for a TTL change,
+`optimise` for a part of the tree. In `optimise` the figure you supply is
+`[given]`, because it is the one number here this tool did not produce.
 
 > *"Where did my tokens go this week?"*
 > → `tokenamun tree all --since 7d`
@@ -111,3 +113,4 @@ Details in [`METHODOLOGY.md`](METHODOLOGY.md).
 - [`AGENTS.md`](AGENTS.md) — conventions and the quality gates
 - [`docs/research-entire.md`](docs/research-entire.md) — what Entire's data contains, measured
 - [`docs/experiments.md`](docs/experiments.md) — using `series` for before/after
+- [`docs/interventions.md`](docs/interventions.md) — what people try to cut tokens, and what can be checked

@@ -58,8 +58,8 @@ real transcript, even partially, even in a comment.
 ## The four rules the tests protect
 
 1. **Every number carries a provenance label** — `observed`, `derived`,
-   `inferred` or `counterfactual`. It is a type, not a comment, and the
-   renderer cannot print an unlabelled number.
+   `derived-approx`, `inferred`, `counterfactual` or `given`. It is a type,
+   not a comment, and the renderer cannot print an unlabelled number.
 2. **Token accounting comes from the transcript, deduplicated by `requestId`.**
    An `assistant` entry is a content block, not an API call. Never derive
    totals from checkpoint `token_usage`: it is cumulative in some checkpoints
@@ -81,7 +81,9 @@ same commit.
 * **The adapters are a quarantine.** Only `internal/entire` and
   `internal/claudecode` may know a field name from someone else's format.
   Everything downstream consumes `internal/model`. New format knowledge goes
-  in `assumptions.go` with a note on how we detect it breaking.
+  in the adapter's package comment, beside the assumption it sits with and a
+  note on how we detect it breaking; `tokenamun version` names the versions
+  the adapters were read off.
 * **Output is terse; the argument goes where there is room.** No paragraphs in
   a table cell, tooltip, legend, or beside a number. Say the one thing in a
   sentence and put the reasoning in the field that exists for it — `caveat`
