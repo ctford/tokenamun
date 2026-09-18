@@ -215,8 +215,8 @@ func RenderHypothetical(w io.Writer, h Hypothetical) error {
 	b.WriteString("\n")
 
 	b.WriteString("Counterfactual\n")
-	fmt.Fprintf(b, "  Optimisation       %14s   [given]     (what that part becomes)\n",
-		remainingStr(h.Becomes-1))
+	fmt.Fprintf(b, "  Optimisation       %14s   [%s]     (what that part becomes)\n",
+		remainingStr(h.Becomes-1), model.Given)
 	fmt.Fprintf(b, "  Saving             %14s   [counterfactual]\n", num(int(h.Saving)))
 	fmt.Fprintf(b, "  Impact             %14s   [counterfactual]  (what the session becomes)\n\n",
 		remainingStr(h.Impact-1))

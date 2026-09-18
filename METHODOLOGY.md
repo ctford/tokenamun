@@ -9,7 +9,7 @@ sessions in three repositories, raw token volume overstated cost by between
 
 ## 1. Provenance
 
-Every quantity carries one of five labels. It is a type in the data model, not
+Every quantity carries one of six labels. It is a type in the data model, not
 a documentation convention, and the renderer will not print an unlabelled
 number.
 
@@ -20,6 +20,7 @@ number.
 | `derived-approx` | Deterministic, but with a stated estimator: token counts from the byte-ratio estimator, and cyclomatic complexity from branch keywords. |
 | `inferred` | Could be wrong. Used for a file path parsed out of a shell command line, as against one a tool reported. |
 | `counterfactual` | Arithmetic about a session that never happened. |
+| `given` | Supplied by the caller. Only `optimise --optimise`: the one reported figure this tool did not produce. |
 
 Counterfactuals render in their own section, never inside an observed total,
 and always with an `unknown` section. One that produces an empty `unknown`
