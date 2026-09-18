@@ -42,6 +42,14 @@ in `.private-names`: one regex per line, gitignored, a failure if ever
 tracked. Without it the generic rules still run. It never prints what it
 matched, because that copies the secret into the CI log.
 
+**The name check is local by construction, so it is the pre-commit hook that
+enforces it.** CI has no `.private-names` — that is the point of the file —
+so there it prints `generic checks only` and the commit-message half does not
+run at all. A name that reaches a push has already passed the only gate that
+could have seen it. Don't read a green CI run as the names having been
+checked; install the hook (`scripts/install-hooks.sh`) and keep the file
+current.
+
 `scripts/test-leak-guard.sh` exercises it against strings it must catch and
 must not, under the shell options the gates use. Keep it that way: a guard
 whose patterns quietly match nothing reports success, so the only evidence it

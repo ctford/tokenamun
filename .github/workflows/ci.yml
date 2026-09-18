@@ -18,6 +18,13 @@ jobs:
           # code-budget check counts committed lines. Depth 1 is enough; the
           # checkpoint reader needs refs only when profiling, not when
           # testing.
+          #
+          # One gate is weaker here than in the hook, and deliberately: the
+          # private-name check needs .private-names, which is gitignored so
+          # that a public repository does not publish the list it protects.
+          # CI therefore runs the generic patterns only, and the
+          # commit-message scan -- the part that would want full history --
+          # does not run at all. See AGENTS.md.
           fetch-depth: 1
 
       - uses: actions/setup-go@v5
