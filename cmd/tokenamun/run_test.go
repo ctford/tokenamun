@@ -547,6 +547,9 @@ func TestOptimiseNeedsAPartAndAReason(t *testing.T) {
 	for _, args := range [][]string{
 		{"optimise", "--dir", repo, "--optimise", "0.5", "--why", "x."},
 		{"optimise", "--dir", repo, "--at", "cli output", "--optimise", "0.5"},
+		// Forgetting --optimise is not the same as asking for zero, which is
+		// what the flag's own default would otherwise have meant.
+		{"optimise", "--dir", repo, "--at", "cli output", "--why", "x."},
 		{"optimise", "--dir", repo, "--at", "cli output", "--optimise", "1", "--why", "x."},
 		{"optimise", "--dir", repo, "--at", "nowhere", "--optimise", "0.5", "--why", "x."},
 	} {

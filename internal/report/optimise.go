@@ -88,16 +88,26 @@ type Hypothetical struct {
 }
 
 // ParseOptimisation builds one from the command line.
-func ParseOptimisation(at string, becomes float64, label, why string) (Optimisation, error) {
+//
+// becomes is a pointer because zero is a figure you might mean -- it removes
+// the part entirely -- so a flag left off cannot be told from a flag set to
+// its default. Forgetting --optimise used to report the most extreme
+// counterfactual the tool can state, which is the opposite of the point.
+func ParseOptimisation(at string, becomes *float64, label, why string) (Optimisation, error) {
 	if at == "" {
 		return Optimisation{}, fmt.Errorf("--at is required: name the part of the tree, " +
 			"as `tokenamun tree` names it")
 	}
-	if becomes < 0 {
-		return Optimisation{}, fmt.Errorf("--optimise %.2f is negative; it is what the "+
-			"part becomes, so 0.5 halves it and 0 removes it", becomes)
+	if becomes == nil {
+		return Optimisation{}, fmt.Errorf("--optimise is required: say what %q becomes, "+
+			"since the figure is yours and not something this tool can measure. "+
+			"0.5 halves it, 0 removes it, 1.1 is a change for the worse", at)
 	}
-	if becomes == 1 {
+	if *becomes < 0 {
+		return Optimisation{}, fmt.Errorf("--optimise %.2f is negative; it is what the "+
+			"part becomes, so 0.5 halves it and 0 removes it", *becomes)
+	}
+	if *becomes == 1 {
 		return Optimisation{}, fmt.Errorf("--optimise 1 changes nothing: it is what the " +
 			"part becomes, not how much comes off")
 	}
@@ -113,7 +123,7 @@ func ParseOptimisation(at string, becomes float64, label, why string) (Optimisat
 	if label == "" {
 		label = "optimisation"
 	}
-	return Optimisation{Label: label, At: splitPath(at), Becomes: becomes, Why: why}, nil
+	return Optimisation{Label: label, At: splitPath(at), Becomes: *becomes, Why: why}, nil
 }
 
 // BuildHypothetical resolves the node and applies the change.

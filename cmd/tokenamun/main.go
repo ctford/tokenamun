@@ -192,8 +192,15 @@ func run(args []string) error {
 	case "report", "treemap":
 		return cmdReport(*dir, *source, selector, *title, *out, *asJSON)
 	case "what-if", "whatif", "optimise":
+		// Whether --optimise was given, not just its value: zero is a
+		// meaningful figure here, so the flag's default is indistinguishable
+		// from the flag being forgotten. See ParseOptimisation.
+		var becomes *float64
+		if given(fs)["optimise"] {
+			becomes = optimise
+		}
 		return cmdOptimise(*dir, *source, selector, optimiseArgs{
-			at: *at, becomes: *optimise, why: *why, label: *label,
+			at: *at, becomes: becomes, why: *why, label: *label,
 		}, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
@@ -205,6 +212,19 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q; try `tokenamun help`", cmd)
 	}
+}
+
+// given names the flags that were actually passed.
+//
+// For most flags the zero value is answer enough: an empty --at was not
+// given. --optimise is the exception, because 0 is a figure somebody might
+// mean, and the whole point of the command is that the figure is the
+// caller's. FlagSet.Visit accumulates across the repeated Parse calls that
+// parseInterspersed makes, so it can be read once afterwards.
+func given(fs *flag.FlagSet) map[string]bool {
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	return set
 }
 
 // parseInterspersed parses flags that may appear before, after or between
@@ -547,8 +567,10 @@ func localState(refs []model.SessionRef, err error) string {
 
 // optimiseArgs is a hypothetical as the command line describes it.
 type optimiseArgs struct {
-	at      string
-	becomes float64
+	at string
+	// becomes is nil when --optimise was not passed, which is not the same
+	// as zero: zero removes the part entirely.
+	becomes *float64
 	why     string
 	label   string
 }

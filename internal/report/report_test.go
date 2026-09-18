@@ -377,13 +377,17 @@ func jsonKeys(t *testing.T, v any) []string {
 	return keys
 }
 
+// ptr gives --optimise's value an address, since ParseOptimisation
+// distinguishes a figure of zero from no figure at all.
+func ptr(f float64) *float64 { return &f }
+
 // The unknown section must always render, because it is the thing that stops
 // a counterfactual being read as a measurement. It survived the deletion of
 // the named interventions: the one hypothetical that is left is held to it.
 func TestAHypotheticalAlwaysRendersItsUnknowns(t *testing.T) {
 	s := carrySession(t)
 	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
-	o, err := ParseOptimisation("cli output", 0.5, "proxy", "A guess, not a measurement.")
+	o, err := ParseOptimisation("cli output", ptr(0.5), "proxy", "A guess, not a measurement.")
 	if err != nil {
 		t.Fatal(err)
 	}
