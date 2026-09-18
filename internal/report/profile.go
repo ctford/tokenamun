@@ -296,7 +296,14 @@ func line(b *strings.Builder, label string, q model.Quantity) {
 	fmt.Fprintf(b, "%-22s %14s   [%s]\n", label, num(int(q.Value)), q.Prov)
 }
 
+// pct is line for a share, and refuses an unlabelled one for the same reason:
+// an empty bracket beside a percentage reads as a rendering glitch rather
+// than as a number nobody can vouch for.
 func pct(b *strings.Builder, label string, q model.Quantity) {
+	if err := q.Validate(); err != nil {
+		fmt.Fprintf(b, "  %-20s %14s\n", label, "(unlabelled)")
+		return
+	}
 	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]\n", label, q.Value*100, q.Prov)
 }
 

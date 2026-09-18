@@ -156,10 +156,18 @@ func TestVolumeAndCostAreDistinctQuantities(t *testing.T) {
 }
 
 func TestTextRendererRefusesUnlabelledQuantities(t *testing.T) {
-	var b strings.Builder
-	line(&b, "  Bare", model.Quantity{Value: 42})
-	if !strings.Contains(b.String(), "unlabelled") {
-		t.Fatalf("an unlabelled quantity must not render as a number, got %q", b.String())
+	// Both helpers, because only one of them used to check: pct printed the
+	// figure with an empty bracket after it, which looks like a formatting
+	// bug rather than a number with nothing behind it.
+	for name, render := range map[string]func(*strings.Builder, string, model.Quantity){
+		"line": line,
+		"pct":  pct,
+	} {
+		var b strings.Builder
+		render(&b, "  Bare", model.Quantity{Value: 42})
+		if !strings.Contains(b.String(), "unlabelled") {
+			t.Errorf("%s rendered an unlabelled quantity as a number: %q", name, b.String())
+		}
 	}
 }
 
