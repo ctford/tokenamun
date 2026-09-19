@@ -7,22 +7,20 @@ name a hypothetical:
 tokenamun optimise --at "cli output" --optimise 0.5 --why "quieter test runner output"
 ```
 
-This document is the other half of that: a catalogue of the interventions
-people actually try, what part of a session each one acts on, how good the
-published evidence for each is, and which of them can be checked against your
-own data at all. It used to be a set of built-in estimates; see
-[why they were deleted](#why-there-are-no-built-in-estimates) at the end.
+This document is the other half of that: what people try, which part of a
+session each technique acts on, how good its published evidence is, and which
+can be checked against your own data. It used to be a set of built-in
+estimates; see [why they were deleted](#why-there-are-no-built-in-estimates).
 
 Evidence grades used below: **vendor** (self-reported, own benchmark),
 **independent** (third party reproduced or measured), **contested**
 (independent result materially disagrees), **structural** (follows from how the
 API works, hard to dispute). [Sources](#sources) are at the end.
 
-A source can be more than one of those at once, so each claim below is graded
-on its own. Anthropic's cost guide is the case that matters: its benchmark
-figures are **vendor** — own harness, own tasks, list prices on the day — while
-its account of what invalidates a cached prefix, and the multipliers, are
-**structural**, and `internal/cost` already prices with them.
+A source can be more than one at once, so each claim is graded on its own.
+Anthropic's cost guide is both: its benchmarks are **vendor** — own harness,
+own tasks, list prices on the day — while its account of cache invalidation and
+the multipliers is **structural**, and `internal/cost` prices with them.
 
 ## The one thing everybody agrees on
 
@@ -90,17 +88,15 @@ its success rate". Most tool-vendor percentages here are token numbers without
 one. A 65% output reduction that makes the agent re-ask for what it lost is not
 a 65% saving.
 
-The exception is worth understanding. Anthropic's cost
-guide reports accuracy beside cost almost throughout — tool search at 45% less
-cost with accuracy unmoved, uploading a CSV instead of pasting it at 6/25 →
-25/25 correct for 92% less, a prompt audit at 14% cheaper for five points more.
-The asymmetry is structural rather than moral: a model vendor is paid whichever
-way the accuracy number lands, so publishing it costs nothing, while a tool
-vendor whose product *is* the reduction has one number that sells and one that
-can only hurt. That is a reason to read the grades carefully, not a reason to
-trust the model vendor's own benchmarks about its own models. Either way:
-Tokenamun cannot see task success, must not imply it can, and names the outcome
-question as unanswered every time.
+The exception is instructive. Anthropic's cost guide reports accuracy beside
+cost almost throughout — tool search at 45% less cost with accuracy unmoved, a
+CSV uploaded instead of pasted at 6/25 → 25/25 correct for 92% less, a prompt
+audit at 14% cheaper for five points more. The asymmetry is structural: a model
+vendor is paid whichever way accuracy lands, so publishing it costs nothing,
+while a tool vendor whose product *is* the reduction has one number that sells
+and one that can only hurt. Read the grades carefully; a vendor benchmarking
+its own model is still a vendor. Either way Tokenamun cannot see task success,
+and says so every time.
 
 ## Volume: less content
 
@@ -116,30 +112,28 @@ Caveman, Headroom, RTK-style adapters.
   independent testing on real agentic tasks measured 8.5% — an eight-fold gap,
   and the cleanest example of why this tool exists. A second vendor figure in
   the same family reports 33.2% fewer input tokens over 54 runs *with 18/18
-  correctness*, the only claim among the tool vendors here that reports a
-  success rate alongside a token count. Headroom's own repository line is the
-  honest one: "20% fewer tokens for coding agents, 60–95% fewer
-  tokens for JSON" — the headline range is the JSON case and the coding-agent
-  case is 20%. RTK claims 60–90% on "common dev commands" (vendor), where the
-  session-level effect depends entirely on what share of your output those
-  commands are.
+  correctness*, the only tool-vendor claim here carrying a success rate.
+  Headroom's own repository line is the honest one: "20% fewer tokens for
+  coding agents, 60–95% fewer tokens for JSON" — the range is the JSON case,
+  the coding-agent case is 20%. RTK claims 60–90% on "common dev commands"
+  (vendor), where the session-level effect depends on what share of your
+  output those commands are.
 * **What nobody measures:** the ratio on *your* content. Both ends of that
-  spread were measured on somebody else's output. Your own split matters: build
-  logs and status noise compress well, and a file the agent went looking for
-  compresses into a second tool call. The only way to settle it for a given
-  repository is to pipe that repository's own observed content through the real
-  compressor and count — which is a thing to build, not a figure to quote.
+  spread came from someone else's output, and the split matters: build logs
+  compress well, while a file the agent went looking for compresses into a
+  second tool call. Settling it means piping your own content through the real
+  compressor and counting — a thing to build, not a figure to quote.
 * **Netting:** rewriting context invalidates the cached prefix from that point,
-  turning cheap reads into full-price writes. A compression saving quoted
-  without that is gross, not net.
+  turning cheap reads into full-price writes. A saving quoted without that is
+  gross, not net.
 * **Check it:** pick the ratio yourself and say why. `--at "cli output"
   --optimise 0.5 --why "Measured on our own logs."`
 
 ### Compressing the files themselves
 
-Shorter documents, deleted dead code, less duplication. Distinct from a proxy:
-a smaller file is smaller every time anything reads it, smaller in every
-re-send, and smaller in every prefix rebuild.
+Shorter documents, deleted dead code, less duplication. Unlike a proxy, a
+smaller file is smaller on every read, every re-send and every prefix
+rebuild.
 
 * **Acts on** `file content`, and you can point at a directory:
   `--at "file content/docs"`.
@@ -148,10 +142,10 @@ re-send, and smaller in every prefix rebuild.
   28 KB file read once by three to one, and ranking by bytes puts them the
   other way round. `tokenamun hotspots` joins file size and complexity onto
   session cost from the other end.
-* **What nobody measures:** whether the shorter file still answers the question.
-  Trimmed past that point it is read *and* something else is read as well.
-* **Also:** unlike a proxy this changes the repository, and the files are read
-  by people too. Their time is not in this budget.
+* **What nobody measures:** whether the shorter file still answers the
+  question. Trimmed past that point it is read *and* something else is too.
+* **Also:** this changes the repository, and people read the files as well.
+  Their time is not in this budget.
 
 ### A more compact output format
 
@@ -538,25 +532,10 @@ content was retrieved to find things, from where, how much was re-retrieved,
 and what carrying it cost. The post-intervention side needs a second session.
 `tokenamun tree all --since` and `--until` are the before-and-after form.
 
-## Three things worth keeping in view
-
-* **Prompt caching is the highest-leverage thing most teams already have.**
-  Cached input at 2.5–12% of list price
-  ([`METHODOLOGY.md`](METHODOLOGY.md#3-volume-is-not-cost) has the per-model
-  multipliers), applied to the 93–99% of spend that is input. `cache_read` against `cache_creation` is observed, so "is your caching
-  actually working" is not a counterfactual question at all. It is probably the
-  cheapest real finding this tool can produce.
-* **Accuracy moves with efficiency in both directions.** Tool search improved
-  tool-selection accuracy; TOON's accuracy claim is contested; the language
-  server bought precision at a token premium. Efficiency and quality are not
-  opposite ends of one axis.
-* **The unit that matters is cost per completed task, and this tool measures
-  the numerator.** That is the stated golden rule of the vendor whose figures
-  get quoted at people hardest, and it is also the exact shape of what
-  Tokenamun cannot see. A session that spent less because the agent gave up is
-  indistinguishable here from one that spent less because it worked better. The
-  same document closes by saying its own numbers are directional and should be
-  tested on your own workload.
+**Accuracy moves with efficiency in both directions.** Tool search improved
+tool-selection accuracy; TOON's accuracy claim is contested; the language
+server bought precision at a token premium. Efficiency and quality are not
+opposite ends of one axis.
 
 ## Where to start
 
@@ -565,7 +544,10 @@ Ranked by evidence quality rather than by claimed upside.
 1. **Cache hygiene.** Observed end to end, no assumed parameter, and the
    largest number measured here by a wide margin: 40% of one session's
    effective input bill went on prefixes that expired while someone was
-   thinking. One setting. Nobody is talking about it.
+   thinking. Cached input costs 2.5–12% of list
+   ([`METHODOLOGY.md`](METHODOLOGY.md#3-volume-is-not-cost) has the per-model
+   multipliers) against the 93–99% of spend that is input. One setting.
+   Nobody is talking about it.
 2. **Repeated retrieval.** Observed, per session, and the counterfactual is
    arithmetic. Also the most likely to be free: nobody wants the same file
    three times.
