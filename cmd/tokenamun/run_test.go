@@ -586,7 +586,7 @@ func TestPricesFlagIsHonouredOrRefused(t *testing.T) {
 		})
 	}
 
-	for _, cmd := range []string{"retrieval", "carry", "report", "optimise", "sessions"} {
+	for _, cmd := range []string{"retrieval", "carry", "report", "optimise", "sessions", "length"} {
 		if _, err := capture(t, cmd, "--dir", repo, "fixture", "--prices"); err == nil {
 			t.Errorf("%s accepted --prices and did nothing with it", cmd)
 		}

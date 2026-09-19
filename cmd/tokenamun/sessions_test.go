@@ -76,3 +76,49 @@ func TestSessionsSortOrderIsCheckedRatherThanIgnored(t *testing.T) {
 		t.Errorf("the error should name the orders that exist: %v", err)
 	}
 }
+
+// The variable a hypothetical most often turns on, and the one the tool had
+// no view of: does a call cost more in a longer session? It is a question
+// about a population, so it takes no selector and answers over the window.
+func TestLengthBinsTheWholeWindow(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+	out, err := capture(t, "length", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Bins []struct {
+			Calls    string                   `json:"calls"`
+			Sessions *struct{ Value float64 } `json:"sessions"`
+			PerCall  *struct{ Value float64 } `json:"cost_per_call_eit"`
+		} `json:"bins"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Bins) == 0 {
+		t.Fatal("no bands, from a fixture with calls in it")
+	}
+	for _, b := range doc.Bins {
+		if b.Sessions == nil || b.Sessions.Value == 0 {
+			t.Errorf("%s: an empty band should not be printed", b.Calls)
+		}
+		if b.PerCall == nil || b.PerCall.Value <= 0 {
+			t.Errorf("%s: no per-call rate", b.Calls)
+		}
+	}
+
+	text, err := capture(t, "length", "--dir", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "PER CALL") {
+		t.Errorf("the table should carry the rate it exists for:\n%s", text)
+	}
+
+	// A window with nothing in it is an error rather than an empty table: a
+	// distribution over no sessions is not a distribution.
+	if _, err := capture(t, "length", "--dir", repo, "--since", "2099-01-01"); err == nil {
+		t.Error("an empty window should be refused rather than binned")
+	}
+}

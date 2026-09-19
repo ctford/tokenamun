@@ -108,6 +108,7 @@ Details in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
 | --- | --- |
 | `doctor` | whether either source is set up to record here |
 | `sessions` | what transcripts it can see, and what each cost |
+| `length` | what a call cost, binned by how long the session ran |
 | `profile` | where the tokens went, and what they cost |
 | `tree` | the same, one level at a time; `--at` drills in |
 | `report` | a standalone HTML viewer of the same tree |

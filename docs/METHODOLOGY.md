@@ -26,8 +26,8 @@ Counterfactuals render in their own section, never inside an observed total,
 and always with an `unknown` section. One that produces an empty `unknown`
 fails a test.
 
-`sessions`, `profile`, `retrieval`, `carry`, `cache`, `scan`, `hotspots`,
-`series` and `optimise` label every figure they print. `tree`, `report` and
+`sessions`, `length`, `profile`, `retrieval`, `carry`, `cache`, `scan`,
+`hotspots`, `series` and `optimise` label every figure they print. `tree`, `report` and
 `compare` do not: each reports one quantity throughout, stated in its header,
 and a label on every cell would be noise.
 
@@ -267,6 +267,23 @@ session.
 
 **Prices are configuration.** The multipliers in §3 are published Claude rates.
 They change and vary by model and platform. Check them against your own bill.
+
+## 7a. Aggregate at the level the question is about
+
+A relationship measured over day totals is not the same relationship measured
+over sessions, and it can point the other way. A day is a mixture of session
+lengths; the long sessions dominate its totals; and cost per call rises with
+session length and then flattens, because a call re-sends whatever is still
+resident and eventually there is nothing more to add. Fitted across day
+aggregates that curve looks like a line, and a per-call saving read off the
+line has already been published and then retracted against the session-level
+figures.
+
+`tokenamun length` is the view that shows it: sessions binned by how many
+calls they made, with each band's cost per call beside its session count.
+Fixed geometric bands, no curve through them, and the two extreme sessions in
+each band printed so a band of three cannot be read as a property of that
+length. Where the rise stops is read off the table, not asserted.
 
 ## 8. Not a productivity metric
 

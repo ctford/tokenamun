@@ -30,6 +30,9 @@ const usage = `tokenamun - a profiler for coding-agent token usage
 Usage:
   tokenamun sessions              list the sessions it can see, with what
                                   each one cost; --sort cost ranks them
+  tokenamun length                what a call cost, binned by how many calls
+                                  the session made. Over every session in
+                                  the window, since one session has no bins.
   tokenamun doctor                whether either source is set up to record here
   tokenamun profile [session]     where the tokens went, and what they cost
   tokenamun retrieval [session]   what content entered the context, and from where
@@ -202,6 +205,8 @@ func run(args []string) error {
 	switch cmd {
 	case "doctor":
 		return cmdDoctor(*dir, *asJSON)
+	case "length":
+		return cmdLength(*dir, *source, *asJSON)
 	case "sessions":
 		return cmdSessions(*dir, *source, *sortBy, *asJSON)
 	case "profile":
@@ -327,6 +332,27 @@ func cmdSessions(dir, source, sortBy string, asJSON bool) error {
 		return writeJSON(l)
 	}
 	return report.RenderSessionList(os.Stdout, l)
+}
+
+// cmdLength bins every discovered session by how many calls it made.
+//
+// No selector: one session has no distribution in it, and the question --
+// does a call cost more in a longer session -- is about a population. Scoped
+// by --since/--until like everything else, which is how you ask it of a week.
+func cmdLength(dir, source string, asJSON bool) error {
+	refs, err := discover(dir, source)
+	if err != nil {
+		return err
+	}
+	if len(refs) == 0 {
+		return fmt.Errorf("no sessions in %s; widen --since/--until, or run "+
+			"`tokenamun sessions` to see where it looked", window)
+	}
+	l := report.BuildLengths(refs, window.String(), parses.Load)
+	if asJSON {
+		return writeJSON(l)
+	}
+	return report.RenderLengths(os.Stdout, l)
 }
 
 func cmdProfile(dir, source, selector string, asJSON, withPrices bool) error {
