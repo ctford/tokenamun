@@ -12,7 +12,7 @@ Where the delivered work is now written down:
 | how every number is computed and labelled | [`METHODOLOGY.md`](../METHODOLOGY.md) |
 | the conventions and the quality gates | [`AGENTS.md`](../AGENTS.md) |
 | the commands and flags | `tokenamun help` |
-| what Entire's data contains | [`research-entire.md`](research-entire.md) |
+| what Entire's data contains | [`ENTIRE.md`](../ENTIRE.md) |
 | what people try, and what can be checked | [`interventions.md`](interventions.md) |
 | before-and-after experiments | [`experiments.md`](experiments.md) |
 

@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 Tokenamun is an **experimental** profiler for coding-agent token usage.
 [`METHODOLOGY.md`](METHODOLOGY.md) is canonical on how every number is
-computed; [`docs/research-entire.md`](docs/research-entire.md) on what the
+computed; [`ENTIRE.md`](ENTIRE.md) on what the
 data contains. Read the latter before touching an adapter — most non-obvious
 decisions there follow from something measured in it.
 
