@@ -83,7 +83,7 @@ func TestTheCheapCacheReadBelongsToAGenerationNotAFamily(t *testing.T) {
 }
 
 func TestReferenceDatasetRatio(t *testing.T) {
-	// The measured headline from METHODOLOGY.md section 3: raw prompt volume
+	// The measured headline from docs/METHODOLOGY.md section 3: raw prompt volume
 	// overstates cost by ~6x. Guards the weights against silent edits.
 	u := model.TokenUsage{
 		Input:           4_058,

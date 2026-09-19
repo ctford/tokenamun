@@ -1,6 +1,6 @@
 // Package ingest turns a transcript into a normalized model.Session.
 //
-// Its central job is the deduplication in METHODOLOGY.md section 2: a Claude
+// Its central job is the deduplication in docs/METHODOLOGY.md section 2: a Claude
 // Code assistant entry is a content block, not an API call, and entries
 // sharing a requestId repeat the same usage object. Summing per entry
 // overstates token usage by roughly 70% on real sessions.

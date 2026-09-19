@@ -9,7 +9,7 @@ Where the delivered work is now written down:
 
 | what | where |
 | --- | --- |
-| how every number is computed and labelled | [`METHODOLOGY.md`](../METHODOLOGY.md) |
+| how every number is computed and labelled | [`METHODOLOGY.md`](METHODOLOGY.md) |
 | the conventions and the quality gates | [`AGENTS.md`](../AGENTS.md) |
 | the commands and flags | `tokenamun help` |
 | what Entire's data contains | [`ENTIRE.md`](../ENTIRE.md) |

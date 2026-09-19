@@ -33,7 +33,7 @@ type SessionRef struct {
 
 // ModelInvocation is one API call. Building these correctly -- one per
 // requestId, not one per transcript line -- is the tool's central correctness
-// rule. See METHODOLOGY.md section 2.
+// rule. See docs/METHODOLOGY.md section 2.
 type ModelInvocation struct {
 	Seq       int        `json:"seq"`
 	RequestID string     `json:"request_id"`

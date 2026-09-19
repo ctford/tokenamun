@@ -1,7 +1,7 @@
 // Package cost converts token volume into cost. Volume is not cost: Anthropic
 // prompt caching prices cache reads at a tenth of fresh input and cache writes
 // above it, so on real sessions raw prompt volume overstates cost by 6x to 8x.
-// See METHODOLOGY.md section 3.
+// See docs/METHODOLOGY.md section 3.
 package cost
 
 import (

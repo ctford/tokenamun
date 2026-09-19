@@ -3,7 +3,7 @@
 Guidance for coding agents working in this repository.
 
 Tokenamun is an **experimental** profiler for coding-agent token usage.
-[`METHODOLOGY.md`](METHODOLOGY.md) is canonical on how every number is
+[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) is canonical on how every number is
 computed; [`ENTIRE.md`](ENTIRE.md) on what the
 data contains. Read the latter before touching an adapter — most non-obvious
 decisions there follow from something measured in it.
@@ -78,7 +78,7 @@ real transcript, even partially, even in a comment.
    cache class each re-send was actually billed at. Raw volume may appear
    alongside; never alone, and nothing is called expensive on volume alone.
 
-Changing one of these means changing [`METHODOLOGY.md`](METHODOLOGY.md) in the
+Changing one of these means changing [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) in the
 same commit.
 
 ## Conventions

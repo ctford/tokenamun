@@ -92,7 +92,7 @@ produced a broken change consumes fewer tokens than one that worked. Tokenamun
 supplies the token numerator and cannot supply the success denominator, so the
 experiment still needs an outcome check — does the probe's change compile, pass
 tests, actually implement the trait — recorded alongside. This is the
-tokens-to-success discipline from [`METHODOLOGY.md`](../METHODOLOGY.md#6-counterfactuals)
+tokens-to-success discipline from [`METHODOLOGY.md`](METHODOLOGY.md#6-counterfactuals)
 and it is the one thing a profiler can never do for you.
 
 **It cannot rescue n = 1.** Each of his 15 data points is a single probe run.

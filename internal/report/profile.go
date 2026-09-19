@@ -1,5 +1,5 @@
 // Package report renders analyses for humans and for agents. Every rendered
-// quantity carries its provenance; see METHODOLOGY.md section 1.
+// quantity carries its provenance; see docs/METHODOLOGY.md section 1.
 package report
 
 import (

@@ -199,7 +199,7 @@
   "notes": [
     "Bytes are the observed size of what entered the context, measured from the tool_result block the model received.",
     "Token counts are estimates unless a real tokenizer was used; check token_estimator.",
-    "Retrieved-content tokens are not billed tokens. Content is priced once and carried many times; see METHODOLOGY.md.",
+    "Retrieved-content tokens are not billed tokens. Content is priced once and carried many times; see docs/METHODOLOGY.md.",
     "withheld_bytes is content the harness kept out of context, so it was never paid for.",
     "Image results are counted but their tokens are not estimated: an image is priced by its dimensions, so a byte ratio would overstate a screenshot by more than an order of magnitude."
   ]

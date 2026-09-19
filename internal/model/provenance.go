@@ -6,7 +6,7 @@ import "fmt"
 
 // Provenance records how a number came to exist. Every reported quantity has
 // one, and the renderers refuse to print a quantity that doesn't. See
-// METHODOLOGY.md section 1.
+// docs/METHODOLOGY.md section 1.
 type Provenance string
 
 const (
