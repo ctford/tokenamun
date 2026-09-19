@@ -60,6 +60,7 @@ import (
 // `optimise` grew `parts`, and its `at`/`optimise`/`why` may now repeat. A
 // consumer that composed several single-node runs by hand was adding impacts,
 // which do not add, or adding savings over nodes that may contain one another.
+//
 // 8: a leaf a wrapper produced opens into the targets it ran, so `tree` and
 // the report payload can be a level deeper than before, and every leaf
 // holding more than one retrieval says so in its `detail`. A consumer reading
