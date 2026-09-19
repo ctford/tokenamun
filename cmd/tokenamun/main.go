@@ -70,6 +70,10 @@ Hypothetical optimisations:
 
 Flags:
   --json          machine-readable output
+  --prices        also total it in money, from a pinned published catalog.
+                  Taken by profile, cache and tree. EIT is the default unit
+                  and stays exact within a model; this is for the total that
+                  spans two of them, where EIT adds different-sized things.
   --dir PATH      directory to look in (default: working directory)
   --source SRC    entire | local | any (default: any)
   -o FILE         output file (report; default tokenamun-report.html)
@@ -117,6 +121,7 @@ func run(args []string) error {
 
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "machine-readable output")
+	withPrices := fs.Bool("prices", false, "also total it in money, from the pinned catalog")
 	dir := fs.String("dir", ".", "directory to look in")
 	source := fs.String("source", "any", "entire | local | any")
 	out := fs.String("o", "tokenamun-report.html", "output file for the report")
@@ -159,19 +164,26 @@ func run(args []string) error {
 		second = positional[1]
 	}
 
+	// A flag this command cannot honour is an error, never a no-op. Silently
+	// dropping one is the worst failure available to a CLI an agent drives:
+	// it reads as an answer to the question it asked.
+	if err := pricesApplies(cmd, given(fs)["prices"]); err != nil {
+		return err
+	}
+
 	switch cmd {
 	case "doctor":
 		return cmdDoctor(*dir, *asJSON)
 	case "sessions":
 		return cmdSessions(*dir, *source, *asJSON)
 	case "profile":
-		return cmdProfile(*dir, *source, selector, *asJSON)
+		return cmdProfile(*dir, *source, selector, *asJSON, *withPrices)
 	case "retrieval":
 		return cmdRetrieval(*dir, *source, selector, *asJSON)
 	case "carry":
 		return cmdCarry(*dir, *source, selector, *asJSON)
 	case "cache":
-		return cmdCache(*dir, *source, selector, *asJSON)
+		return cmdCache(*dir, *source, selector, *asJSON, *withPrices)
 	case "scan":
 		return cmdScan(*dir, selector, skipDuplicatesIn, codescan.Budget{
 			MaxFileLines:          *maxFileLines,
@@ -185,7 +197,7 @@ func run(args []string) error {
 	case "series":
 		return cmdSeries(positional, *interventionCost, *asJSON)
 	case "tree":
-		return cmdTree(*dir, *source, selector, *at, *mode, *asJSON)
+		return cmdTree(*dir, *source, selector, *at, *mode, *asJSON, *withPrices)
 	// "report" names the artifact; "treemap" named one of its two views, and
 	// the other one is a table. Kept as an alias because it is in muscle
 	// memory and in older notes.
@@ -212,6 +224,23 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q; try `tokenamun help`", cmd)
 	}
+}
+
+// pricesApplies rejects --prices on the commands that cannot honour it.
+//
+// Money is only offered where the total spans models, which is where EIT is
+// unsound and where the conversion is available per call. The rest report one
+// quantity in EIT throughout; `report` is absent because its payload feeds the
+// HTML viewer, which would then show a figure the CLI does not.
+func pricesApplies(cmd string, asked bool) error {
+	if !asked {
+		return nil
+	}
+	switch cmd {
+	case "profile", "cache", "tree":
+		return nil
+	}
+	return fmt.Errorf("--prices is not available on %s; it is taken by profile, cache and tree", cmd)
 }
 
 // given names the flags that were actually passed.
@@ -328,8 +357,8 @@ func cmdSessions(dir, source string, asJSON bool) error {
 	return nil
 }
 
-func cmdProfile(dir, source, selector string, asJSON bool) error {
-	p, err := profileOf(dir, source, selector)
+func cmdProfile(dir, source, selector string, asJSON, withPrices bool) error {
+	p, err := profileOf(dir, source, selector, withPrices)
 	if err != nil {
 		return err
 	}
@@ -345,16 +374,23 @@ func cmdProfile(dir, source, selector string, asJSON bool) error {
 // session made by concatenating them: residency does not compose across
 // sessions, and a concatenated session would look like a single context to
 // every analysis downstream. See report.MergeProfiles.
-func profileOf(dir, source, selector string) (report.Profile, error) {
+func profileOf(dir, source, selector string, withPrices bool) (report.Profile, error) {
 	if selector != SelectAll {
 		s, err := loadSelected(dir, source, selector)
 		if err != nil {
 			return report.Profile{}, err
 		}
-		return report.BuildProfile(s), nil
+		p := report.BuildProfile(s)
+		if p.Session, err = pricedIf(withPrices, p.Session, s); err != nil {
+			return report.Profile{}, err
+		}
+		return p, nil
 	}
 	sessions, info, err := loadSessions(dir, source)
 	if err != nil {
+		return report.Profile{}, err
+	}
+	if info, err = pricedIf(withPrices, info, sessions...); err != nil {
 		return report.Profile{}, err
 	}
 	profiles := make([]report.Profile, 0, len(sessions))
@@ -362,6 +398,19 @@ func profileOf(dir, source, selector string) (report.Profile, error) {
 		profiles = append(profiles, report.BuildProfile(s))
 	}
 	return report.MergeProfiles(profiles, info), nil
+}
+
+// pricedIf attaches money to a session header when it was asked for.
+//
+// One place, so that every command spells "priced per call at its own model"
+// the same way, and so that the unpriced-model error reads the same wherever
+// it comes from.
+func pricedIf(withPrices bool, info report.SessionInfo, sessions ...*model.Session) (
+	report.SessionInfo, error) {
+	if !withPrices {
+		return info, nil
+	}
+	return report.WithPrices(info, sessions...)
 }
 
 func cmdRetrieval(dir, source, selector string, asJSON bool) error {
@@ -388,7 +437,7 @@ func cmdCarry(dir, source, selector string, asJSON bool) error {
 	return report.RenderCarry(os.Stdout, r)
 }
 
-func cmdCache(dir, source, selector string, asJSON bool) error {
+func cmdCache(dir, source, selector string, asJSON, withPrices bool) error {
 	// "all" parses each transcript once in this process. Summing it by
 	// shelling out per session took long enough on 131 sessions that I gave
 	// up waiting, which is its own argument for the selector being
@@ -396,6 +445,9 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 	if selector == SelectAll {
 		sessions, info, err := loadSessions(dir, source)
 		if err != nil {
+			return err
+		}
+		if info, err = pricedIf(withPrices, info, sessions...); err != nil {
 			return err
 		}
 		var reports []analysis.CacheReport
@@ -414,6 +466,9 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 		return err
 	}
 	r := report.BuildCache(s, analysis.Cache(s, analysis.TTL5m))
+	if r.Session, err = pricedIf(withPrices, r.Session, s); err != nil {
+		return err
+	}
 	if asJSON {
 		return writeJSON(r)
 	}
@@ -626,7 +681,9 @@ func cmdOptimise(dir, source, selector string, a optimiseArgs, asJSON bool) erro
 	if err != nil {
 		return err
 	}
-	tree, info, err := loadTree(dir, source, selector)
+	// No money here: a counterfactual is not a bill, and --prices is refused
+	// on this command rather than quietly ignored.
+	tree, info, err := loadTree(dir, source, selector, false)
 	if err != nil {
 		return err
 	}

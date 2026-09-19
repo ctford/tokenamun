@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/ctford/tokenamun/internal/model"
 )
 
 // litellmPrices is the pinned extract of LiteLLM's published catalog: the
@@ -95,4 +97,40 @@ func CatalogPin() string {
 		commit = commit[:12]
 	}
 	return fmt.Sprintf("%s@%s, retrieved %s", u.Repo, commit, u.Retrieved)
+}
+
+// USD totals invocations in dollars, pricing each call at its own model's
+// published input price.
+//
+// This is the conversion EIT cannot do. A cost-weighted token is a multiple of
+// one model's input price, so summing EIT across models adds quantities of
+// different sizes; dollars are the same size everywhere, which is the entire
+// reason to have them. That only holds if each call is converted at its own
+// model, so this walks invocations rather than multiplying a session total by
+// one price. A session that switches model -- which opusplan does on every
+// plan-mode toggle -- would otherwise be billed at whichever model happened to
+// go first.
+//
+// unpriced names the models with no published price, in first-seen order. When
+// it is non-empty the totals are an under-statement and the caller must say so
+// rather than print them: a bill missing a model looks exactly like a bill.
+func USD(invocations []model.ModelInvocation) (prompt, output float64, unpriced []string) {
+	seen := map[string]bool{}
+	for _, inv := range invocations {
+		if !inv.IsRealCall() {
+			continue
+		}
+		price, ok := InputPrice(inv.Model)
+		if !ok {
+			if !seen[inv.Model] {
+				seen[inv.Model] = true
+				unpriced = append(unpriced, inv.Model)
+			}
+			continue
+		}
+		p, o := PerCall(inv)
+		prompt += p * price
+		output += o * price
+	}
+	return prompt, output, unpriced
 }

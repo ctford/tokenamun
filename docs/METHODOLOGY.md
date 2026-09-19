@@ -16,7 +16,7 @@ number.
 | Label | Meaning |
 | --- | --- |
 | `observed` | Present in the telemetry. No interpretation. |
-| `derived` | Deterministic arithmetic over observed values. |
+| `derived` | Deterministic arithmetic over observed values, and over pinned published rates. |
 | `derived-approx` | Deterministic, but with a stated estimator: token counts from the byte-ratio estimator, and cyclomatic complexity from branch keywords. |
 | `inferred` | Could be wrong. Used for a file path parsed out of a shell command line, as against one a tool reported. |
 | `counterfactual` | Arithmetic about a session that never happened. |
@@ -76,9 +76,36 @@ same model.
 
 **It is model-relative, and that is a limit rather than a feature.** A total
 spanning two differently priced models adds quantities of different sizes.
-Reports say when that applies; correcting it needs a price list, which is
-configuration this tool does not have and does not read. Within one model the
-unit is exact and needs no price list, which is the reason to use it.
+Reports say when that applies, and `--prices` is how you correct it. Within
+one model the unit is exact and needs no price list, which is why it is the
+default and stays the default.
+
+### Money, on request
+
+`profile`, `cache` and `tree` take `--prices`, which adds a total in dollars.
+Only those three: money is for the total that spans models, and the commands
+that report one quantity in EIT throughout refuse the flag rather than ignore
+it.
+
+Dollars are computed **per call**, each at its own model's published input
+price, and then added. That is the only conversion that is sound across
+models, and it is why the flag exists: EIT cannot add two models, dollars can.
+A model the catalog does not know is an error, not a zero — a total that drops
+the calls it could not price is a bill missing a model, and reads as a bill.
+
+The figures are labelled `derived`, not `derived-approx`. Nothing in them is
+estimated: the tokens are observed, the arithmetic is exact, and each call is
+converted at its own rate. What can be wrong is the published rate, which is
+staleness rather than approximation, and `derived-approx` promises the wrong
+caveat — an estimator whose error you can reason about. The honest mitigation
+is the pin, so every surface that prints dollars prints the catalog and commit
+beside them, and a test asserts that none of them can print one without the
+other.
+
+Cost *within* a report stays in EIT. A tree node is a share of content, and
+this tool does not yet attribute a node's cost to the call, and so the model,
+that carried it; a per-node dollar figure would have to pick one model for the
+whole tree, which is the error the money total exists to avoid.
 
 These multipliers are checked, not asserted. `scripts/refresh-prices.sh`
 vendors the Claude rows of LiteLLM's published catalog into

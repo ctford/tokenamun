@@ -264,6 +264,12 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 		pricing = "as though nothing cached"
 	}
 	fmt.Fprintf(b, "Priced %s\n\n", pricing)
+	// The money total, when it was asked for. The figures below it stay in
+	// EIT: a node is a share of content, and attributing content cost to the
+	// call -- and so to the model -- that carried it is not something this
+	// tree does yet. A per-node dollar figure would have to pick one model
+	// for the whole tree, which is the error the money total exists to avoid.
+	prices(b, v.Session.Prices)
 
 	fmt.Fprintf(b, "At %s\n", pathOrRoot(v.Path))
 	fmt.Fprintf(b, "  Cost               %14s   (%s of session)\n",

@@ -141,6 +141,7 @@ func RenderCache(w io.Writer, r Cache) error {
 		fmt.Fprintf(b, "  ! %s\n", wrap(w.Detail, 70, "    "))
 	}
 	b.WriteString("\n")
+	prices(b, r.Session.Prices)
 
 	if len(r.Causes) == 0 {
 		b.WriteString("No large cache rebuilds. The prefix stayed warm for this session.\n\n")

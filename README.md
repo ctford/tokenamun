@@ -5,7 +5,10 @@ the tokens went, and what they actually cost — for the session you are in, or
 for a whole team's history.
 
 Costs are in cost-weighted tokens: every class on one scale where 1 is a
-full-price input token, a cache read is 0.1 and output is 5.0.
+full-price input token, a cache read is 0.1 and output is 5.0. Exact within
+one model, and only within one model — for a total that spans two, `profile`,
+`cache` and `tree` take `--prices` and add it up in dollars instead, from a
+published catalog pinned in the repository and printed beside the figure.
 
 > **Experimental, and vibed rather than rigorous.**
 

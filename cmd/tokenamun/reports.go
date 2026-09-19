@@ -23,8 +23,8 @@ import (
 // The viewer needs a browser and a mouse. This is the same tree, reachable by
 // name, so an agent can answer "where did the tokens go" without a person
 // reading a picture to it.
-func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
-	tree, info, err := loadTree(dir, source, selector)
+func cmdTree(dir, source, selector, at, mode string, asJSON, withPrices bool) error {
+	tree, info, err := loadTree(dir, source, selector, withPrices)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func cmdTree(dir, source, selector, at, mode string, asJSON bool) error {
 }
 
 func cmdReport(dir, source, selector, title, outPath string, asJSON bool) error {
-	tree, info, err := loadTree(dir, source, selector)
+	tree, info, err := loadTree(dir, source, selector, false)
 	if err != nil {
 		return err
 	}
@@ -190,9 +190,12 @@ const SelectAll = "all"
 // Trees are merged rather than sessions concatenated: cost is additive across
 // sessions, residency is not, since each session has its own context. See
 // report.BuildPeriod.
-func loadAll(dir, source string) (*report.Node, report.SessionInfo, error) {
+func loadAll(dir, source string, withPrices bool) (*report.Node, report.SessionInfo, error) {
 	sessions, info, err := loadSessions(dir, source)
 	if err != nil {
+		return nil, report.SessionInfo{}, err
+	}
+	if info, err = pricedIf(withPrices, info, sessions...); err != nil {
 		return nil, report.SessionInfo{}, err
 	}
 	p := report.BuildPeriod(sessions, window.String(), nil)
@@ -277,14 +280,19 @@ func onlyOrigin(origins map[model.Origin]bool) model.Origin {
 }
 
 // loadTree resolves a selector to a tree, which is "all" or one session.
-func loadTree(dir, source, selector string) (*report.Node, report.SessionInfo, error) {
+func loadTree(dir, source, selector string, withPrices bool) (
+	*report.Node, report.SessionInfo, error) {
 	if selector == SelectAll {
-		return loadAll(dir, source)
+		return loadAll(dir, source, withPrices)
 	}
 	s, err := loadSelected(dir, source, selector)
 	if err != nil {
 		return nil, report.SessionInfo{}, err
 	}
+	info, err := pricedIf(withPrices, report.SessionOf(s), s)
+	if err != nil {
+		return nil, report.SessionInfo{}, err
+	}
 	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
-	return report.BuildTree(s, carry), report.SessionOf(s), nil
+	return report.BuildTree(s, carry), info, nil
 }

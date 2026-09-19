@@ -723,3 +723,75 @@ func TestProfileOverASetSumsRatherThanAverages(t *testing.T) {
 			merged.Usage.TotalCost.Value, single.Usage.TotalCost.Value)
 	}
 }
+
+// --prices is opt-in and, where it is not honoured, an error. A flag that
+// silently does nothing is the failure mode this CLI is built to avoid: an
+// agent reads the output as an answer to the question it asked.
+func TestPricesFlagIsHonouredOrRefused(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+
+	for _, cmd := range []string{"profile", "cache", "tree"} {
+		t.Run(cmd, func(t *testing.T) {
+			plain, err := capture(t, cmd, "--dir", repo, "fixture")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(plain, "$") {
+				t.Error("money printed without --prices; EIT is the default unit")
+			}
+			priced, err := capture(t, cmd, "--dir", repo, "fixture", "--prices")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(priced, "$") {
+				t.Fatalf("--prices printed no money:\n%s", priced)
+			}
+			if !strings.Contains(priced, "litellm@") {
+				t.Errorf("--prices printed money with no catalog pin:\n%s", priced)
+			}
+		})
+	}
+
+	for _, cmd := range []string{"retrieval", "carry", "report", "optimise", "sessions"} {
+		if _, err := capture(t, cmd, "--dir", repo, "fixture", "--prices"); err == nil {
+			t.Errorf("%s accepted --prices and did nothing with it", cmd)
+		}
+	}
+}
+
+// The JSON contract carries the same figures, in their own unit, with the pin.
+func TestPricesReachTheJSONContract(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+	out, err := capture(t, "profile", "--dir", repo, "fixture", "--prices", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Session struct {
+			Prices *struct {
+				Total struct {
+					Value float64 `json:"value"`
+					Unit  string  `json:"unit"`
+					Prov  string  `json:"provenance"`
+				} `json:"total_cost"`
+				Catalog string `json:"catalog"`
+			} `json:"prices"`
+		} `json:"session"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	p := doc.Session.Prices
+	if p == nil {
+		t.Fatal("--prices produced no prices block")
+	}
+	if p.Total.Unit != "usd" || p.Total.Prov != "derived" {
+		t.Errorf("total is %s/%s, want usd/derived", p.Total.Unit, p.Total.Prov)
+	}
+	if p.Total.Value <= 0 {
+		t.Errorf("total is %v", p.Total.Value)
+	}
+	if !strings.Contains(p.Catalog, "litellm@") {
+		t.Errorf("catalog pin is %q", p.Catalog)
+	}
+}
