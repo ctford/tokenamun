@@ -379,10 +379,13 @@ func profileOf(dir, source, selector string, withPrices bool) (report.Profile, e
 			return report.Profile{}, err
 		}
 		p := report.BuildProfile(s)
-		if p.Session, err = pricedIf(withPrices, p.Session, s); err != nil {
-			return report.Profile{}, err
+		if !withPrices {
+			return p, nil
 		}
-		return p, nil
+		// The whole profile rather than its header: the subagent block has
+		// money in it too, and pricing one and not the other would answer
+		// "what did this cost" with the part that happened in this context.
+		return report.WithProfilePrices(p, s)
 	}
 	sessions, info, err := loadSessions(dir, source)
 	if err != nil {

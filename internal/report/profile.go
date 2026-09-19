@@ -75,7 +75,13 @@ import (
 // to another reported `false` beside a combined total that added two models'
 // EIT, which is a sum of differently-sized quantities and the error the unit
 // is defined to make visible.
-const SchemaVersion = 9
+//
+// 10: under --prices the subagent block gains `prices`, with the subagents'
+// spend and the combined total in dollars. A consumer that read `prices`
+// under `session` as what the work cost was reading what this context cost:
+// on a session that fans out, most of the spend is in the other block, and
+// there was no dollar figure for it anywhere.
+const SchemaVersion = 10
 
 // Profile is a session overview.
 type Profile struct {
@@ -210,6 +216,29 @@ type SubagentReport struct {
 	// its subagents share a model, which is the common case, and where it is
 	// not exact the caveat says where the sound number is.
 	CombinedCaveat string `json:"combined_caveat,omitempty"`
+	// Prices is this block in money. Absent unless --prices asked.
+	Prices *SubagentPrices `json:"prices,omitempty"`
+}
+
+// SubagentPrices is subagent spend and the combined total in money.
+//
+// Here rather than in Prices, which is the session's own context like the
+// rest of the report. The combined figure is the one number that crosses
+// the boundary, so it sits in the block that is about crossing it, and the
+// money block points at it.
+//
+// It is also the sound answer to CombinedCaveat: dollars are the same size
+// whatever the model, so a parent and its subagents on different models add
+// here and do not add in EIT.
+type SubagentPrices struct {
+	// Total is what the subagents cost.
+	Total model.Quantity `json:"total_cost"`
+	// Combined is the session and its subagents together.
+	Combined model.Quantity `json:"combined_cost"`
+	// Catalog is repeated rather than referred to. A consumer reading this
+	// block alone would otherwise have a dollar figure with no source, which
+	// is the number this tool exists not to produce.
+	Catalog string `json:"catalog"`
 }
 
 // combinedCaveat is what CombinedCost says about itself when parent and
@@ -444,7 +473,14 @@ func RenderText(w io.Writer, p Profile) error {
 		fmt.Sprintf("%.1fx", p.Usage.VolumeCostRatio.Value), p.Usage.VolumeCostRatio.Prov)
 	b.WriteString("\n")
 
-	prices(b, p.Session.Prices)
+	// The money block is this context. Where there is more money outside it,
+	// say so there rather than leaving a reader to find the larger figure
+	// further down, or not.
+	seeAlso := ""
+	if p.Subagents != nil && p.Subagents.Prices != nil {
+		seeAlso = "Subagents cost more again; the combined total is in their block."
+	}
+	prices(b, p.Session.Prices, seeAlso)
 
 	b.WriteString("Caching\n")
 	fmt.Fprintf(b, "%-22s %14s   [%s]\n", "  Observed TTL", p.Caching.TTLBucket, model.Observed)
@@ -464,6 +500,7 @@ func RenderText(w io.Writer, p Profile) error {
 			fmt.Fprintf(b, "  ! %s\n", sa.CombinedCaveat)
 		}
 		pct(b, "  Share out of sight", sa.ShareOfCombined)
+		subagentPrices(b, sa.Prices)
 		b.WriteString("  Every other figure here is this session's own context.\n")
 		b.WriteString("\n")
 	}
@@ -574,24 +611,9 @@ func SessionOf(s *model.Session) SessionInfo { return sessionInfo(s) }
 // alternative is a total that quietly drops the calls it could not price,
 // which is a bill missing a model and looks exactly like a bill.
 func WithPrices(info SessionInfo, sessions ...*model.Session) (SessionInfo, error) {
-	var prompt, output float64
-	var unpriced []string
-	seen := map[string]bool{}
-	for _, s := range sessions {
-		p, o, missing := cost.USD(s.Invocations)
-		prompt += p
-		output += o
-		for _, m := range missing {
-			if !seen[m] {
-				seen[m] = true
-				unpriced = append(unpriced, m)
-			}
-		}
-	}
-	if len(unpriced) > 0 {
-		return info, fmt.Errorf(
-			"no published price for %s; the catalog is pinned at %s, and scripts/refresh-prices.sh is how it moves",
-			strings.Join(unpriced, ", "), cost.CatalogPin())
+	prompt, output, err := usdOf(ownCalls, sessions)
+	if err != nil {
+		return info, err
 	}
 	info.Prices = &Prices{
 		Prompt:  model.Der(prompt, model.USD),
@@ -602,12 +624,85 @@ func WithPrices(info SessionInfo, sessions ...*model.Session) (SessionInfo, erro
 	return info, nil
 }
 
+// ownCalls and subagentCalls are the two sets of invocations a session has.
+// They are kept apart everywhere else for the reason model.Session gives --
+// a subagent's context is not this one -- and priced apart for the same
+// reason.
+func ownCalls(s *model.Session) []model.ModelInvocation      { return s.Invocations }
+func subagentCalls(s *model.Session) []model.ModelInvocation { return s.SubagentInvocations() }
+
+// usdOf totals one set of calls across sessions, at each call's own model.
+//
+// An error rather than a figure when the catalog does not know a model, and
+// it names every model it could not price rather than the first: a total
+// that quietly drops the calls it could not price is a bill missing a model,
+// and looks exactly like a bill.
+func usdOf(calls func(*model.Session) []model.ModelInvocation, sessions []*model.Session) (
+	prompt, output float64, err error) {
+	var unpriced []string
+	seen := map[string]bool{}
+	for _, s := range sessions {
+		p, o, missing := cost.USD(calls(s))
+		prompt += p
+		output += o
+		for _, m := range missing {
+			if !seen[m] {
+				seen[m] = true
+				unpriced = append(unpriced, m)
+			}
+		}
+	}
+	if len(unpriced) > 0 {
+		return 0, 0, fmt.Errorf(
+			"no published price for %s; the catalog is pinned at %s, and scripts/refresh-prices.sh is how it moves",
+			strings.Join(unpriced, ", "), cost.CatalogPin())
+	}
+	return prompt, output, nil
+}
+
+// WithProfilePrices attaches money to a whole profile: the session header,
+// and the subagent block where there is one.
+//
+// One call rather than two, because the combined dollar figure needs both
+// halves and a profile carrying money in one block and not the other would
+// answer "what did this cost" with the part of it that happened here.
+//
+// The dollar figures live under Subagents rather than under Money. Money is
+// this context, like every other figure in the report bar the combined one,
+// and moving a cross-context total into it would make the one block a reader
+// trusts for "what this session cost" mean something else. The money block
+// points at them instead.
+func WithProfilePrices(p Profile, sessions ...*model.Session) (Profile, error) {
+	info, err := WithPrices(p.Session, sessions...)
+	if err != nil {
+		return p, err
+	}
+	p.Session = info
+	if p.Subagents == nil {
+		return p, nil
+	}
+	prompt, output, err := usdOf(subagentCalls, sessions)
+	if err != nil {
+		return p, err
+	}
+	// A copy: the caller still holds the profile this pointer came from.
+	sa := *p.Subagents
+	total := prompt + output
+	sa.Prices = &SubagentPrices{
+		Total:    model.Der(total, model.USD),
+		Combined: model.Der(total+info.Prices.Total.Value, model.USD),
+		Catalog:  cost.CatalogPin(),
+	}
+	p.Subagents = &sa
+	return p, nil
+}
+
 // prices renders the money block, pin included.
 //
 // One function for every surface that can print dollars, so that the pin
 // cannot be forgotten on one of them. A dollar figure whose source is not
 // stated is the kind of number this tool exists not to produce.
-func prices(b *strings.Builder, p *Prices) {
+func prices(b *strings.Builder, p *Prices, seeAlso string) {
 	if p == nil {
 		return
 	}
@@ -616,7 +711,24 @@ func prices(b *strings.Builder, p *Prices) {
 	usd(b, "  Output", p.Output)
 	usd(b, "  Total", p.Total)
 	fmt.Fprintf(b, "  Catalog            %s\n", p.Catalog)
-	b.WriteString("  Priced per call, each at its own model's published input rate.\n\n")
+	b.WriteString("  Priced per call, each at its own model's published input rate.\n")
+	if seeAlso != "" {
+		fmt.Fprintf(b, "  %s\n", seeAlso)
+	}
+	b.WriteString("\n")
+}
+
+// subagentPrices renders the subagent block's money, pin included, for the
+// same reason prices does: the pin cannot be optional on any surface.
+func subagentPrices(b *strings.Builder, p *SubagentPrices) {
+	if p == nil {
+		return
+	}
+	b.WriteString("  In money (published rates, not a bill)\n")
+	usd(b, "    Their cost", p.Total)
+	usd(b, "    Combined total", p.Combined)
+	fmt.Fprintf(b, "    Catalog          %s\n", p.Catalog)
+	b.WriteString("    Dollars add across models where the figures above do not.\n")
 }
 
 // usd is line for money. Two decimal places rather than thousands separators:

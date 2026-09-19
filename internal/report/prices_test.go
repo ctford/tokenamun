@@ -121,10 +121,17 @@ func TestEveryRendererThatPrintsDollarsPrintsThePin(t *testing.T) {
 	}
 	cacheReport := BuildCacheOf(info, analysis.Cache(s, analysis.TTL5m))
 
+	fan := crossModelFanOut()
+	fanned, err := WithProfilePrices(BuildProfile(fan), fan)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	rendered := map[string]func(b *bytes.Buffer) error{
-		"profile": func(b *bytes.Buffer) error { return RenderText(b, p) },
-		"cache":   func(b *bytes.Buffer) error { return RenderCache(b, cacheReport) },
-		"tree":    func(b *bytes.Buffer) error { return RenderTreeView(b, view) },
+		"profile":   func(b *bytes.Buffer) error { return RenderText(b, p) },
+		"cache":     func(b *bytes.Buffer) error { return RenderCache(b, cacheReport) },
+		"tree":      func(b *bytes.Buffer) error { return RenderTreeView(b, view) },
+		"subagents": func(b *bytes.Buffer) error { return RenderText(b, fanned) },
 	}
 	for name, render := range rendered {
 		t.Run(name, func(t *testing.T) {
@@ -168,4 +175,98 @@ func TestPricedQuantitiesAreLabelled(t *testing.T) {
 	p := BuildProfile(s)
 	p.Session = info
 	walkQuantities(t, "", mustTree(t, p))
+}
+
+// TestTheSubagentBlockCarriesItsOwnPin. The whole-output check above passes
+// on a report whose money block has the pin and whose subagent block does
+// not, and a reader quoting the combined figure is reading the second one.
+func TestTheSubagentBlockCarriesItsOwnPin(t *testing.T) {
+	s := crossModelFanOut()
+	p, err := WithProfilePrices(BuildProfile(s), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Subagents.Prices == nil {
+		t.Fatal("--prices stopped at the boundary the whole plan is about")
+	}
+	if p.Subagents.Prices.Catalog != cost.CatalogPin() {
+		t.Errorf("subagent money pinned at %q, want %q",
+			p.Subagents.Prices.Catalog, cost.CatalogPin())
+	}
+
+	var b bytes.Buffer
+	if err := RenderText(&b, p); err != nil {
+		t.Fatal(err)
+	}
+	_, block, ok := strings.Cut(b.String(), "Subagents (")
+	if !ok {
+		t.Fatal("no subagent block in the rendered report")
+	}
+	if !strings.Contains(block, "$") {
+		t.Fatal("no dollars in the subagent block, so this proves nothing")
+	}
+	if !strings.Contains(block, cost.CatalogPin()) {
+		t.Error("the subagent block prints dollars without the catalog pin")
+	}
+}
+
+// TestCombinedDollarsAddWhereCombinedEITDoesNot is the claim the caveat on
+// combined_cost makes: there is a sound number, and this is it.
+//
+// The parent and the subagent cost the same in EIT here and different
+// amounts in money, because fable-5-1 costs twice opus-5 per input token
+// and reads cache at a quarter the multiple. A combined figure that were
+// really EIT in disguise would come out symmetric.
+func TestCombinedDollarsAddWhereCombinedEITDoesNot(t *testing.T) {
+	s := crossModelFanOut()
+	p, err := WithProfilePrices(BuildProfile(s), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Subagents.CombinedMixedPricing {
+		t.Fatal("fixture no longer spans two pricings, so this proves nothing")
+	}
+
+	own := p.Session.Prices.Total.Value
+	sub := p.Subagents.Prices.Total.Value
+	if math.Abs(p.Subagents.Prices.Combined.Value-(own+sub)) > 1e-12 {
+		t.Errorf("combined $%.6f is not own $%.6f plus subagents $%.6f",
+			p.Subagents.Prices.Combined.Value, own, sub)
+	}
+	if math.Abs(own-sub) < 1e-12 {
+		t.Error("the two halves cost the same in dollars as in EIT, so the " +
+			"conversion could be a rescaled EIT total and this proves nothing")
+	}
+	for _, q := range []model.Quantity{p.Subagents.Prices.Total, p.Subagents.Prices.Combined} {
+		if q.Unit != model.USD || q.Prov != model.Derived {
+			t.Errorf("quantity %v is %s/%s, want usd/derived", q.Value, q.Unit, q.Prov)
+		}
+	}
+}
+
+// TestSubagentMoneyRefusesAModelItCannotPrice. The refusal has to reach the
+// subagents too: a combined total missing a subagent's model is a bill
+// missing a model just as much as the session's own is.
+func TestSubagentMoneyRefusesAModelItCannotPrice(t *testing.T) {
+	s := crossModelFanOut()
+	s.Subagents[0].Invocations[0].Model = "claude-nonesuch-9"
+	p, err := WithProfilePrices(BuildProfile(s), s)
+	if err == nil {
+		t.Fatalf("priced an unknown subagent model at $%.5f", p.Subagents.Prices.Combined.Value)
+	}
+	if !strings.Contains(err.Error(), "claude-nonesuch-9") {
+		t.Errorf("error does not name the model: %v", err)
+	}
+}
+
+// TestSubagentMoneyIsOptOutLikeTheRest. EIT is the default unit, and a
+// report nobody asked money of has none in it anywhere.
+func TestSubagentMoneyIsOptOutLikeTheRest(t *testing.T) {
+	var b bytes.Buffer
+	if err := RenderText(&b, BuildProfile(crossModelFanOut())); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(b.String(), "$") {
+		t.Error("money printed in the subagent block without being asked for")
+	}
 }

@@ -142,6 +142,14 @@ The number stays and is qualified rather than withheld. It is exact whenever
 the parent and its subagents share a model, which is the common case, and
 where it is not exact the caveat names the flag that is.
 
+`--prices` reaches both figures: what the subagents cost, and the combined
+total, each priced per call at its own model and so sound across the
+boundary that EIT is not. They are printed in the subagent block rather than
+in the money block, which is this context like everything else, and the
+money block points at them. Both carry the catalog pin, because a consumer
+reading one block is reading a dollar figure and must be able to see where
+the rate came from.
+
 ## 4. Carry: content is cheap, keeping it is not
 
 The model has no memory between calls, so everything still in the context is
