@@ -281,16 +281,10 @@ observed deltas, per session.
 
 ## Tokenizer
 
-There is no public Claude tokenizer, and **`tiktoken` must not be used** — it is
-OpenAI's, and undercounts Claude by 15–20% on prose and considerably more on
-code, which is most of what we measure. So:
-
-* **Default (offline):** the calibrated bytes-per-token estimator above, labelled
-  `derived-approx` with its calibration residual printed. Good enough for
-  ranking, never presented as exact.
-* **Opt-in (`--tokenizer=api`):** `POST /v1/messages/count_tokens` via
-  `anthropic-sdk-go`, model-specific and exact. Content is already
-  content-hashed, so results cache by hash and a re-profile costs nothing.
+There is no public Claude tokenizer, so token counts for *content* come from
+the bytes-per-token estimator calibrated above, labelled `derived-approx` with
+its calibration residual printed. Good enough for ranking, never presented as
+exact. Why not `tiktoken` is in the `internal/tokens` package comment.
 
 ## Observed / derived / inferred, summarised
 
@@ -305,13 +299,15 @@ and `effort`.
 **Derived** — deterministic arithmetic over the above:
 deduplicated session totals; per-call context deltas and their attribution to
 tool calls; preamble carry cost; content hashes and repeated-retrieval volume;
-estimated token counts of content (or exact, with `--tokenizer=api`);
-per-category retrieval totals; cost-of-carry per retrieval; residency spans.
+estimated token counts of content; per-channel and per-command retrieval
+totals; cost-of-carry per retrieval; residency spans.
 
 **Inferred** — a classifier's opinion, always labelled:
-activity phases (planning / implementation / verification / …); content
-categories from path heuristics; which Bash invocations were retrieval versus
-mutation; intent behind a sequence of turns.
+which Bash invocations were retrieval rather than mutation, and the file paths
+parsed out of their command lines. Activity phases and a semantic content
+taxonomy were both candidates here; neither was built, and the reasons are in
+[`METHODOLOGY.md`](METHODOLOGY.md#7-what-it-cannot-measure) and the
+`internal/content` package comment.
 
 **Not available at all** — say so, don't estimate:
 system prompt, tool schemas and skill-definition sizes; the

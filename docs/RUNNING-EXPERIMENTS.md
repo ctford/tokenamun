@@ -112,10 +112,9 @@ taking a median costs five probe runs and no extra analysis work. `tokenamun
 series` reports median and range rather than a point value for exactly this
 reason.
 
-## For the book
+## Wiring it into a driver
 
-If the experiments are of this shape, Tokenamun covers the measurement and not
-the orchestration. Concretely, per probe run:
+Concretely, per probe run:
 
 ```bash
 # before the run: what the code looks like

@@ -1,8 +1,8 @@
 package model
 
-// Channel is how content reached the context. It answers a different question
-// from Category: a decision record read through `cat` is an ADR by category
-// and file reading by channel, and both are worth seeing.
+// Channel is how content reached the context, independent of what the content
+// turned out to be: a decision record read through `cat` is shell output by
+// channel, and the directory it came from says the rest.
 type Channel string
 
 const (
