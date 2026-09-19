@@ -15,31 +15,26 @@ estimates; see [why they were deleted](#why-there-are-no-built-in-estimates).
 Evidence grades used below: **vendor** (self-reported, own benchmark),
 **independent** (third party reproduced or measured), **contested**
 (independent result materially disagrees), **structural** (follows from how the
-API works, hard to dispute). [Sources](#sources) are at the end.
-
-A source can be more than one at once, so each claim is graded on its own.
-Anthropic's cost guide is both: its benchmarks are **vendor** — own harness,
-own tasks, list prices on the day — while its account of cache invalidation and
-the multipliers is **structural**, and `internal/cost` prices with them.
+API works, hard to dispute). A source can be more than one at once, so each
+claim is graded on its own: Anthropic's cost guide is **vendor** on its own
+benchmarks and **structural** on cache invalidation and the multipliers, which
+`internal/cost` prices with. [Sources](#sources) are at the end.
 
 ## The one thing everybody agrees on
 
 Input tokens dominate agentic coding spend — commonly cited at 93–99% of
 trajectory volume, with one analysis attributing 62% of the bill to re-sent
-context alone. The model has no memory between turns, so every turn re-sends
-the accumulated conversation and cost grows with session length regardless of
-how much new work is happening. An arXiv study of agent spending finds input
-dominance holds *even with prompt caching in use*.
+context alone, and an arXiv study of agent spending finding that dominance
+holds *even with prompt caching in use*. The model has no memory between turns,
+so cost grows with session length regardless of how much new work is happening.
 
 Measurement here agrees emphatically: across eight sessions, ~711K tokens of
 unique tool-result content sat behind ~856M tokens of billed input
 ([`ENTIRE.md`](ENTIRE.md#prompt-size-is-observed-on-every-call)). The content
-is not the cost. **Carrying** the content is the cost.
-
-That is the good news for a profiler — the dominant term is a function of when
-content enters and how long it stays, both observable. It also means every
-claim below should be read as a claim about *residency*, and most of them are
-not stated that way.
+is not the cost. **Carrying** the content is the cost — which is the good news
+for a profiler, since when content enters and how long it stays are both
+observable. Every claim below should be read as a claim about *residency*, and
+most of them are not stated that way.
 
 ## The three things an intervention can change
 
@@ -88,15 +83,13 @@ its success rate". Most tool-vendor percentages here are token numbers without
 one. A 65% output reduction that makes the agent re-ask for what it lost is not
 a 65% saving.
 
-The exception is instructive. Anthropic's cost guide reports accuracy beside
-cost almost throughout — tool search at 45% less cost with accuracy unmoved, a
-CSV uploaded instead of pasted at 6/25 → 25/25 correct for 92% less, a prompt
-audit at 14% cheaper for five points more. The asymmetry is structural: a model
-vendor is paid whichever way accuracy lands, so publishing it costs nothing,
-while a tool vendor whose product *is* the reduction has one number that sells
-and one that can only hurt. Read the grades carefully; a vendor benchmarking
-its own model is still a vendor. Either way Tokenamun cannot see task success,
-and says so every time.
+The exception is instructive, and the asymmetry behind it is structural rather
+than moral: Anthropic's cost guide reports accuracy beside cost almost
+throughout, because a model vendor is paid whichever way accuracy lands, while
+a tool vendor whose product *is* the reduction has one number that sells and
+one that can only hurt. Read the grades carefully all the same — a vendor
+benchmarking its own model is still a vendor. Either way Tokenamun cannot see
+task success, and says so every time.
 
 ## Volume: less content
 
@@ -380,8 +373,8 @@ Moving from the 5-minute prompt cache to the 1-hour one —
   request's *start*, and every four minutes after. On the 5.1 generation, whose
   cache reads are 0.025× rather than 0.1×, that measured 13–20% cheaper per
   session than the 1-hour TTL whenever pauses ran for minutes; the 1-hour
-  setting only won once pauses approached 45 minutes, and then by about twelve
-  cents a session (vendor, over structural multipliers). Every input to that
+  setting only won once pauses approached 45 minutes, and then barely (vendor,
+  over structural multipliers). Every input to that
   comparison is observed here — the gaps, the prefix sizes, the per-model read
   rate — so `tokenamun cache` offers a two-way counterfactual where the data
   supports a three-way one.
@@ -403,25 +396,22 @@ Fewer `/model` switches, fewer effort changes, fewer plugin toggles.
 * **Observed:** the model per API call, so per-model token and call
   distributions are available. Cost weights are model-relative, so a
   mixed-model session still adds up.
-* **The evidence, graded: vendor, and better than the routing claim it
-  replaces.** An earlier version of this entry cited "route the easy 80% of
-  steps to a small model, escalate the hard 20%, pay ~12% of all-frontier
-  cost". The controlled versions are less flattering and more useful. Two
-  shapes are distinguished: an **advisor**, where a cheaper executor escalates
-  hard decisions, and an **orchestrator**, where a frontier model plans and
+* **The evidence, graded: vendor.** The controlled versions are less
+  flattering than the routing claim they replace, and more useful. Two shapes
+  are distinguished: an **advisor**, where a cheaper executor escalates hard
+  decisions, and an **orchestrator**, where a frontier model plans and
   delegates bulk work to cheaper workers.
 * **Where an orchestrator pays:** on a corpus larger than any context window,
-  a lead over 25 cheaper workers cost 47–55% less than the same model solo and
-  finished in about 2.3 hours against 15 to 20, for 10 to 12 points of
-  accuracy. The condition is work that fans out into independent pieces, not
-  the price of the models.
+  a lead over 25 cheaper workers cost 47–55% less than the same model solo,
+  finished several times faster, and scored 10 to 12 points better. The
+  condition is work that fans out into independent pieces, not the price of
+  the models.
 * **Where they do not, which is the half worth carrying:** on the full
   BrowseComp set the single model alone reached the coordinator's accuracy at
-  22–30% *lower* cost. An advisor pairing on chart reading came in at 65.0
-  against the advisor model working alone at 67.5 — within noise — for about
-  2.6× the cost per task, because the executor consulted on nearly every task.
-  The stated rule is to baseline one model's whole effort curve before adding
-  a second.
+  22–30% *lower* cost, and an advisor pairing on chart reading came out within
+  noise of the advisor model working alone for about 2.6× the cost per task,
+  because the executor consulted on nearly every task. The stated rule is to
+  baseline one model's whole effort curve before adding a second.
 * **Price the tail, not the median.** On one 20-problem run, two problems
   carried 43% of the spend — the strongest case anywhere here for reading a
   distribution rather than a total. It sits awkwardly beside the rule below
@@ -455,12 +445,11 @@ Saying so is more useful than a fabricated percentage.
   which this intervention does not touch. Results arrive either
   way; only the schemas leave.
 * **The evidence, graded: vendor, with independent support.** Anthropic's
-  code-execution-with-MCP figure is 150,000 → 2,000 tokens, 98.7%. That is one
-  illustrative workflow. Independent reproductions land lower and scale with
-  tool count — 58% at 96 tools, 84.5% at 251, 92.8% at 508, and one measuring
-  78.5% input-token reduction; a GitHub-tools implementation held ~98% at 112.
-  The saving is real and it is a function of how many tools you had loaded,
-  which makes the headline a property of the baseline.
+  code-execution-with-MCP figure is 98.7%, on one illustrative workflow.
+  Independent reproductions land lower and scale with tool count — 58% at 96
+  tools, 84.5% at 251, 92.8% at 508. The saving is real and it is a function of
+  how many tools you had loaded, which makes the headline a property of the
+  baseline.
 * **How to actually measure it:** run the same opening prompt with the server
   connected and disconnected, and compare the first call's prompt size. That
   difference is observed. `tokenamun compare` does it.
@@ -475,18 +464,15 @@ anything to bite on — but not its token value.
 The vendor figure is 85% fewer tool-definition tokens, which is arithmetic on a
 number you can count: schemas cost 100–400 tokens each. More interesting is the
 reported *accuracy* gain, tool selection 79.5% → 88.1%, which suggests the win
-is not only cost. Claude Code already applies this automatically once
-deferrable definitions exceed 10% of the context window, so many teams have the
-effect without having chosen it.
-
-A later and better-controlled run is worth the update, because it holds
-accuracy fixed while varying the thing that matters. Growing a catalogue to
-502 tools nearly doubled the cost of a run with every definition loaded, and
-left it flat at every catalogue size behind tool search — 45% less at 502 —
-with accuracy 15 to 18 of 20 in every cell either way. Deferring a single
-public GitHub MCP server's toolset cut a run 20% at the same accuracy. The
-saving is still a function of how many schemas you had loaded: a property of
-your baseline, and yours is not decomposable here.
+is not only cost. A later run holds accuracy fixed while varying what matters:
+growing a catalogue to 502 tools nearly doubled the cost of a run with every
+definition loaded and left it flat at every catalogue size behind tool search,
+45% less at 502. Deferring one public GitHub MCP server's toolset cut a run 20%
+at the same accuracy. The saving is still a function of how many schemas you
+had loaded — a property of your baseline, and yours is not decomposable here.
+Claude Code already applies this automatically once deferrable definitions
+exceed 10% of the context window, so many teams have the effect without having
+chosen it.
 
 ### Fewer or smaller skills
 
@@ -531,11 +517,6 @@ content was retrieved to find things, from where, how much was re-retrieved,
 and what carrying it cost. The post-intervention side needs a second session.
 `tokenamun tree all --since` and `--until` are the before-and-after form.
 
-**Accuracy moves with efficiency in both directions.** Tool search improved
-tool-selection accuracy; TOON's accuracy claim is contested; the language
-server bought precision at a token premium. Efficiency and quality are not
-opposite ends of one axis.
-
 ## Where to start
 
 Ranked by evidence quality rather than by claimed upside.
@@ -574,16 +555,15 @@ There used to be eight, with a plugin protocol for adding more. They are gone.
 
 Everything that shrinks content does the same two things — pick a part of the
 session, make it smaller — and the answer is always that part's share times the
-change. A named intervention added nothing but a vendor's name and a default
-ratio, plus one thing it should not: the appearance that the tool knew
-something about that vendor. The `caveman` row reported 13% of a session. That
-came from `--ratio`'s default of 50% applied to measured volume, on evidence
-spanning 2% to 17% — a finding in appearance, an assumption with a logo on it.
+change. So a named intervention added a vendor's name, a default ratio, and the
+appearance that the tool knew something about that vendor. The `caveman` row
+reported 13% of a session, which came from a default ratio of 50% applied to
+measured volume, on evidence spanning 2% to 17%: a finding in appearance, an
+assumption with a logo on it.
 
 Two of the eight were real models, `cache-ttl` and `repeated-retrieval`, with
 every input observed. They survive as measurements, in `tokenamun cache` and
-`tokenamun retrieval`, reported as what they are rather than as
-counterfactuals.
+`tokenamun retrieval`, reported as what they are.
 
 ## The anti-pattern to avoid building
 

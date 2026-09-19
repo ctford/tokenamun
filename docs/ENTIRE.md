@@ -194,12 +194,11 @@ lines for the paths they touch.
 
 ## Retrieved content, measured
 
-Unique `tool_result` payload bytes per session, with the share that is
-byte-identical to content retrieved earlier in the same session:
-
-2,560,257 bytes across the eight. `S1` is 1,238,793 of them and re-retrieved
-**24.1%** — 298 KB of identical content, mostly three Read calls averaging
-212 KB. `S2` was 1.6%, `S3` 0.2%, and the other five were zero, Bash only.
+Unique `tool_result` payload bytes come to 2,560,257 across the eight
+sessions. `S1` is 1,238,793 of them, and **24.1%** of its retrieved bytes were
+byte-identical to content it had already retrieved — 298 KB, mostly three Read
+calls averaging 212 KB. `S2` was 1.6%, `S3` 0.2%, and the other five zero,
+Bash only.
 
 Content hashing works and finds something real. That the rest are near-clean is
 itself the finding: repeated retrieval is *session-shaped*, not universal, so
@@ -236,16 +235,15 @@ call  690: 853,459
 
 Two things fall straight out of this.
 
-**1. The session preamble is observed, and it is paid on every call.** The first
-call's prompt size is everything that exists before any work happens. For
-`S1` that is 28,630 tokens × 691 calls ≈ **19.8M tokens of billed input
-just carrying the preamble**. We cannot decompose it (no system prompt or tool
-schemas in the transcript), but we can measure it exactly and multiply. That is
-the honest ceiling for every "reduce the instructions/tool schemas" intervention.
+**1. The session preamble is observed, and it is paid on every call.** The
+first call's prompt is everything that exists before any work happens — for
+`S1`, 28,630 tokens × 691 calls ≈ **19.8M tokens of billed input just carrying
+the preamble**. It cannot be decomposed, because no system prompt or tool
+schema is in the transcript, but it can be measured exactly and multiplied.
 
 **2. Context growth can be attributed to the tool calls that caused it.** The
-delta between consecutive prompt sizes is the tokens added in between. Validated
-against session `S5` (22 calls), with content estimated at 3.6 bytes/token:
+delta between consecutive prompt sizes is the tokens added in between.
+Validated against session `S5` (22 calls), at 3.6 bytes/token:
 
 ```
   k    prompt    delta  prev_output  result_bytes  explained  residual
@@ -257,38 +255,21 @@ total growth 80,270   explained 69,500   ratio 0.87
 ```
 
 **87% of observed context growth is explained by observed output tokens plus
-observed tool-result content.** The residual is system-reminders, attachments
+observed tool-result content.** The residual is system reminders, attachments
 and message-envelope overhead — reportable as `unattributed` rather than
 silently distributed.
 
-This gives per-item token costs that come from the API's own accounting rather
-than from a tokenizer, which is a much stronger epistemic position than
-tokenizing content and hoping. It also makes the local tokenizer
-*self-calibrating*: fit bytes-per-token by minimising the residual against
-observed deltas, per session.
+So per-item token costs come from the API's own accounting rather than from a
+tokenizer. It also makes the estimator *self-calibrating*: there is no public
+Claude tokenizer, so bytes-per-token is fitted per session by minimising that
+residual, labelled `derived-approx` with the residual printed. Good enough for
+ranking, never presented as exact. Why not `tiktoken` is in the
+`internal/tokens` package comment.
 
-## Tokenizer
+## What is opinion, and what is not there at all
 
-There is no public Claude tokenizer, so token counts for *content* come from
-the bytes-per-token estimator calibrated above, labelled `derived-approx` with
-its calibration residual printed. Good enough for ranking, never presented as
-exact. Why not `tiktoken` is in the `internal/tokens` package comment.
-
-## Observed / derived / inferred, summarised
-
-**Observed** — in the telemetry, no interpretation:
-per-API-call `input`/`output`/`cache_read`/`cache_creation`/`thinking` tokens;
-prompt size per call; API call count; model per call; tool names, inputs, ids,
-timestamps; tool-result payloads and their truncation flags; Read line ranges;
-`structuredPatch` diffs; user prompts; `files_touched`; agent-vs-human line
-attribution; explicit skill invocations; git branch and commit; permission mode
-and `effort`.
-
-**Derived** — deterministic arithmetic over the above:
-deduplicated session totals; per-call context deltas and their attribution to
-tool calls; preamble carry cost; content hashes and repeated-retrieval volume;
-estimated token counts of content; per-channel and per-command retrieval
-totals; cost-of-carry per retrieval; residency spans.
+Everything above is observed, and what Tokenamun computes from it is
+deterministic arithmetic labelled `derived`. Two categories are not.
 
 **Inferred** — a classifier's opinion, always labelled:
 which Bash invocations were retrieval rather than mutation, and the file paths
