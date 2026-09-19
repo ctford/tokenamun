@@ -176,7 +176,7 @@
     },
     {
       "code": "entries_collapsed",
-      "detail": "5 assistant entries collapsed into 3 API calls; summing per entry would overstate usage by 67%"
+      "detail": "5 assistant entries collapsed into 2 API calls; summing per entry would overstate usage by 97%"
     },
     {
       "code": "zero_prompt_calls",

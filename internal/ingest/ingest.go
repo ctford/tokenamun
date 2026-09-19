@@ -361,11 +361,35 @@ func resolveTools(s *model.Session, toolIndex map[string]int) {
 
 // diagnose records what the reader needs to know about the data itself.
 func diagnose(s *model.Session) {
-	if s.AssistantEntries > len(s.Invocations) {
-		s.Warn("entries_collapsed", fmt.Sprintf(
-			"%d assistant entries collapsed into %d API calls; summing per entry would overstate usage by %.0f%%",
-			s.AssistantEntries, len(s.Invocations),
-			100*(float64(s.AssistantEntries)/float64(max(len(s.Invocations), 1))-1)))
+	// Two things this has to get right, and it got both wrong.
+	//
+	// The call count is RealCalls, the same way the report's own "API calls"
+	// line counts. Error and synthetic entries carry no prompt and are
+	// excluded from every cost figure, so counting them here printed two
+	// different totals for "API calls" on one page of output.
+	//
+	// The overstatement is measured rather than approximated by the ratio of
+	// entries to calls. Every entry sharing a requestId repeats the same
+	// usage object, so what summing per entry would have produced is each
+	// call's usage times its entry count -- which is arithmetic over observed
+	// numbers, not a proxy. The proxy was wrong in both directions: it
+	// counted zero-usage entries as though they inflated the total, and it
+	// weighted a two-entry call the same as a twelve-entry one.
+	if calls := s.RealCalls(); s.AssistantEntries > calls {
+		var naive, deduplicated float64
+		for _, inv := range s.Invocations {
+			if !inv.IsRealCall() {
+				continue
+			}
+			usage := float64(inv.Usage.PromptTokens() + inv.Usage.Output)
+			deduplicated += usage
+			naive += usage * float64(max(inv.Entries, 1))
+		}
+		if deduplicated > 0 {
+			s.Warn("entries_collapsed", fmt.Sprintf(
+				"%d assistant entries collapsed into %d API calls; summing per entry would overstate usage by %.0f%%",
+				s.AssistantEntries, calls, 100*(naive/deduplicated-1)))
+		}
 	}
 	var zero, agentCalls int
 	for _, inv := range s.Invocations {

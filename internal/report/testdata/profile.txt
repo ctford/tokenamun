@@ -35,7 +35,7 @@ Tool results by tool
 
 Data notes
   ! unresolved_tool_calls: 1 tool calls have no result in this transcript (interrupted, denied, or still running)
-  ! entries_collapsed: 5 assistant entries collapsed into 3 API calls; summing per entry would overstate usage by 67%
+  ! entries_collapsed: 5 assistant entries collapsed into 2 API calls; summing per entry would overstate usage by 97%
   ! zero_prompt_calls: 1 calls reported no prompt tokens (API errors or synthetic entries) and are excluded from cost
   ! subagent_usage_missing: 1 Agent calls were made but no sidechain invocations are present; subagent token usage is not in this transcript
 
