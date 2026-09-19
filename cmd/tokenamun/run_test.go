@@ -663,17 +663,21 @@ func TestAllIsOfferedOnlyWhereItWorks(t *testing.T) {
 	// than as a command that does not take it.
 	repo := localFixture(t, "carry.jsonl")
 
-	// Where a set composes, it works. Cost is additive, so these do.
-	for _, cmd := range []string{"tree", "profile", "cache"} {
+	// Where a set composes, it works. Cost is additive, so these do --
+	// including carry, whose totals are sums over invocations and whose item
+	// ranking is priced per call, so rows from different sessions are
+	// comparable once each says which session it came from.
+	for _, cmd := range []string{"tree", "profile", "cache", "carry"} {
 		if _, err := capture(t, cmd, "all", "--dir", repo); err != nil {
 			t.Errorf("%s all: %v", cmd, err)
 		}
 	}
 
-	// Where it does not, the error says what to use instead. These report
-	// per-retrieval or per-file detail whose sequence numbers and joins
-	// mean nothing once two sessions are in one list.
-	for _, cmd := range []string{"retrieval", "carry", "hotspots"} {
+	// Where it does not, the error says what to use instead. retrieval
+	// reports redundant re-retrieval within one context and calibrates its
+	// own bytes-per-token; hotspots joins per-file detail onto a checkout.
+	// Neither survives two sessions being in one list.
+	for _, cmd := range []string{"retrieval", "hotspots"} {
 		_, err := capture(t, cmd, "all", "--dir", repo)
 		if err == nil {
 			t.Errorf("%s all should be refused", cmd)
@@ -682,6 +686,74 @@ func TestAllIsOfferedOnlyWhereItWorks(t *testing.T) {
 		if !strings.Contains(err.Error(), "tokenamun tree all") {
 			t.Errorf("%s all must name a command that does take a set: %v", cmd, err)
 		}
+	}
+}
+
+// The refusal that sent a reader to the transcripts: carry answers the
+// question people bring to this tool -- which retrieval cost the most to keep
+// -- and answered it only about one session.
+func TestCarryOverASetKeepsTheSessionsTotalsAndNamesTheSession(t *testing.T) {
+	repo := localFixture(t, "carry.jsonl")
+	one, err := capture(t, "carry", "latest", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := capture(t, "carry", "all", "--dir", repo, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type carryJSON struct {
+		Sessions int `json:"sessions"`
+		Context  struct {
+			PromptCost struct{ Value float64 }  `json:"prompt_cost"`
+			Final      *struct{ Value float64 } `json:"final_prompt_tokens"`
+		} `json:"context"`
+		Preamble struct {
+			Carry struct{ Value float64 } `json:"carry"`
+		} `json:"preamble"`
+		Items []struct {
+			Session   string                  `json:"session"`
+			CarryCost struct{ Value float64 } `json:"carry_cost"`
+		} `json:"items"`
+	}
+	var single, merged carryJSON
+	if err := json.Unmarshal([]byte(one), &single); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(all), &merged); err != nil {
+		t.Fatal(err)
+	}
+
+	// One session in the fixture, so the set equals the session. Anything
+	// else means the merge is dropping or double-counting.
+	if merged.Context.PromptCost.Value != single.Context.PromptCost.Value {
+		t.Errorf("prompt cost over a set of one = %v, want %v",
+			merged.Context.PromptCost.Value, single.Context.PromptCost.Value)
+	}
+	if merged.Preamble.Carry.Value != single.Preamble.Carry.Value {
+		t.Errorf("preamble carry over a set of one = %v, want %v",
+			merged.Preamble.Carry.Value, single.Preamble.Carry.Value)
+	}
+	if len(merged.Items) != len(single.Items) || len(merged.Items) == 0 {
+		t.Fatalf("the ranking has %d rows over a set of one, want %d",
+			len(merged.Items), len(single.Items))
+	}
+	for i := range merged.Items {
+		if merged.Items[i].CarryCost.Value != single.Items[i].CarryCost.Value {
+			t.Errorf("row %d costs %v over a set and %v alone", i,
+				merged.Items[i].CarryCost.Value, single.Items[i].CarryCost.Value)
+		}
+		// A row nobody can trace back to a session is not actionable.
+		if merged.Items[i].Session == "" {
+			t.Errorf("row %d over a set does not say which session it is from", i)
+		}
+		if single.Items[i].Session != "" {
+			t.Errorf("row %d repeats the session id the header already gives", i)
+		}
+	}
+	if merged.Context.Final != nil {
+		t.Error("a set of sessions has no final prompt")
 	}
 }
 

@@ -111,7 +111,7 @@ Details in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
 | `profile` | where the tokens went, and what they cost |
 | `tree` | the same, one level at a time; `--at` drills in |
 | `report` | a standalone HTML viewer of the same tree |
-| `carry` | what it cost to *keep* content, not to fetch it |
+| `carry` | the individual retrievals that cost the most to *keep*, worst first |
 | `cache` | why the prompt cache was rebuilt, and what that cost |
 | `retrieval` | what content entered the context, and from where |
 | `optimise` | what a hypothetical change to part of the tree is worth |

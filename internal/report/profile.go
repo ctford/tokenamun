@@ -31,7 +31,12 @@ import (
 // cost-weighted total could not be corrected. It can: the dollar figures are
 // priced per call at each call's own model, so they add across models where
 // EIT does not.
-const SchemaVersion = 4
+//
+// 5: carry answers `all`. Over a set its items carry a `session`, and
+// `final_prompt_tokens` and `reset_calls` are absent rather than zero. A
+// consumer that read a missing final prompt as a zero one would be reading a
+// week of work as a context that ended empty.
+const SchemaVersion = 5
 
 // Profile is a session overview.
 type Profile struct {

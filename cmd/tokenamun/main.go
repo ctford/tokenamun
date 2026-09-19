@@ -32,7 +32,8 @@ Usage:
   tokenamun doctor                whether either source is set up to record here
   tokenamun profile [session]     where the tokens went, and what they cost
   tokenamun retrieval [session]   what content entered the context, and from where
-  tokenamun carry [session]       what it cost to keep content, not to fetch it
+  tokenamun carry [session]       the individual retrievals that cost the most
+                                  to keep, worst first
   tokenamun cache [session]       why the prompt cache was rebuilt, and what it cost
   tokenamun scan [path]           code properties: size, complexity, duplication
   tokenamun hotspots [session]    code properties joined against session cost
@@ -51,8 +52,8 @@ Usage:
 Session selector:
   "all"      every session discovered, summed. With Entire this is the
              whole team's history, which is what Entire is for. Taken by
-             tree, report, profile, cache and optimise; the others report
-             on one session.
+             tree, report, profile, cache, carry and optimise; the others
+             report on one session.
   "current"  the session invoking this tool
   "latest"   the most recently active (the default)
   or a session-id prefix.
@@ -426,15 +427,43 @@ func cmdRetrieval(dir, source, selector string, asJSON bool) error {
 }
 
 func cmdCarry(dir, source, selector string, asJSON bool) error {
-	s, err := loadSelected(dir, source, selector)
+	r, err := carryOf(dir, source, selector)
 	if err != nil {
 		return err
 	}
-	r := report.BuildCarry(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
 	if asJSON {
 		return writeJSON(r)
 	}
 	return report.RenderCarry(os.Stdout, r)
+}
+
+// carryOf reports on one session or on the whole set.
+//
+// Summed from finished per-session reports, like profileOf and for the same
+// reason: residency does not compose across sessions, so each is analysed
+// against its own context and the results added. report.MergeCarries says
+// what survives that and what is dropped.
+func carryOf(dir, source, selector string) (report.Carry, error) {
+	if selector != SelectAll {
+		s, err := loadSelected(dir, source, selector)
+		if err != nil {
+			return report.Carry{}, err
+		}
+		return carryOne(s), nil
+	}
+	sessions, info, err := loadSessions(dir, source)
+	if err != nil {
+		return report.Carry{}, err
+	}
+	carries := make([]report.Carry, 0, len(sessions))
+	for _, s := range sessions {
+		carries = append(carries, carryOne(s))
+	}
+	return report.MergeCarries(carries, info), nil
+}
+
+func carryOne(s *model.Session) report.Carry {
+	return report.BuildCarry(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
 }
 
 func cmdCache(dir, source, selector string, asJSON, withPrices bool) error {
@@ -485,7 +514,8 @@ func loadSelected(dir, source, selector string) (*model.Session, error) {
 		return nil, fmt.Errorf("%q is a set of sessions, and this command reports on one. "+
 			"Over a set: `tokenamun tree all` for where the tokens went, "+
 			"`tokenamun profile all` for what they cost, `tokenamun cache all` for the "+
-			"prompt cache, `tokenamun optimise all` for a hypothetical. Or name one "+
+			"prompt cache, `tokenamun carry all` for the retrievals that cost the most "+
+			"to keep, `tokenamun optimise all` for a hypothetical. Or name one "+
 			"session: `tokenamun sessions` lists them", SelectAll)
 	}
 	refs, err := discover(dir, source)

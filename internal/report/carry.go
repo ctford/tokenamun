@@ -11,22 +11,32 @@ import (
 
 // Carry reports what it cost to keep content in the context.
 type Carry struct {
-	SchemaVersion int             `json:"schema_version"`
-	Session       SessionInfo     `json:"session"`
-	Context       ContextReport   `json:"context"`
-	Preamble      PreambleReport  `json:"preamble"`
-	Items         []CarryItem     `json:"items"`
-	Unattributed  model.Quantity  `json:"unattributed_growth_share"`
-	Warnings      []model.Warning `json:"warnings,omitempty"`
-	Notes         []string        `json:"notes"`
+	SchemaVersion int         `json:"schema_version"`
+	Session       SessionInfo `json:"session"`
+	// Sessions is how many were summed, and is absent for one. A total over
+	// an unknown number of sessions is not a total.
+	Sessions     int             `json:"sessions,omitempty"`
+	Context      ContextReport   `json:"context"`
+	Preamble     PreambleReport  `json:"preamble"`
+	Items        []CarryItem     `json:"items"`
+	Unattributed model.Quantity  `json:"unattributed_growth_share"`
+	Warnings     []model.Warning `json:"warnings,omitempty"`
+	Notes        []string        `json:"notes"`
 }
 
 // ContextReport is the observed prompt-size trajectory.
 type ContextReport struct {
-	Peak       model.Quantity `json:"peak_prompt_tokens"`
-	Final      model.Quantity `json:"final_prompt_tokens"`
-	PromptCost model.Quantity `json:"prompt_cost"`
-	Resets     []int          `json:"reset_calls"`
+	// Peak is the largest prompt observed. Over a set it is the largest any
+	// one session reached, which is a maximum of maxima and not a sum.
+	Peak model.Quantity `json:"peak_prompt_tokens"`
+	// Final is the last call's prompt, and is absent over a set: a set of
+	// sessions has no last context, and reporting one session's as the
+	// group's would be picking a member at random.
+	Final      *model.Quantity `json:"final_prompt_tokens,omitempty"`
+	PromptCost model.Quantity  `json:"prompt_cost"`
+	// Resets index into one session's calls, so they are absent over a set
+	// for the same reason the item sequence numbers are.
+	Resets []int `json:"reset_calls"`
 }
 
 // PreambleReport is the cost of everything that existed before any work.
@@ -39,6 +49,12 @@ type PreambleReport struct {
 
 // CarryItem is one retrieval priced by residency.
 type CarryItem struct {
+	// Session names which session this retrieval is from, and is absent when
+	// the report covers one. It is what makes the ranking composable: CarryEIT
+	// is already priced per call, so rows from different sessions are
+	// comparable, but a row you cannot trace back to a session is not
+	// actionable.
+	Session     string         `json:"session,omitempty"`
 	Tool        string         `json:"tool"`
 	Path        string         `json:"path,omitempty"`
 	Tokens      model.Quantity `json:"tokens"`
@@ -48,6 +64,14 @@ type CarryItem struct {
 	CarryCost   model.Quantity `json:"carry_cost"`
 }
 
+// CarryItemsShown is how many retrievals the ranking lists. Enough that the
+// tail of a bad session is visible, short enough to read in one screen.
+const CarryItemsShown = 15
+
+// quantity takes the address of a quantity, for the fields that are absent
+// rather than zero when a report covers a set.
+func quantity(q model.Quantity) *model.Quantity { return &q }
+
 // BuildCarry computes the carry report.
 func BuildCarry(s *model.Session, c analysis.CarryReport) Carry {
 	r := Carry{
@@ -55,7 +79,7 @@ func BuildCarry(s *model.Session, c analysis.CarryReport) Carry {
 		Session:       sessionInfo(s),
 		Context: ContextReport{
 			Peak:       model.Obs(float64(c.Peak), model.Tokens),
-			Final:      model.Obs(float64(c.Final), model.Tokens),
+			Final:      quantity(model.Obs(float64(c.Final), model.Tokens)),
 			PromptCost: model.Der(c.PromptCostEIT, model.EIT),
 			Resets:     c.Resets,
 		},
@@ -77,7 +101,7 @@ func BuildCarry(s *model.Session, c analysis.CarryReport) Carry {
 	}
 
 	for i, it := range c.Items {
-		if i >= 15 {
+		if i >= CarryItemsShown {
 			break
 		}
 		r.Items = append(r.Items, CarryItem{
@@ -97,11 +121,18 @@ func RenderCarry(w io.Writer, r Carry) error {
 	b := &strings.Builder{}
 	b.WriteString("TOKENAMUN  cost of carry\n\n")
 	fmt.Fprintf(b, "Session %s\n", r.Session.ID)
+	if r.Sessions > 1 {
+		fmt.Fprintf(b, "  Sessions           %s\n", num(r.Sessions))
+	}
 	fmt.Fprintf(b, "  API calls          %s\n\n", num(r.Session.Calls))
 
 	b.WriteString("Context trajectory\n")
 	line(b, "  Peak prompt", r.Context.Peak)
-	line(b, "  Final prompt", r.Context.Final)
+	// Absent over a set rather than zero: a set of sessions has no last
+	// context.
+	if r.Context.Final != nil {
+		line(b, "  Final prompt", *r.Context.Final)
+	}
 	line(b, "  Prompt cost", r.Context.PromptCost)
 	if len(r.Context.Resets) > 0 {
 		fmt.Fprintf(b, "%-22s %14s   [%s]  (content does not survive these)\n",
@@ -117,14 +148,16 @@ func RenderCarry(w io.Writer, r Carry) error {
 
 	if len(r.Items) > 0 {
 		b.WriteString("Most expensive to carry (not the largest)\n")
-		fmt.Fprintf(b, "  %-34s %10s %7s %6s %12s\n", "CONTENT", "TOKENS", "CALLS", "COLD", "CARRY (EIT)")
+		fmt.Fprintf(b, "  %-34s%s %10s %7s %6s %12s\n",
+			"CONTENT", carrySessionCol(r, "SESSION"), "TOKENS", "CALLS", "COLD", "CARRY (EIT)")
 		for _, it := range r.Items {
 			label := it.Path
 			if label == "" {
 				label = "(" + it.Tool + " output)"
 			}
-			fmt.Fprintf(b, "  %-34s %10s %7s %6s %12s\n",
-				trunc(label, 34), num(int(it.Tokens.Value)),
+			fmt.Fprintf(b, "  %-34s%s %10s %7s %6s %12s\n",
+				trunc(label, 34), carrySessionCol(r, it.Session),
+				num(int(it.Tokens.Value)),
 				num(int(it.ResidentFor.Value)), num(int(it.ColdCalls.Value)),
 				num(int(it.CarryCost.Value)))
 		}
@@ -137,6 +170,16 @@ func RenderCarry(w io.Writer, r Carry) error {
 
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// carrySessionCol is the session column, present only over a set. One
+// session's report already names it in the header, and repeating it on
+// fifteen rows would be a column of the same string.
+func carrySessionCol(r Carry, id string) string {
+	if r.Sessions == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" %-12s", trunc(id, 12))
 }
 
 // callList formats call sequence numbers for display.
