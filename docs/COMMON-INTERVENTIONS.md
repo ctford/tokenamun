@@ -1,4 +1,4 @@
-# Interventions: what people try, and what can be checked
+# Common interventions: what people try, what the evidence says, and what you can check
 
 Tokenamun does not model named techniques. It measures a session and lets you
 name a hypothetical:
@@ -8,11 +8,35 @@ tokenamun optimise --at "cli output" --optimise 0.5 --why "quieter test runner o
 ```
 
 This document is the other half of that: a catalogue of the interventions
-people actually try, what part of a session each one acts on, and which of them
-can be checked against evidence at all. It used to be a set of built-in
-estimates. Those were deleted, because a vendor's figure applied to your
-session is that vendor's claim wearing this tool's authority — see
+people actually try, what part of a session each one acts on, how good the
+published evidence for each is, and which of them can be checked against your
+own data at all. It used to be a set of built-in estimates. Those were deleted,
+because a vendor's figure applied to your session is that vendor's claim
+wearing this tool's authority — see
 [the deletion](#why-there-are-no-built-in-estimates) at the end.
+
+Evidence grades used below: **vendor** (self-reported, own benchmark),
+**independent** (third party reproduced or measured), **contested**
+(independent result materially disagrees), **structural** (follows from how the
+API works, hard to dispute). [Sources](#sources) are at the end.
+
+## The one thing everybody agrees on
+
+Input tokens dominate agentic coding spend — commonly cited at 93–99% of
+trajectory volume, with one analysis attributing 62% of the bill to re-sent
+context alone. The model has no memory between turns, so every turn re-sends
+the accumulated conversation and cost grows with session length regardless of
+how much new work is happening. An arXiv study of agent spending finds input
+dominance holds *even with prompt caching in use*.
+
+Measurement here agrees emphatically: across eight sessions, ~711K tokens of
+unique tool-result content sat behind ~856M tokens of billed input. The content
+is not the cost. **Carrying** the content is the cost.
+
+That is the good news for a profiler — the dominant term is a function of when
+content enters and how long it stays, both observable. It also means every
+claim below should be read as a claim about *residency*, and most of them are
+not stated that way.
 
 ## The three things an intervention can change
 
@@ -30,6 +54,38 @@ Only a change in **volume** reads as a discount on the treemap: the same
 rectangles, smaller. The other two leave the picture the same shape and change
 what it cost, which is why they cannot be expressed as `--optimise` on a node.
 
+## Why the published percentages do not transfer
+
+Three problems run through almost every number in this document. They are also
+the reasons behind the output contract in
+[`METHODOLOGY.md`](METHODOLOGY.md#6-counterfactuals) §6.
+
+**1. The denominator is the intervention.** "98.7% fewer tokens" describes a
+baseline that loaded 150K tokens of tool schemas. "60–95%" describes JSON
+payloads. "3–32×" describes however many MCP servers the author had connected.
+None of these are properties of the technique; they are properties of the mess
+it was pointed at. A team with two MCP servers and a lean `AGENTS.md` should
+expect approximately none of the advertised saving, and nothing in the
+marketing says so. Hence: the observed baseline prints before the
+counterfactual, always.
+
+**2. Token reduction is not cost reduction, and compression can invert it.**
+Cached input costs around a tenth of list price, and compression works by
+rewriting history — which breaks the cached prefix and reprices everything
+after it. A pass that removes 30% of your tokens can increase your bill. The
+same cost lab measured `/compact` payback at 18–19 turns against a
+pre-registered prediction of 2–4. Hence: four token classes priced separately,
+and an intervention that mutates context is reported net of the invalidation or
+not netted at all.
+
+**3. Nobody reports the success rate.** The LSP study's commitment is the one
+worth stealing — its metric is *tokens-to-success*, total context tokens over
+*successful* rollouts, and "we never report a token number without its success
+rate". Every vendor percentage here is a token number without a success rate. A
+65% output reduction that makes the agent re-ask for what it lost is not a 65%
+saving. Hence: Tokenamun cannot see task success, must not imply it can, and
+names the outcome question as unanswered every time.
+
 ## Volume: less content
 
 ### Compressing tool output
@@ -40,11 +96,23 @@ Caveman, Headroom, RTK-style adapters.
 * **Acts on** `cli output`, `mcp output`, `web content`.
 * **Addressable, measured:** `tokenamun tree --at "cli output"`. On the two
   reference repositories this was 22% and 11% of session cost.
-* **What nobody measures:** the ratio on *your* content. Published figures span
-  8.5% to 65% for the same tool — an eight-fold spread, and both ends were
-  measured on somebody else's output. Your own split matters: build logs and
-  status noise compress well, and a file the agent went looking for compresses
-  into a second tool call.
+* **The evidence, graded:** Caveman claims 65% output reduction (vendor);
+  independent testing on real agentic tasks measured 8.5% — an eight-fold gap,
+  and the cleanest example of why this tool exists. A second vendor figure in
+  the same family reports 33.2% fewer input tokens over 54 runs *with 18/18
+  correctness*, which is worth singling out: it is the only claim in this
+  document that reports a success rate alongside a token count. Headroom's own repository
+  line is the honest one: "20% fewer tokens for coding agents, 60–95% fewer
+  tokens for JSON" — the headline range is the JSON case and the coding-agent
+  case is 20%. RTK claims 60–90% on "common dev commands" (vendor), where the
+  session-level effect depends entirely on what share of your output those
+  commands are.
+* **What nobody measures:** the ratio on *your* content. Both ends of that
+  spread were measured on somebody else's output. Your own split matters: build
+  logs and status noise compress well, and a file the agent went looking for
+  compresses into a second tool call. The only way to settle it for a given
+  repository is to pipe that repository's own observed content through the real
+  compressor and count — which is a thing to build, not a figure to quote.
 * **Netting:** rewriting context invalidates the cached prefix from that point,
   turning cheap reads into full-price writes. A compression saving quoted
   without that is gross, not net.
@@ -82,6 +150,12 @@ data so the same information costs fewer tokens.
   property of the encoding rather than of the content's meaning. Nothing is
   discarded, so the sufficiency question that haunts every other compression
   technique does not arise.
+* **The evidence, graded: contested.** TOON's official benchmarks report
+  39.6–46.3% fewer tokens than JSON *with equal or better* accuracy (72.2% vs
+  71.4%). An independent evaluation ranked it 9th of 12 formats at 47.5%
+  accuracy, *below* JSON's 52.3%. Both cannot be describing the same workload.
+  The token reduction is easy to verify; the accuracy claim is where the
+  disagreement lives — which is the retry risk below, quantified by nobody.
 * **What nobody measures:** whether the model reads the compact form as
   reliably. A format the model mis-parses costs a retry, and a retry is a whole
   round trip.
@@ -208,6 +282,11 @@ Fewer `/model` switches, fewer effort changes, fewer plugin toggles.
 * **Observed:** the model per API call, so per-model token and call
   distributions are available. Cost weights are model-relative, so a
   mixed-model session still adds up.
+* **The evidence, graded: vendor.** Routing the easy 80% of steps to a small
+  model and escalating the hard 20% is reported at ~12% of all-frontier cost.
+  If that holds even approximately it dominates every compression result in
+  this document — and unlike them it is measurable from this data, because the
+  model per API call is observed.
 * **Not a token question:** switching model changes price *and* changes the
   work. `tokenamun compare` on two sessions is the honest form, and even that
   cannot see whether the output was as good.
@@ -230,6 +309,13 @@ Saying so is more useful than a fabricated percentage.
   7.1% of MCP *results* in the same session, which is the number someone
   reaches for and which this intervention does not touch. Results arrive either
   way; only the schemas leave.
+* **The evidence, graded: vendor, with independent support.** Anthropic's
+  code-execution-with-MCP figure is 150,000 → 2,000 tokens, 98.7%. That is one
+  illustrative workflow. Independent reproductions land lower and scale with
+  tool count — 58% at 96 tools, 84.5% at 251, 92.8% at 508, and one measuring
+  78.5% input-token reduction; a GitHub-tools implementation held ~98% at 112.
+  The saving is real and it is a function of how many tools you had loaded,
+  which makes the headline a property of the baseline.
 * **How to actually measure it:** run the same opening prompt with the server
   connected and disconnected, and compare the first call's prompt size. That
   difference is observed. `tokenamun compare` does it.
@@ -241,11 +327,23 @@ cannot be decomposed. You can count tools *used* against tools *available* when
 the harness records a listing, which tells you whether the mechanism has
 anything to bite on — but not its token value.
 
+The vendor figure is 85% fewer tool-definition tokens, which is arithmetic on a
+number you can count: schemas cost 100–400 tokens each. More interesting is the
+reported *accuracy* gain, tool selection 79.5% → 88.1%, which suggests the win
+is not only cost. Claude Code already applies this automatically once
+deferrable definitions exceed 10% of the context window, so many teams have the
+effect without having chosen it.
+
 ### Fewer or smaller skills
 
 Definition sizes are on disk, not in the transcript. Entire records which
 skills fired, so you can see what was invoked; the cost is a local file
 measurement rather than an observation of the session.
+
+Independent measurements of skills against equivalent MCP servers cluster
+around 2.9× "at rest" for ten equivalent capabilities and stretch to 32× on
+specific tasks. The spread is the finding: it depends entirely on how many
+schemas you were loading and how chatty the task is.
 
 ### Code-mode MCP and code execution over MCP
 
@@ -255,12 +353,43 @@ are observed — `model output / tool inputs` is 16% to 48% of the sessions
 here — so the round trip is visible. Sizing the fix needs a counterfactual
 about code the agent never wrote.
 
-### Knowledge graphs and code indexing
+### Semantic retrieval, language servers, knowledge graphs
 
-What the intervention *replaces* is measurable, and precisely: how much content
-was retrieved to find things, from where, how much was re-retrieved, and what
-carrying it cost. The post-intervention side needs a second session.
+Reading symbols instead of whole files — Serena and similar, LSP-backed tools,
+code indexes.
+
+**The evidence, graded: contested, and the best-measured thing in this
+document.** A five-arm ablation (grep-only, LSP-only, both, semantic-forced,
+repo-map plus grep) found the language server *costs* tokens rather than
+saving them: +6% on symbol localisation with Opus and **+118% with Sonnet**;
++19% on reference-finding, though with perfect precision against grep's 0.76;
+and grep beat location-only LSP on multi-file renames, 100% success against
+67%. It clearly saved tokens only for the weakest model tested, −26% with
+Haiku. The widely repeated efficiency claim is, in the authors' words,
+asserted without clear evidence.
+
+Knowledge graphs and code indexing make the same shape of claim with
+published numbers at personal-project scale. The LSP study is the cautionary
+precedent: the mechanism being sound does not make the direction obvious.
+
+What the intervention *replaces* is measurable here, and precisely: how much
+content was retrieved to find things, from where, how much was re-retrieved,
+and what carrying it cost. The post-intervention side needs a second session.
 `tokenamun period --since` is the before-and-after form.
+
+## Two things worth keeping in view
+
+* **Prompt caching is the highest-leverage thing most teams already have.**
+  Cached input at 10–25% of list price, applied to the 93–99% of spend that is
+  input. `cache_read` against `cache_creation` is observed, so "is your caching
+  actually working" is not a counterfactual question at all. It is probably the
+  cheapest real finding this tool can produce, which is why it heads the list
+  below.
+* **Accuracy moves with efficiency in both directions.** Tool search improved
+  tool-selection accuracy; TOON's accuracy claim is contested; the language
+  server bought precision at a token premium. Efficiency and quality are not
+  opposite ends of one axis — which is another reason not to report a
+  reduction as an improvement.
 
 ## Where to start
 
@@ -311,8 +440,13 @@ as what they are rather than as counterfactuals.
 
 **Token spend as a productivity metric.** Tokens are an input, not an outcome,
 and treating them as the latter is the lines-of-code vanity metric with a new
-unit. It has produced real damage: at least one gamed internal leaderboard, and
-at least one AI budget exhausted a third of the way through the year.
+unit. It has produced real damage: at least one gamed internal leaderboard,
+pulled within weeks, and at least one AI budget exhausted a third of the way
+through the year. The surrounding data is worse than the anecdotes — GitClear's
+analysis of 211M changed lines and the 2026 Faros AI Engineering Report
+together report code churn +861% under high AI adoption, bugs per developer up
+from +9% to +54%, median code-review time +441%, and PRs merged with no review
+at all up 31%.
 
 It is also the failure mode this tool is closest to. A profiler that reported
 "tokens per developer" would be worse than no profiler. Hence:
@@ -327,3 +461,32 @@ It is also the failure mode this tool is closest to. A profiler that reported
 * A reduction is never reported as an improvement without the outcome question
   attached. Spending fewer tokens to do worse work is not a win, and Tokenamun
   cannot see work quality, so it must not imply that it can.
+
+## Sources
+
+Anthropic — [Code execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp) ·
+[Advanced tool use / tool search](https://www.anthropic.com/engineering/advanced-tool-use) ·
+[Tool search tool docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool)
+
+Independent measurement — [Does a Language Server Save Tokens for Coding Agents? (arXiv 2608.13568)](https://arxiv.org/html/2608.13568) ·
+[How Do AI Agents Spend Your Money? (arXiv 2604.22750)](https://arxiv.org/pdf/2604.22750) ·
+[agent-cost-lab](https://github.com/yuki-uix/agent-cost-lab) ·
+[Notation Matters: token-optimized formats benchmark (arXiv 2605.29676)](https://arxiv.org/pdf/2605.29676) ·
+[TOON benchmarks, critical analysis](https://www.towardsdeeplearning.com/toon-benchmarks-a-critical-analysis-of-different-results-d2a74563adca) ·
+[JetBrains: Speaking to AI agents like cavemen](https://blog.jetbrains.com/ai/2026/07/speak-to-ai-agents-like-cavemen-tosave-tokens/) ·
+[Agent Skills vs MCP: measuring the actual context cost](https://dev.to/topuzas/agent-skills-vs-mcp-i-stopped-reading-hot-takes-and-measured-the-actual-context-cost-1cp1) ·
+[Production results: MCP code-first pattern at 112 tools](https://github.com/orgs/modelcontextprotocol/discussions/629)
+
+Tools — [Headroom](https://github.com/headroomlabs-ai/headroom) ·
+[RTK](https://github.com/rtk-ai/rtk) ·
+[Serena](https://github.com/oraios/serena) ·
+[TOON](https://toonformat.dev/guide/benchmarks) ·
+[Graphify](https://github.com/Graphify-Labs/graphify) ·
+[Caveman](https://www.producthunt.com/products/caveman)
+
+Spend analysis — [Augment Code: where token spend really goes in an agent loop](https://www.augmentcode.com/guides/ai-coding-cost-analysis-agent-token-spend) ·
+[Vantage: the hidden cost driver in agentic coding](https://www.vantage.sh/blog/agentic-coding-costs)
+
+Anti-pattern — [Faros AI Engineering Report 2026](https://www.faros.ai/blog/ai-acceleration-whiplash-takeaways) ·
+[IBM: what is tokenmaxxing](https://www.ibm.com/think/topics/tokenmaxxing) ·
+[InfoWorld: tokenmaxxing](https://www.infoworld.com/article/4208123/tokenmaxxing-the-strangest-developer-productivity-metric-of-all-time.html)
