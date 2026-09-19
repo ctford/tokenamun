@@ -95,6 +95,7 @@ func BuildCarry(s *model.Session, c analysis.CarryReport) Carry {
 		Warnings:     s.Warnings,
 		Notes: []string{
 			"Carry is the cost of re-sending content on later calls, not the cost of fetching it.",
+			"The call a retrieval entered at is what separates two retrievals of the same size: content that arrives early is re-sent for the rest of the session, content that arrives at the end is written once.",
 			"Cold calls rebuilt the prefix and were billed at the cache write rate; warm calls were read at a tenth of input price.",
 			"Per-item cache class is not directly observable: the API reports one split per call, so residency is priced per call.",
 		},
@@ -148,16 +149,22 @@ func RenderCarry(w io.Writer, r Carry) error {
 
 	if len(r.Items) > 0 {
 		b.WriteString("Most expensive to carry (not the largest)\n")
-		fmt.Fprintf(b, "  %-34s%s %10s %7s %6s %12s\n",
-			"CONTENT", carrySessionCol(r, "SESSION"), "TOKENS", "CALLS", "COLD", "CARRY (EIT)")
+		// ENTERED is the call the content arrived on, and it is the column
+		// the size-versus-arrival argument turns on: two retrievals of the
+		// same size differ by orders of magnitude depending on it. It was in
+		// the JSON and not here, so a reader of the text had the ranking
+		// without the reason for it.
+		fmt.Fprintf(b, "  %-34s%s %10s %7s %7s %6s %12s\n",
+			"CONTENT", carrySessionCol(r, "SESSION"), "TOKENS", "ENTERED",
+			"CALLS", "COLD", "CARRY (EIT)")
 		for _, it := range r.Items {
 			label := it.Path
 			if label == "" {
 				label = "(" + it.Tool + " output)"
 			}
-			fmt.Fprintf(b, "  %-34s%s %10s %7s %6s %12s\n",
+			fmt.Fprintf(b, "  %-34s%s %10s %7s %7s %6s %12s\n",
 				trunc(label, 34), carrySessionCol(r, it.Session),
-				num(int(it.Tokens.Value)),
+				num(int(it.Tokens.Value)), "call "+itoa(it.EnteredAt),
 				num(int(it.ResidentFor.Value)), num(int(it.ColdCalls.Value)),
 				num(int(it.CarryCost.Value)))
 		}

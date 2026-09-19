@@ -1,6 +1,7 @@
 package report
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ctford/tokenamun/internal/model"
@@ -144,4 +145,38 @@ func TestCarryOverAnEmptySetIsStillALabelledReport(t *testing.T) {
 	// the renderer refuses to print.
 	got := MergeCarries(nil, SessionInfo{ID: "no sessions"})
 	walkQuantities(t, "carry", mustTree(t, got))
+}
+
+// Nothing is viewer-only, and nothing is JSON-only either: the arrival call
+// was in the payload and not in the table, so a reader of the text had the
+// ranking without the quantity that explains it.
+func TestCarryTextTableShowsTheCallContentArrivedOn(t *testing.T) {
+	r := Carry{
+		SchemaVersion: SchemaVersion,
+		Session:       SessionInfo{ID: "s", Calls: 20},
+		Context: ContextReport{
+			Peak: model.Obs(10, model.Tokens), PromptCost: model.Der(100, model.EIT),
+		},
+		Preamble: PreambleReport{
+			Tokens: model.Obs(1, model.Tokens), Carry: model.Der(1, model.EIT),
+			Share: model.Der(0.01, model.Ratio),
+		},
+		Unattributed: model.Der(0, model.Ratio),
+		Items:        []CarryItem{synthItem("early.go", 900), synthItem("late.go", 9)},
+	}
+	r.Items[1].EnteredAt = 17
+
+	var b strings.Builder
+	if err := RenderCarry(&b, r); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "ENTERED") {
+		t.Error("the table must have a column for the call content arrived on")
+	}
+	for _, want := range []string{"call 3", "call 17"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the table does not show %q", want)
+		}
+	}
 }
