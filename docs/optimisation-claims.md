@@ -149,8 +149,8 @@ is a test failure.
 
 1. Add **cache-class weighting** to carry and to every what-if: token counts per
    class, and an explicit cache-invalidation term for interventions that rewrite
-   context. Without it, a what-if can report a saving that is a loss. ✔ folded
-   into [`plan.md`](plan.md).
+   context. Without it, a what-if can report a saving that is a loss. ✔ built;
+   see [`METHODOLOGY.md`](../METHODOLOGY.md) §3 and §6.
 2. Add an **observed caching-health check** to `profile` —
    `cache_read` / `cache_creation` ratio and re-creation events. Observed, cheap,
    and the highest-value early finding.
