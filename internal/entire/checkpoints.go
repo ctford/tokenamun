@@ -58,11 +58,28 @@ func DiscoverCheckpoints(dir string) ([]model.SessionRef, error) {
 		return nil, err
 	}
 
+	return fullestPerSession(repo, blobs, metas), nil
+}
+
+// fullestPerSession picks one transcript per session and shapes the refs.
+//
+// Everything above this is git; everything in it is the decision, which is
+// why it is a function of its inputs and nothing else -- it is the part with
+// a rule in it rather than a subprocess.
+//
+// The rule: full.jsonl is cumulative, so a session's fullest snapshot is its
+// largest across every checkpoint. Most recent would be wrong, because a
+// resumed session gives a later checkpoint a shorter transcript, and taking
+// it would report the smaller slice as the whole session.
+//
+// A full.jsonl with no readable metadata.json beside it is skipped rather
+// than guessed at: the session id is the only thing that makes two snapshots
+// the same session, and without it there is nothing to compare.
+func fullestPerSession(repo string, blobs []blobRef, metas map[string][]byte) []model.SessionRef {
 	type best struct {
-		spec  string
-		size  int64
-		when  time.Time
-		model string
+		spec string
+		size int64
+		when time.Time
 	}
 	bySession := map[string]best{}
 	for _, b := range blobs {
@@ -80,9 +97,7 @@ func DiscoverCheckpoints(dir string) ([]model.SessionRef, error) {
 		if cur, seen := bySession[m.SessionID]; seen && cur.size >= b.size {
 			continue
 		}
-		bySession[m.SessionID] = best{
-			spec: b.spec, size: b.size, when: m.CreatedAt, model: m.Model,
-		}
+		bySession[m.SessionID] = best{spec: b.spec, size: b.size, when: m.CreatedAt}
 	}
 
 	out := make([]model.SessionRef, 0, len(bySession))
@@ -98,8 +113,10 @@ func DiscoverCheckpoints(dir string) ([]model.SessionRef, error) {
 			InGit: true,
 		})
 	}
+	// Newest first, and stable, so two checkpoints sharing a timestamp keep
+	// the order git listed them in rather than a random one.
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Modified.After(out[j].Modified) })
-	return out, nil
+	return out
 }
 
 // checkpointMeta is the part of a checkpoint's metadata.json we need to

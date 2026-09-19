@@ -208,3 +208,135 @@ func readBlob(t *testing.T, ref model.SessionRef) []byte {
 	}
 	return body
 }
+
+// snapshot describes one full.jsonl inside one checkpoint, for the unit tests
+// below: the selection rule is a function of sizes and session ids, so it can
+// be exercised without building a repository for every case.
+type snapshot struct {
+	ref     string
+	dir     string
+	session string // "" writes no metadata.json beside the transcript
+	when    string
+	size    int64
+	rawMeta string // overrides the generated metadata, for malformed input
+}
+
+// pick runs the selection rule over the described snapshots.
+func pick(repo string, snaps ...snapshot) []model.SessionRef {
+	blobs, metas := inputs(snaps...)
+	return fullestPerSession(repo, blobs, metas)
+}
+
+func inputs(snaps ...snapshot) ([]blobRef, map[string][]byte) {
+	var blobs []blobRef
+	metas := map[string][]byte{}
+	for _, s := range snaps {
+		dirSpec := s.ref + ":" + s.dir
+		blobs = append(blobs, blobRef{
+			spec: dirSpec + "full.jsonl", dirSpec: dirSpec,
+			name: "full.jsonl", size: s.size,
+		})
+		switch {
+		case s.rawMeta != "":
+			metas[dirSpec+"metadata.json"] = []byte(s.rawMeta)
+		case s.session != "":
+			metas[dirSpec+"metadata.json"] = []byte(fmt.Sprintf(
+				`{"session_id":%q,"created_at":%q}`, s.session, s.when))
+		}
+	}
+	return blobs, metas
+}
+
+func TestFullestPerSessionPrefersSizeOverRecency(t *testing.T) {
+	cases := []struct {
+		name  string
+		snaps []snapshot
+		want  string // the spec that should win
+	}{
+		{
+			name: "the later checkpoint is shorter, so the earlier one wins",
+			snaps: []snapshot{
+				{ref: "a", dir: "0/", session: "s", when: "2026-09-01T10:00:00Z", size: 900},
+				{ref: "b", dir: "0/", session: "s", when: "2026-09-02T10:00:00Z", size: 100},
+			},
+			want: "a:0/full.jsonl",
+		},
+		{
+			name: "the later checkpoint is longer, which is the usual case",
+			snaps: []snapshot{
+				{ref: "a", dir: "0/", session: "s", when: "2026-09-01T10:00:00Z", size: 100},
+				{ref: "b", dir: "0/", session: "s", when: "2026-09-02T10:00:00Z", size: 900},
+			},
+			want: "b:0/full.jsonl",
+		},
+		{
+			name: "equal sizes keep the first, rather than depending on map order",
+			snaps: []snapshot{
+				{ref: "a", dir: "0/", session: "s", when: "2026-09-01T10:00:00Z", size: 500},
+				{ref: "b", dir: "0/", session: "s", when: "2026-09-02T10:00:00Z", size: 500},
+			},
+			want: "a:0/full.jsonl",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := pick("/repo", c.snaps...)
+			if len(got) != 1 {
+				t.Fatalf("one session, got %d: %+v", len(got), got)
+			}
+			if got[0].Transcript != c.want {
+				t.Errorf("chose %q, want %q", got[0].Transcript, c.want)
+			}
+		})
+	}
+}
+
+func TestATranscriptWithoutUsableMetadataIsSkippedNotGuessedAt(t *testing.T) {
+	// The session id is the only thing that makes two snapshots the same
+	// session. Without one there is nothing to compare, so the snapshot is
+	// dropped rather than being invented an identity.
+	cases := []struct {
+		name string
+		snap snapshot
+	}{
+		{"no metadata.json beside it", snapshot{ref: "a", dir: "0/", size: 100}},
+		{"metadata is not JSON", snapshot{ref: "a", dir: "0/", size: 100, rawMeta: "not json"}},
+		{"metadata has no session id", snapshot{ref: "a", dir: "0/", size: 100, rawMeta: `{"model":"m"}`}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := pick("/repo", c.snap); len(got) != 0 {
+				t.Errorf("expected nothing usable, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestSessionsComeBackNewestFirst(t *testing.T) {
+	got := pick("/repo",
+		snapshot{ref: "a", dir: "0/", session: "old", when: "2026-09-01T10:00:00Z", size: 100},
+		snapshot{ref: "a", dir: "1/", session: "new", when: "2026-09-03T10:00:00Z", size: 100},
+		snapshot{ref: "a", dir: "2/", session: "mid", when: "2026-09-02T10:00:00Z", size: 100},
+	)
+	var ids []string
+	for _, r := range got {
+		ids = append(ids, r.ID)
+	}
+	if strings.Join(ids, ",") != "new,mid,old" {
+		t.Errorf("order = %v, want new,mid,old", ids)
+	}
+}
+
+func TestEveryCheckpointRefIsMarkedAsLivingInGit(t *testing.T) {
+	// The loader branches on this: a checkpoint transcript has no path to
+	// open, so it must be fetched from git instead.
+	got := pick("/somewhere/repo",
+		snapshot{ref: "a", dir: "0/", session: "s", when: "2026-09-01T10:00:00Z", size: 100},
+	)
+	if len(got) != 1 {
+		t.Fatalf("expected one ref, got %d", len(got))
+	}
+	if !got[0].InGit || got[0].Repo != "/somewhere/repo" || got[0].Origin != model.FromEntire {
+		t.Errorf("ref is not shaped for the git loader: %+v", got[0])
+	}
+}
