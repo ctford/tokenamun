@@ -8,17 +8,22 @@ computed; [`docs/ENTIRE.md`](docs/ENTIRE.md) on what the
 data contains. Read the latter before touching an adapter — most non-obvious
 decisions there follow from something measured in it.
 
-[`plans/`](plans/) is where a change is argued before it is made, and where
-it stays afterwards. Each file opens with a `Status:` line, and a decision
-taken along the way is recorded in a `**Decided:**` blockquote rather than
-being left implicit in the code. **A built plan is not deleted** — it
-becomes the record of why the code is shaped the way it is, including the
-alternatives that were rejected and what they would have cost, which is the
-part neither the diff nor the commit message keeps. Before proposing
-something, check whether a plan already says why it was not done: several
-of them exist because the same idea arrived twice. When you finish a plan,
-rewrite it in the past tense rather than appending to it — a file that is
-half proposal and half record is read as neither.
+`plans/` is where a change is argued before it is made, and it holds only
+work that is not built yet. Each file opens with a `Status:` line, and a
+decision taken along the way goes in a `**Decided:**` blockquote.
+
+**Delete a plan when it ships.** It is a scratchpad, not a record: a
+directory of finished plans is a second description of the code that
+nothing keeps true, and one plan is made stale by the next one building
+what it called missing. Git history has the file if anyone wants it.
+
+The condition on deleting is that the reasoning has somewhere else to live
+first. An alternative that was rejected, and what it would have cost, is
+the part no diff keeps — so it belongs in the doc comment beside the code
+that took the other road, in `docs/METHODOLOGY.md` if it is about how a
+number is computed, or in the commit message if it is about the change
+rather than the result. Move it, then delete the plan. A decision that
+exists only in `plans/` is one deletion away from being lost.
 
 ## Everything committed here is published publicly
 

@@ -61,9 +61,12 @@ func TestProfileOmitsTheSubagentBlockWhenThereAreNone(t *testing.T) {
 	}
 }
 
-// crossModelFanOut is the shape Stage 1 of plans/subagent-dollars.md exists
-// for: a parent that never switched model, dispatching a subagent to a
-// differently priced one. Synthetic and hand-written, with round counts.
+// crossModelFanOut is the shape the combined-total signal exists for: a
+// parent that never switched model, dispatching a subagent to a differently
+// priced one. MixedPricing is false here and correctly so -- it is about
+// this context -- which is why the combined figure needs its own signal
+// rather than borrowing that one. Synthetic and hand-written, with round
+// counts.
 //
 // claude-opus-5    reads at 0.1x
 // claude-fable-5-1 reads at 0.025x
