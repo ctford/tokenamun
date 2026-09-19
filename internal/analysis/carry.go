@@ -141,6 +141,27 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 // separate model of it. A clear and a compaction do the same thing to carry
 // cost -- they truncate every open residency span -- so the counterfactual is
 // the observed session with more resets in it.
+// weightsFor picks one pricing for a whole session, from the first model seen.
+//
+// This is an approximation and the only place left that makes it. Carry prices
+// the residency of one content item over a span of calls, and those calls can
+// span models, so doing it properly means pricing each send at the model of
+// the call it went out on rather than the span at one rate. Until then, a
+// session that switches between the 5.1 generation and anything else has its
+// carry priced at whichever came first -- and since carry is mostly cache
+// reads, that is the 0.025x-against-0.1x term, a fourfold error on the
+// dominant class.
+//
+// internal/analysis/cache.go used to share this and no longer does: its
+// counterfactual buckets by pricing. Fixing carry the same way is a larger
+// change, because a bucket is not enough -- the span has to be walked.
+func weightsFor(s *model.Session) cost.Weights {
+	if ms := s.Models(); len(ms) > 0 {
+		return cost.For(ms[0])
+	}
+	return cost.Default
+}
+
 func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) CarryReport {
 	w := weightsFor(s)
 	cold := ColdCalls(cacheReport)

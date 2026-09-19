@@ -380,3 +380,37 @@ func TestMergeAddsCostsAndReconcilesTheTTL(t *testing.T) {
 		t.Errorf("merging one report changed it: %+v", one)
 	}
 }
+
+func TestLongerTTLPricesEachModelsWritesAtItsOwnRate(t *testing.T) {
+	// A session that switches model, which `opusplan` does on every plan-mode
+	// toggle. The 5.1 generation reads cache at 0.025x against 0.1x, so
+	// pricing the whole session at whichever model came first gets the
+	// counterfactual wrong -- and which way depends on the order, which is
+	// the tell that it was never a rounding matter.
+	s := session(
+		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 100_000),
+		inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 100_000),
+		inv(2, 25*time.Minute, "claude-fable-5-1", "2.1.246", "high", 1, 0, 100_000),
+		inv(3, 45*time.Minute, "claude-fable-5-1", "2.1.246", "high", 1, 0, 100_000),
+	)
+	r := Cache(s, TTL5m)
+
+	if got := r.AvoidableTokens; got != 200_000 {
+		t.Fatalf("avoidable = %d, want 200000 (one expiry under each pricing)", got)
+	}
+
+	// Standard pricing: 200k written at 1.25 becomes 100k at 2.0 plus 100k
+	// read at 0.1, so -40,000. The 5.1 pricing differs only in the read,
+	// 0.025, so -47,500.
+	const want = -87_500
+	if math.Abs(r.LongerTTLNetEIT-want) > 1 {
+		t.Errorf("net = %.0f, want %d", r.LongerTTLNetEIT, want)
+	}
+	// Pricing it all at the first model seen gives -80,000, and all at the
+	// last -95,000. Either would pass a tolerance wide enough to be useless.
+	for _, wrong := range []float64{-80_000, -95_000} {
+		if math.Abs(r.LongerTTLNetEIT-wrong) < 1 {
+			t.Errorf("net = %.0f, which is the single-pricing answer", r.LongerTTLNetEIT)
+		}
+	}
+}

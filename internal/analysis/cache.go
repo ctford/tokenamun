@@ -88,6 +88,38 @@ type CacheReport struct {
 	LongerTTLShare  float64 `json:"longer_ttl_net_share_of_prompt_cost"`
 }
 
+// ttlBucket accumulates the counterfactual's inputs for one pricing.
+//
+// One bucket per set of weights, not one per session. A session switches model
+// whenever `opusplan` toggles plan mode, and the 5.1 generation reads cache at
+// 0.025x against 0.1x -- which is one of the two terms the break-even is made
+// of. Summing everybody's tokens and pricing the total at the first model seen
+// is the mistake cost.PerCall exists to avoid, and it survived in here until
+// the weights were bucketed.
+type ttlBucket struct {
+	w         cost.Weights
+	writes5m  int64
+	avoidable int64
+}
+
+// ttlBuckets keeps pricings in the order they were first seen, so that summing
+// over them is deterministic. Map iteration order is not, and these are
+// floats.
+type ttlBuckets []ttlBucket
+
+// at returns the bucket for a model's pricing, creating it if new. The pointer
+// is valid until the next call, which is as long as any caller holds it.
+func (b *ttlBuckets) at(modelID string) *ttlBucket {
+	w := cost.For(modelID)
+	for i := range *b {
+		if (*b)[i].w == w {
+			return &(*b)[i]
+		}
+	}
+	*b = append(*b, ttlBucket{w: w})
+	return &(*b)[len(*b)-1]
+}
+
 // longerTTL prices a switch from the 5-minute lifetime to the 1-hour one.
 //
 //	old = every 5m write at 1.25
@@ -96,27 +128,31 @@ type CacheReport struct {
 // A session that never idles past five minutes avoids nothing and pays double
 // for every write, so this comes out positive, which is the point of computing
 // it rather than assuming. Break-even is avoided writes above 37.5% of all
-// writes.
-func longerTTL(r *CacheReport, w cost.Weights) {
+// writes -- at the standard 0.1x read. On the 5.1 generation the cheaper read
+// moves it, which is the reason each pricing is priced on its own.
+func longerTTL(r *CacheReport, buckets ttlBuckets) {
 	if r.Writes5m == 0 {
 		return
 	}
-	for _, m := range r.Misses {
-		if m.AvoidableByTTL {
-			r.AvoidableTokens += m.Rebuilt
+	for _, b := range buckets {
+		if b.writes5m == 0 {
+			// Already on the 1-hour lifetime for this pricing, so there is
+			// nothing here for a switch to buy.
+			continue
 		}
+		avoidable := float64(b.avoidable)
+		if avoidable > float64(b.writes5m) {
+			// Cannot avoid more than was written; a defensive clamp rather
+			// than a silent negative.
+			avoidable = float64(b.writes5m)
+		}
+		r.AvoidableTokens += int64(avoidable)
+		old := float64(b.writes5m) * b.w.CacheWrite5m
+		// The avoided rewrite does not vanish: the prefix is still sent, as a
+		// cache read.
+		now := (float64(b.writes5m)-avoidable)*b.w.CacheWrite1h + avoidable*b.w.CacheRead
+		r.LongerTTLNetEIT += now - old
 	}
-	avoidable := float64(r.AvoidableTokens)
-	if avoidable > float64(r.Writes5m) {
-		// Cannot avoid more than was written; a defensive clamp rather than a
-		// silent negative.
-		avoidable = float64(r.Writes5m)
-	}
-	old := float64(r.Writes5m) * w.CacheWrite5m
-	// The avoided rewrite does not vanish: the prefix is still sent, as a
-	// cache read.
-	now := (float64(r.Writes5m)-avoidable)*w.CacheWrite1h + avoidable*w.CacheRead
-	r.LongerTTLNetEIT = now - old
 	if r.TotalCostEIT > 0 {
 		r.LongerTTLShare = r.LongerTTLNetEIT / r.TotalCostEIT
 	}
@@ -135,13 +171,14 @@ type CauseAgg struct {
 // it. Everything except the final elimination step is observed.
 func Cache(s *model.Session, ttl time.Duration) CacheReport {
 	r := CacheReport{ByCause: map[string]CauseAgg{}}
-	w := weightsFor(s)
+	var buckets ttlBuckets
 
 	var usage model.TokenUsage
 	for _, inv := range s.Invocations {
 		usage = usage.Add(inv.Usage)
 		callPrompt, _ := cost.PerCall(inv)
 		r.TotalCostEIT += callPrompt
+		buckets.at(inv.Model).writes5m += inv.Usage.CacheCreation5m
 	}
 	r.Writes5m, r.Writes1h = usage.CacheCreation5m, usage.CacheCreation1h
 	switch {
@@ -168,7 +205,8 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 		m := Miss{
 			Seq:     inv.Seq,
 			Rebuilt: inv.Usage.CacheCreation,
-			CostEIT: w.PromptCost(model.TokenUsage{
+			// Priced at this call's own model, not the session's first.
+			CostEIT: cost.For(inv.Model).PromptCost(model.TokenUsage{
 				CacheCreation:   inv.Usage.CacheCreation,
 				CacheCreation5m: inv.Usage.CacheCreation5m,
 				CacheCreation1h: inv.Usage.CacheCreation1h,
@@ -187,6 +225,9 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 				m.Cause = CauseCompaction
 			}
 			m.AvoidableByTTL = m.Cause == CauseTTLExpiry && m.Gap <= TTL1h
+			if m.AvoidableByTTL {
+				buckets.at(inv.Model).avoidable += m.Rebuilt
+			}
 		} else {
 			m.Cause = CauseSessionStart
 		}
@@ -214,7 +255,7 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 			r.ByCause[cause] = agg
 		}
 	}
-	longerTTL(&r, w)
+	longerTTL(&r, buckets)
 	return r
 }
 
@@ -288,13 +329,6 @@ func gapBetween(prev, cur model.ModelInvocation) time.Duration {
 		return 0
 	}
 	return cur.Timestamp.Sub(prev.Timestamp)
-}
-
-func weightsFor(s *model.Session) cost.Weights {
-	if ms := s.Models(); len(ms) > 0 {
-		return cost.For(ms[0])
-	}
-	return cost.Default
 }
 
 // ColdCalls returns the set of call sequence numbers that rebuilt their
