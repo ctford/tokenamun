@@ -196,13 +196,12 @@ func Readable(refs []model.SessionRef, load func(model.SessionRef) (*model.Sessi
 	[]*model.Session, []string) {
 	var out []*model.Session
 	var failed []string
-	for _, ref := range refs {
-		s, err := load(ref)
-		if err != nil {
-			failed = append(failed, ref.ID+": "+err.Error())
+	for i, r := range loadEach(refs, load) {
+		if r.Err != nil {
+			failed = append(failed, refs[i].ID+": "+r.Err.Error())
 			continue
 		}
-		out = append(out, s)
+		out = append(out, r.Session)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].Ref.Modified.Before(out[j].Ref.Modified)

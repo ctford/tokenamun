@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -311,5 +312,45 @@ func TestOpenUsesTheUsersCacheDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(c.dir); err != nil {
 		t.Errorf("the cache directory was not created: %v", err)
+	}
+}
+
+func TestTheCacheIsSafeToLoadFromSeveralGoroutines(t *testing.T) {
+	// report.loadEach parses a week's transcripts concurrently, and every
+	// one of those parses comes through here. Two goroutines on one ref is
+	// the interesting case: both miss, both parse, and both write the entry.
+	// They write identical bytes through a temp file and a rename, so the
+	// loser replaces an identical file -- but "identical" is the claim, and
+	// an entry half-written by one reader and read by another is the failure
+	// it is hiding.
+	cache, one, _ := fixture(t)
+	refs := []model.SessionRef{one}
+	for i := 0; i < 8; i++ {
+		path := filepath.Join(t.TempDir(), "s.jsonl")
+		writeTranscript(t, path, "60", frozen)
+		refs = append(refs, model.SessionRef{
+			ID: "s", Transcript: path, Origin: model.FromLocal,
+		})
+	}
+
+	var wg sync.WaitGroup
+	got := make([]int64, len(refs)*3)
+	for i := range got {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s, err := cache.Load(refs[i%len(refs)])
+			if err != nil {
+				t.Errorf("concurrent load: %v", err)
+				return
+			}
+			got[i] = s.Usage().Output
+		}()
+	}
+	wg.Wait()
+	for i, v := range got {
+		if v != 60 {
+			t.Errorf("load %d returned %d output tokens, want 60", i, v)
+		}
 	}
 }

@@ -96,12 +96,18 @@ func BuildLengths(refs []model.SessionRef, window string,
 	byBand := make([][]sample, len(lengthBands))
 	models := map[string]bool{}
 	var binned int
-	for _, ref := range refs {
-		s, err := load(ref)
-		if err != nil {
-			l.Unreadable = append(l.Unreadable, ref.ID+": "+err.Error())
+	// Loaded concurrently and consumed in ref order, so the bands and the
+	// extremes they print are what they were. This view has no selector by
+	// construction -- a distribution needs a population -- so it reads every
+	// session in the window every time, which makes it the command with the
+	// most to gain.
+	for i, r := range loadEach(refs, load) {
+		ref := refs[i]
+		if r.Err != nil {
+			l.Unreadable = append(l.Unreadable, ref.ID+": "+r.Err.Error())
 			continue
 		}
+		s := r.Session
 		calls := s.RealCalls()
 		if calls == 0 {
 			// No calls is not a session of length zero; it is a transcript
