@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ctford/tokenamun/internal/analysis"
@@ -70,6 +71,11 @@ Hypothetical optimisations:
   Name a part of the tree and what it becomes. The part is measured; the
   figure is yours, and so is the reason it is plausible.
 
+  Repeat the trio to price several changes at once; they are read as
+  columns of one table, and the parts must not contain one another:
+  tokenamun optimise --at "cli output" --optimise 0.5 --why "..." \
+                     --at "your prompts" --optimise 0.8 --why "..."
+
 Flags:
   --json          machine-readable output
   --prices        also total it in money, from a pinned published catalog.
@@ -88,12 +94,14 @@ Flags:
   --until WHEN    only sessions active before WHEN, exclusive
   --at PATH       which node of the tree to show, e.g. "cli output/version control".
                   Names come from the level above; matching is case-insensitive.
+                  Repeatable for optimise, once per change.
   --mode MODE     tree pricing: carry (as billed) | uncached (as if nothing
                   cached). The difference is what prompt caching was worth.
-  --optimise N    what --at becomes: 0.5 halves it, 0 removes it, 1.1 is a
-                  change for the worse. Needs --why.
-  --why TEXT      why that figure is plausible. Required, max 64 characters:
-                  a number without it is what this tool exists to avoid.
+  --optimise N    what the matching --at becomes: 0.5 halves it, 0 removes it,
+                  1.1 is a change for the worse. Needs --why. Repeatable.
+  --why TEXT      why that figure is plausible. Required, one per --optimise,
+                  max 64 characters: a number without it is what this tool
+                  exists to avoid.
   --name TEXT     what to call the hypothetical in the report
   --cost N        measured intervention cost in EIT, for series payback
   --scan PATH     tree to scan for code metrics (hotspots; default --dir).
@@ -136,10 +144,18 @@ func run(args []string) error {
 	title := fs.String("title", "", "heading for the report")
 	since := fs.String("since", "", "only sessions active on or after this date, time or age (7d)")
 	until := fs.String("until", "", "only sessions active before this date, time or age")
-	at := fs.String("at", "", "drill to a node in the tree, e.g. \"cli output/git\"")
+	var at repeatable
+	fs.Var(&at, "at", "node in the tree, e.g. \"cli output/git\" (repeatable for optimise)")
 	mode := fs.String("mode", "carry", "cost mode for the tree: carry | uncached")
-	optimise := fs.Float64("optimise", 0, "what --at becomes: 0.5 halves it")
-	why := fs.String("why", "", "caveat, required with --optimise")
+	// Repeatable, and a slice rather than a value, because 0 is a figure
+	// somebody might mean: it removes the part entirely. A plain float flag's
+	// default is indistinguishable from the flag being forgotten, and
+	// forgetting it used to report the most extreme counterfactual the tool
+	// can state. An empty slice is unambiguous. See report.ParseOptimisation.
+	var optimise repeatableFloat
+	fs.Var(&optimise, "optimise", "what the matching --at becomes: 0.5 halves it (repeatable)")
+	var why repeatable
+	fs.Var(&why, "why", "caveat, one per --optimise")
 	label := fs.String("name", "", "name for the hypothetical in the report")
 	maxFileLines := fs.Int("max-file-lines", 0, "fail the scan on a file longer than this")
 	maxComplexity := fs.Int("max-complexity", 0, "fail the scan on a function above this complexity")
@@ -210,22 +226,18 @@ func run(args []string) error {
 	case "series":
 		return cmdSeries(positional, *interventionCost, *asJSON)
 	case "tree":
-		return cmdTree(*dir, *source, selector, *at, *mode, *asJSON, *withPrices)
+		// One node at a time here: repeating --at is for optimise, where the
+		// parts compose. The last wins, as a scalar flag given twice does
+		// everywhere else.
+		return cmdTree(*dir, *source, selector, at.last(), *mode, *asJSON, *withPrices)
 	// "report" names the artifact; "treemap" named one of its two views, and
 	// the other one is a table. Kept as an alias because it is in muscle
 	// memory and in older notes.
 	case "report", "treemap":
 		return cmdReport(*dir, *source, selector, *title, *out, *asJSON)
 	case "what-if", "whatif", "optimise":
-		// Whether --optimise was given, not just its value: zero is a
-		// meaningful figure here, so the flag's default is indistinguishable
-		// from the flag being forgotten. See ParseOptimisation.
-		var becomes *float64
-		if given(fs)["optimise"] {
-			becomes = optimise
-		}
 		return cmdOptimise(*dir, *source, selector, optimiseArgs{
-			at: *at, becomes: becomes, why: *why, label: *label,
+			at: at, becomes: optimise, why: why, label: *label,
 		}, *asJSON)
 	case "version":
 		fmt.Printf("tokenamun %s\n", version)
@@ -259,10 +271,11 @@ func pricesApplies(cmd string, asked bool) error {
 // given names the flags that were actually passed.
 //
 // For most flags the zero value is answer enough: an empty --at was not
-// given. --optimise is the exception, because 0 is a figure somebody might
-// mean, and the whole point of the command is that the figure is the
-// caller's. FlagSet.Visit accumulates across the repeated Parse calls that
-// parseInterspersed makes, so it can be read once afterwards.
+// given. A bool is the exception, because false is also its default, and
+// --prices has to be refused where it cannot be honoured rather than
+// silently doing nothing. FlagSet.Visit accumulates across the repeated
+// Parse calls that parseInterspersed makes, so it can be read once
+// afterwards.
 func given(fs *flag.FlagSet) map[string]bool {
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
@@ -595,6 +608,38 @@ func (r *repeatable) Set(v string) error {
 	return nil
 }
 
+// last is the final value given, or "" when the flag was not given at all.
+// For a flag that only means one thing, repeating it is a mistake and the
+// last one is the conventional reading of it.
+func (r repeatable) last() string {
+	if len(r) == 0 {
+		return ""
+	}
+	return r[len(r)-1]
+}
+
+// repeatableFloat is the same for a number. Go's flag package has neither,
+// and --optimise needs one so that "not given" is an empty slice rather than
+// a zero that is also a meaningful figure.
+type repeatableFloat []float64
+
+func (r *repeatableFloat) String() string {
+	var parts []string
+	for _, v := range *r {
+		parts = append(parts, strconv.FormatFloat(v, 'g', -1, 64))
+	}
+	return strings.Join(parts, ",")
+}
+
+func (r *repeatableFloat) Set(v string) error {
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fmt.Errorf("%q is not a number", v)
+	}
+	*r = append(*r, f)
+	return nil
+}
+
 // cmdDoctor says whether the two sources are set up to record.
 //
 // "No sessions found" was the answer to four different problems, and the
@@ -698,13 +743,12 @@ func localState(refs []model.SessionRef, err error) string {
 	}
 }
 
-// optimiseArgs is a hypothetical as the command line describes it.
+// optimiseArgs is a hypothetical as the command line describes it: three
+// repeatable flags read as columns of one table, and a name for the whole.
 type optimiseArgs struct {
-	at string
-	// becomes is nil when --optimise was not passed, which is not the same
-	// as zero: zero removes the part entirely.
-	becomes *float64
-	why     string
+	at      []string
+	becomes []float64
+	why     []string
 	label   string
 }
 
@@ -715,7 +759,7 @@ type optimiseArgs struct {
 // tool measures the part and the caller names the change -- and the reason it
 // is plausible, which is what --why is for.
 func cmdOptimise(dir, source, selector string, a optimiseArgs, asJSON bool) error {
-	o, err := report.ParseOptimisation(a.at, a.becomes, a.label, a.why)
+	o, err := report.ParseOptimisation(a.at, a.becomes, a.why, a.label)
 	if err != nil {
 		return err
 	}

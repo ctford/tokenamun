@@ -42,12 +42,24 @@ import (
 // the two was reading a mean, and a mean reads the same whether a command is
 // expensive on every run or ran once and dumped 200K tokens.
 //
-// 7: `sessions` grew `calls` and `cost_eit` per session, and top-level
+// 7: three additions.
+//
+// `sessions` grew `calls` and `cost_eit` per session, and top-level
 // `sorted_by`, `unreadable` and `notes`. A consumer reading the old output
 // had no cost in it at all and had to derive one from the transcripts, which
 // is the deduplication rule in METHODOLOGY section 2 waiting to be got wrong:
 // summing assistant entries instead of requests overstates by 66-97% on the
 // fixtures here.
+//
+// Every share in `cache` gained a `_of_session_cost` twin, and `optimise`
+// gained `addressable_share_of_prompt_cost`. A consumer reading one share
+// from each command was reading two different denominators -- prompt cost
+// against prompt-and-output -- with nothing in either payload saying so, and
+// putting them in one column compared quantities that are not comparable.
+//
+// `optimise` grew `parts`, and its `at`/`optimise`/`why` may now repeat. A
+// consumer that composed several single-node runs by hand was adding impacts,
+// which do not add, or adding savings over nodes that may contain one another.
 const SchemaVersion = 7
 
 // Profile is a session overview.

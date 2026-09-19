@@ -70,6 +70,10 @@ func MergeTrees(trees []*Node) *Node {
 			continue
 		}
 		mergeInto(out, t)
+		// Summed on the root rather than recomputed, because it is the one
+		// figure here that is not a roll-up of leaves: prompt cost is
+		// measured per session, and a set's is the sum of theirs.
+		out.PromptCost += t.PromptCost
 	}
 	// Collapsed after merging as well as before, because a shape reconciled
 	// during the merge may turn out to have a single same-name child, and

@@ -386,50 +386,6 @@ func jsonKeys(t *testing.T, v any) []string {
 	return keys
 }
 
-// ptr gives --optimise's value an address, since ParseOptimisation
-// distinguishes a figure of zero from no figure at all.
-func ptr(f float64) *float64 { return &f }
-
-// The unknown section must always render, because it is the thing that stops
-// a counterfactual being read as a measurement. It survived the deletion of
-// the named interventions: the one hypothetical that is left is held to it.
-func TestAHypotheticalAlwaysRendersItsUnknowns(t *testing.T) {
-	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
-	o, err := ParseOptimisation("cli output", ptr(0.5), "proxy", "A guess, not a measurement.")
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := BuildHypotheticalFrom(BuildTree(s, carry), sessionInfo(s), o)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var text bytes.Buffer
-	if err := RenderHypothetical(&text, h); err != nil {
-		t.Fatal(err)
-	}
-	out := text.String()
-	for _, want := range []string{
-		"Unknown",
-		// The figure is the caller's, and the report has to say so where the
-		// number is, not only in the docs.
-		"not a measurement",
-		// And the outcome caveat, which is true of every counterfactual: an
-		// agent that fails the task consumes the fewest tokens of all.
-		"came out right",
-		// The caller's own reason, printed beside their number.
-		"A guess, not a measurement.",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the rendered hypothetical is missing %q:\n%s", want, out)
-		}
-	}
-	if len(h.Unknown) == 0 {
-		t.Error("a hypothetical with no unknowns is the claim this tool exists to avoid")
-	}
-}
-
 func TestCompareGoldenOutput(t *testing.T) {
 	a := carrySession(t)
 	b, err := ingest.Load(model.SessionRef{

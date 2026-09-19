@@ -29,6 +29,11 @@
     "unit": "eit",
     "provenance": "derived"
   },
+  "session_cost": {
+    "value": 110509.29999999999,
+    "unit": "eit",
+    "provenance": "derived"
+  },
   "by_cause": [
     {
       "cause": "ttl_expiry",
@@ -49,6 +54,11 @@
       },
       "share_of_prompt_cost": {
         "value": 0.4016885355996174,
+        "unit": "ratio",
+        "provenance": "derived"
+      },
+      "share_of_session_cost": {
+        "value": 0.3902386495978167,
         "unit": "ratio",
         "provenance": "derived"
       },
@@ -85,6 +95,11 @@
         "unit": "ratio",
         "provenance": "derived"
       },
+      "share_of_session_cost": {
+        "value": 0.3393379561720145,
+        "unit": "ratio",
+        "provenance": "derived"
+      },
       "avoidable_by_longer_ttl_calls": {
         "value": 0,
         "unit": "calls",
@@ -118,6 +133,11 @@
         "unit": "ratio",
         "provenance": "derived"
       },
+      "share_of_session_cost": {
+        "value": 0.06899871775497629,
+        "unit": "ratio",
+        "provenance": "derived"
+      },
       "avoidable_by_longer_ttl_calls": {
         "value": 0,
         "unit": "calls",
@@ -138,6 +158,11 @@
     },
     "share_of_prompt_cost": {
       "value": 0.4016885355996174,
+      "unit": "ratio",
+      "provenance": "derived"
+    },
+    "share_of_session_cost": {
+      "value": 0.3902386495978167,
       "unit": "ratio",
       "provenance": "derived"
     },
@@ -176,12 +201,18 @@
       "unit": "ratio",
       "provenance": "counterfactual"
     },
+    "longer_ttl_net_share_of_session": {
+      "value": -0.08483448904300363,
+      "unit": "ratio",
+      "provenance": "counterfactual"
+    },
     "note": "Expiry is attributed by elimination, after the observable causes. MCP server changes, plugin toggles and tool-deny rules also invalidate the cache and are not visible in a transcript, so they appear as unexplained rather than being blamed on the TTL.",
     "net_note": "A counterfactual, but with no assumed parameter: every input is observed. Both halves are shown because a net figure asks to be trusted and these can be checked. The avoided rewrite is not free -- the prefix is still sent, as a cache read -- so the saving is the gap between the two rates, not the whole write. The premium is every write you still make, repriced from 1.25x to 2.0x. On a session of short bursts the premium wins and switching costs you money."
   },
   "notes": [
     "The TTL each call used is observed, from the API's own 5m/1h split.",
     "A cache entry's lifetime runs from request start and a read refreshes it, so calls starting closer together than the TTL keep the prefix warm.",
-    "Claude Code exposes promptCacheTtl and subagentPromptCacheTtl (5m or 1h) since v2.1.242."
+    "Claude Code exposes promptCacheTtl and subagentPromptCacheTtl (5m or 1h) since v2.1.242.",
+    "Every share is printed against both denominators: prompt cost, and the session's total cost with output in it. `optimise` reports against the total, so that is the column its figures are comparable with."
   ]
 }

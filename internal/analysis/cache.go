@@ -58,15 +58,23 @@ type Miss struct {
 // CacheReport is what cache behaviour cost, attributed to causes.
 type CacheReport struct {
 	// ObservedTTL is read from the API's own 5m/1h split, not inferred.
-	ObservedTTL     string              `json:"observed_ttl"`
-	Writes5m        int64               `json:"cache_writes_5m"`
-	Writes1h        int64               `json:"cache_writes_1h"`
-	TotalCostEIT    float64             `json:"total_prompt_cost_eit"`
-	Misses          []Miss              `json:"misses"`
-	ByCause         map[string]CauseAgg `json:"by_cause"`
-	ExpiryCostEIT   float64             `json:"expiry_cost_eit"`
-	ExpiryShare     float64             `json:"expiry_share_of_prompt_cost"`
-	UnexplainedCost float64             `json:"unexplained_cost_eit"`
+	ObservedTTL  string  `json:"observed_ttl"`
+	Writes5m     int64   `json:"cache_writes_5m"`
+	Writes1h     int64   `json:"cache_writes_1h"`
+	TotalCostEIT float64 `json:"total_prompt_cost_eit"`
+	// OutputCostEIT is what the session's output cost, so that this report
+	// can express a share against the whole bill as well as against the
+	// prompt half of it. Not a cache quantity, and here only as a
+	// denominator: caching does not touch output.
+	OutputCostEIT float64             `json:"output_cost_eit"`
+	Misses        []Miss              `json:"misses"`
+	ByCause       map[string]CauseAgg `json:"by_cause"`
+	ExpiryCostEIT float64             `json:"expiry_cost_eit"`
+	ExpiryShare   float64             `json:"expiry_share_of_prompt_cost"`
+	// ExpiryShareOfSession is the same cost against prompt and output
+	// together, which is the denominator `optimise` uses.
+	ExpiryShareOfSession float64 `json:"expiry_share_of_session_cost"`
+	UnexplainedCost      float64 `json:"unexplained_cost_eit"`
 	// AvoidableTokens is the expiry rewriting that a 1-hour lifetime would
 	// have covered: expiry only, and only where the gap was under an hour.
 	// Gaps longer than that expire under either TTL.
@@ -85,8 +93,9 @@ type CacheReport struct {
 	// every *other* write is repriced from 1.25x to 2.0x. Both mistakes push
 	// the answer the same way: this session's real figure is -6.3% and a hand
 	// calculation that made both came out at 11.1%.
-	LongerTTLNetEIT float64 `json:"longer_ttl_net_eit"`
-	LongerTTLShare  float64 `json:"longer_ttl_net_share_of_prompt_cost"`
+	LongerTTLNetEIT       float64 `json:"longer_ttl_net_eit"`
+	LongerTTLShare        float64 `json:"longer_ttl_net_share_of_prompt_cost"`
+	LongerTTLShareSession float64 `json:"longer_ttl_net_share_of_session_cost"`
 	// The two halves the net is made of, both as positive magnitudes:
 	// LongerTTLSavedEIT is what the avoided rewrites stop costing, and
 	// LongerTTLPremiumEIT is what the writes you still make cost extra at
@@ -186,9 +195,8 @@ func longerTTL(r *CacheReport, buckets ttlBuckets) {
 			(b.w.CacheWrite1h - b.w.CacheWrite5m)
 	}
 	r.LongerTTLNetEIT = r.LongerTTLPremiumEIT - r.LongerTTLSavedEIT
-	if r.TotalCostEIT > 0 {
-		r.LongerTTLShare = r.LongerTTLNetEIT / r.TotalCostEIT
-	}
+	r.LongerTTLShare = over(r.LongerTTLNetEIT, r.TotalCostEIT)
+	r.LongerTTLShareSession = over(r.LongerTTLNetEIT, r.SessionCostEIT())
 }
 
 // CauseAgg totals one cause.
@@ -199,10 +207,17 @@ func longerTTL(r *CacheReport, buckets ttlBuckets) {
 // can be avoidable at all, and even there it is only the gaps under an hour --
 // which on real sessions is most of the tokens and not all of them.
 type CauseAgg struct {
-	Calls           int     `json:"calls"`
-	Tokens          int64   `json:"rebuilt_tokens"`
-	CostEIT         float64 `json:"cost_eit"`
+	Calls   int     `json:"calls"`
+	Tokens  int64   `json:"rebuilt_tokens"`
+	CostEIT float64 `json:"cost_eit"`
+	// Share is against prompt cost, ShareOfSession against prompt and output
+	// together. Both, because every share in this report was against prompt
+	// cost and said so only in the key name, while `optimise` reports shares
+	// of the session total -- and a reader who put one of each in a column
+	// compared two different denominators without either figure looking
+	// wrong.
 	Share           float64 `json:"share_of_prompt_cost"`
+	ShareOfSession  float64 `json:"share_of_session_cost"`
 	AvoidableCalls  int     `json:"avoidable_by_longer_ttl_calls"`
 	AvoidableTokens int64   `json:"avoidable_by_longer_ttl_tokens"`
 }
@@ -216,8 +231,9 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 	var usage model.TokenUsage
 	for _, inv := range s.Invocations {
 		usage = usage.Add(inv.Usage)
-		callPrompt, _ := cost.PerCall(inv)
+		callPrompt, callOutput := cost.PerCall(inv)
 		r.TotalCostEIT += callPrompt
+		r.OutputCostEIT += callOutput
 		buckets.at(inv.Model).writes5m += inv.Usage.CacheCreation5m
 	}
 	r.Writes5m, r.Writes1h = usage.CacheCreation5m, usage.CacheCreation1h
@@ -291,13 +307,7 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 		}
 	}
 
-	if r.TotalCostEIT > 0 {
-		r.ExpiryShare = r.ExpiryCostEIT / r.TotalCostEIT
-		for cause, agg := range r.ByCause {
-			agg.Share = agg.CostEIT / r.TotalCostEIT
-			r.ByCause[cause] = agg
-		}
-	}
+	shareOut(&r)
 	longerTTL(&r, buckets)
 	for _, b := range buckets {
 		r.ReadRates = appendRate(r.ReadRates, b.w.CacheRead)
@@ -419,6 +429,7 @@ func Merge(reports []CacheReport) CacheReport {
 		out.Writes5m += r.Writes5m
 		out.Writes1h += r.Writes1h
 		out.TotalCostEIT += r.TotalCostEIT
+		out.OutputCostEIT += r.OutputCostEIT
 		out.ExpiryCostEIT += r.ExpiryCostEIT
 		out.UnexplainedCost += r.UnexplainedCost
 		out.AvoidableTokens += r.AvoidableTokens
@@ -450,13 +461,37 @@ func Merge(reports []CacheReport) CacheReport {
 	default:
 		out.ObservedTTL = "mixed across sessions"
 	}
-	if out.TotalCostEIT > 0 {
-		out.ExpiryShare = out.ExpiryCostEIT / out.TotalCostEIT
-		out.LongerTTLShare = out.LongerTTLNetEIT / out.TotalCostEIT
-		for cause, agg := range out.ByCause {
-			agg.Share = agg.CostEIT / out.TotalCostEIT
-			out.ByCause[cause] = agg
-		}
-	}
+	shareOut(&out)
+	out.LongerTTLShare = over(out.LongerTTLNetEIT, out.TotalCostEIT)
+	out.LongerTTLShareSession = over(out.LongerTTLNetEIT, out.SessionCostEIT())
 	return out
+}
+
+// SessionCostEIT is prompt and output together: the other denominator, and
+// the one `optimise` divides by.
+func (r CacheReport) SessionCostEIT() float64 { return r.TotalCostEIT + r.OutputCostEIT }
+
+// shareOut expresses every cost in the report against both denominators.
+//
+// Both, always, and never one alone. Every share here used to be of prompt
+// cost, named as such only in a JSON key, while the neighbouring command
+// reports shares of the whole bill. Two bases, two directions, and nothing on
+// the line to tell them apart.
+func shareOut(r *CacheReport) {
+	session := r.SessionCostEIT()
+	r.ExpiryShare = over(r.ExpiryCostEIT, r.TotalCostEIT)
+	r.ExpiryShareOfSession = over(r.ExpiryCostEIT, session)
+	for cause, agg := range r.ByCause {
+		agg.Share = over(agg.CostEIT, r.TotalCostEIT)
+		agg.ShareOfSession = over(agg.CostEIT, session)
+		r.ByCause[cause] = agg
+	}
+}
+
+// over divides, and is zero rather than an infinity over nothing.
+func over(part, whole float64) float64 {
+	if whole == 0 {
+		return 0
+	}
+	return part / whole
 }

@@ -77,6 +77,15 @@ type Node struct {
 	// Reconciliation is set on the root when the parts overshoot the measured
 	// prompt cost, which happens through byte-per-token estimation error.
 	Reconciliation float64 `json:"reconciliation,omitempty"`
+	// PromptCost is the session's measured prompt cost, on the root only.
+	//
+	// The root's Carry is prompt cost plus output cost, and that is the right
+	// denominator for "how much of the session is this". It is not the
+	// denominator `cache` uses, which is prompt cost alone, and a share
+	// against one read as a share against the other is a comparison that is
+	// wrong without looking wrong. So both are available, and whoever prints
+	// a percentage says which it is a percentage of.
+	PromptCost float64 `json:"promptCost,omitempty"`
 }
 
 // BuildTree assembles the drill-down hierarchy.
@@ -122,6 +131,7 @@ func BuildTree(s *model.Session, carry analysis.CarryReport) *Node {
 	// rather than of the session, which is the bug this block exists to
 	// prevent -- and merging the output blocks reintroduced it once already.
 	measured := carry.PromptCostEIT + outputCost(s)
+	root.PromptCost = carry.PromptCostEIT
 	// The no-caching total is the same arithmetic against a counterfactual
 	// bill: every prompt token at full input price, output unchanged. Without
 	// its own remainder the uncached mode reconciled against the cached total

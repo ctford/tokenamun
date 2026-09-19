@@ -12,16 +12,25 @@ import (
 
 // Cache reports what cache behaviour cost, attributed to causes.
 type Cache struct {
-	SchemaVersion int             `json:"schema_version"`
-	Session       SessionInfo     `json:"session"`
-	ObservedTTL   string          `json:"observed_ttl"`
-	Writes5m      model.Quantity  `json:"cache_writes_5m"`
-	Writes1h      model.Quantity  `json:"cache_writes_1h"`
-	PromptCost    model.Quantity  `json:"prompt_cost"`
-	Causes        []CauseRow      `json:"by_cause"`
-	Expiry        ExpiryReport    `json:"ttl_expiry"`
-	Warnings      []model.Warning `json:"warnings,omitempty"`
-	Notes         []string        `json:"notes"`
+	SchemaVersion int            `json:"schema_version"`
+	Session       SessionInfo    `json:"session"`
+	ObservedTTL   string         `json:"observed_ttl"`
+	Writes5m      model.Quantity `json:"cache_writes_5m"`
+	Writes1h      model.Quantity `json:"cache_writes_1h"`
+	PromptCost    model.Quantity `json:"prompt_cost"`
+	// SessionCost is prompt and output together, and it is here because it is
+	// the other denominator a reader might have in mind.
+	//
+	// Every share this command printed was of prompt cost. `optimise` prints
+	// a share of the session's total. Both are correct and they are different
+	// numbers for the same cost, so a reader who collected one of each into a
+	// column got a table that was wrong without any cell in it looking wrong.
+	// Printing both, with the base on the line, is the fix.
+	SessionCost model.Quantity  `json:"session_cost"`
+	Causes      []CauseRow      `json:"by_cause"`
+	Expiry      ExpiryReport    `json:"ttl_expiry"`
+	Warnings    []model.Warning `json:"warnings,omitempty"`
+	Notes       []string        `json:"notes"`
 }
 
 // CauseRow is one attributed cause of cache rebuilding.
@@ -31,19 +40,22 @@ type Cache struct {
 // them on the evidence of one, which is the kind of rounding-up this tool
 // exists to refuse.
 type CauseRow struct {
-	Cause           string         `json:"cause"`
-	Calls           model.Quantity `json:"calls"`
-	Rebuilt         model.Quantity `json:"rebuilt_tokens"`
-	Cost            model.Quantity `json:"cost"`
+	Cause   string         `json:"cause"`
+	Calls   model.Quantity `json:"calls"`
+	Rebuilt model.Quantity `json:"rebuilt_tokens"`
+	Cost    model.Quantity `json:"cost"`
+	// Both denominators. See Cache.SessionCost.
 	Share           model.Quantity `json:"share_of_prompt_cost"`
+	ShareOfSession  model.Quantity `json:"share_of_session_cost"`
 	AvoidableCalls  model.Quantity `json:"avoidable_by_longer_ttl_calls"`
 	AvoidableTokens model.Quantity `json:"avoidable_by_longer_ttl_tokens"`
 }
 
 // ExpiryReport isolates what a longer TTL could have addressed.
 type ExpiryReport struct {
-	Cost  model.Quantity `json:"cost"`
-	Share model.Quantity `json:"share_of_prompt_cost"`
+	Cost           model.Quantity `json:"cost"`
+	Share          model.Quantity `json:"share_of_prompt_cost"`
+	ShareOfSession model.Quantity `json:"share_of_session_cost"`
 	// Avoidable is the part a 1-hour lifetime would have covered. Gaps over
 	// an hour expire under either TTL.
 	Avoidable model.Quantity `json:"avoidable_by_1h"`
@@ -58,10 +70,11 @@ type ExpiryReport struct {
 	Saved   model.Quantity `json:"longer_ttl_saved"`
 	Premium model.Quantity `json:"longer_ttl_premium"`
 	// LongerTTLNet is Premium minus Saved. Negative is a saving.
-	LongerTTLNet   model.Quantity `json:"longer_ttl_net"`
-	LongerTTLShare model.Quantity `json:"longer_ttl_net_share"`
-	Note           string         `json:"note"`
-	NetNote        string         `json:"net_note"`
+	LongerTTLNet          model.Quantity `json:"longer_ttl_net"`
+	LongerTTLShare        model.Quantity `json:"longer_ttl_net_share"`
+	LongerTTLShareSession model.Quantity `json:"longer_ttl_net_share_of_session"`
+	Note                  string         `json:"note"`
+	NetNote               string         `json:"net_note"`
 }
 
 // BuildCache computes the cache report.
@@ -74,12 +87,14 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 		Writes5m:      model.Obs(float64(c.Writes5m), model.Tokens),
 		Writes1h:      model.Obs(float64(c.Writes1h), model.Tokens),
 		PromptCost:    model.Der(c.TotalCostEIT, model.EIT),
+		SessionCost:   model.Der(c.SessionCostEIT(), model.EIT),
 		Expiry: ExpiryReport{
-			Cost:      model.Der(c.ExpiryCostEIT, model.EIT),
-			Share:     model.Der(c.ExpiryShare, model.Ratio),
-			Avoidable: model.Der(float64(c.AvoidableTokens), model.Tokens),
-			Calls:     model.Der(float64(expiry.Calls), model.Calls),
-			WarmAt1h:  model.Der(float64(expiry.AvoidableCalls), model.Calls),
+			Cost:           model.Der(c.ExpiryCostEIT, model.EIT),
+			Share:          model.Der(c.ExpiryShare, model.Ratio),
+			ShareOfSession: model.Der(c.ExpiryShareOfSession, model.Ratio),
+			Avoidable:      model.Der(float64(c.AvoidableTokens), model.Tokens),
+			Calls:          model.Der(float64(expiry.Calls), model.Calls),
+			WarmAt1h:       model.Der(float64(expiry.AvoidableCalls), model.Calls),
 			Saved: model.Quantity{
 				Value: c.LongerTTLSavedEIT, Unit: model.EIT, Prov: model.Counterfactual,
 			},
@@ -91,6 +106,9 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 			},
 			LongerTTLShare: model.Quantity{
 				Value: c.LongerTTLShare, Unit: model.Ratio, Prov: model.Counterfactual,
+			},
+			LongerTTLShareSession: model.Quantity{
+				Value: c.LongerTTLShareSession, Unit: model.Ratio, Prov: model.Counterfactual,
 			},
 			NetNote: "A counterfactual, but with no assumed parameter: every input " +
 				"is observed. Both halves are shown because a net figure asks to be " +
@@ -109,6 +127,7 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 			"The TTL each call used is observed, from the API's own 5m/1h split.",
 			"A cache entry's lifetime runs from request start and a read refreshes it, so calls starting closer together than the TTL keep the prefix warm.",
 			"Claude Code exposes promptCacheTtl and subagentPromptCacheTtl (5m or 1h) since v2.1.242.",
+			"Every share is printed against both denominators: prompt cost, and the session's total cost with output in it. `optimise` reports against the total, so that is the column its figures are comparable with.",
 		},
 	}
 
@@ -119,6 +138,7 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 			Rebuilt:         model.Obs(float64(agg.Tokens), model.Tokens),
 			Cost:            model.Der(agg.CostEIT, model.EIT),
 			Share:           model.Der(agg.Share, model.Ratio),
+			ShareOfSession:  model.Der(agg.ShareOfSession, model.Ratio),
 			AvoidableCalls:  model.Der(float64(agg.AvoidableCalls), model.Calls),
 			AvoidableTokens: model.Der(float64(agg.AvoidableTokens), model.Tokens),
 		})
@@ -137,6 +157,7 @@ func RenderCache(w io.Writer, r Cache) error {
 	line(b, "  Writes at 5m", r.Writes5m)
 	line(b, "  Writes at 1h", r.Writes1h)
 	line(b, "  Prompt cost", r.PromptCost)
+	line(b, "  Session cost", r.SessionCost)
 	for _, w := range r.Warnings {
 		fmt.Fprintf(b, "  ! %s\n", wrap(w.Detail, 70, "    "))
 	}
@@ -150,22 +171,29 @@ func RenderCache(w io.Writer, r Cache) error {
 	}
 
 	b.WriteString("Why the cache was rebuilt\n")
-	fmt.Fprintf(b, "  %-22s %7s %14s %12s %8s\n", "CAUSE", "CALLS", "TOKENS", "COST (EIT)", "% COST")
+	// Two percentage columns, each headed by its denominator. One column
+	// headed "% COST" left the base to be guessed at, and the guess a reader
+	// made was the one `optimise` uses.
+	fmt.Fprintf(b, "  %-22s %7s %14s %12s %8s %8s\n",
+		"CAUSE", "CALLS", "TOKENS", "COST (EIT)", "% PROMPT", "% TOTAL")
 	for _, c := range r.Causes {
 		marker := ""
 		if n := int(c.AvoidableCalls.Value); n > 0 {
 			marker = fmt.Sprintf("  <- %s of %s avoidable at 1h",
 				num(n), num(int(c.Calls.Value)))
 		}
-		fmt.Fprintf(b, "  %-22s %7s %14s %12s %7.1f%%%s\n",
+		fmt.Fprintf(b, "  %-22s %7s %14s %12s %7.1f%% %7.1f%%%s\n",
 			trunc(c.Cause, 22), num(int(c.Calls.Value)), num(int(c.Rebuilt.Value)),
-			num(int(c.Cost.Value)), c.Share.Value*100, marker)
+			num(int(c.Cost.Value)), c.Share.Value*100, c.ShareOfSession.Value*100, marker)
 	}
 	b.WriteString("\n")
 
 	b.WriteString("TTL expiry\n")
 	line(b, "  Cost", r.Expiry.Cost)
-	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]\n", "  Share of prompt cost", r.Expiry.Share.Value*100, r.Expiry.Share.Prov)
+	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]\n", "  Share of prompt cost",
+		r.Expiry.Share.Value*100, r.Expiry.Share.Prov)
+	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]   (prompt and output)\n", "  Share of total cost",
+		r.Expiry.ShareOfSession.Value*100, r.Expiry.ShareOfSession.Prov)
 	line(b, "  Avoidable at 1h", r.Expiry.Avoidable)
 	fmt.Fprintf(b, "  %s\n\n", wrap(r.Expiry.Note, 72, "  "))
 
@@ -177,6 +205,8 @@ func RenderCache(w io.Writer, r Cache) error {
 	line(b, "  Net change", r.Expiry.LongerTTLNet)
 	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]\n", "  Share of prompt cost",
 		r.Expiry.LongerTTLShare.Value*100, r.Expiry.LongerTTLShare.Prov)
+	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]   (prompt and output)\n", "  Share of total cost",
+		r.Expiry.LongerTTLShareSession.Value*100, r.Expiry.LongerTTLShareSession.Prov)
 	fmt.Fprintf(b, "  %s\n\n", wrap(r.Expiry.NetNote, 72, "  "))
 
 	_, err := io.WriteString(w, b.String())

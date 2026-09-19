@@ -6,16 +6,18 @@ Session carry-fixture
   Writes at 5m                 74,900   [observed]
   Writes at 1h                      0   [observed]
   Prompt cost                 107,359   [derived]
+  Session cost                110,509   [derived]
 
 Why the cache was rebuilt
-  CAUSE                    CALLS         TOKENS   COST (EIT)   % COST
-  ttl_expiry                   1         34,500       43,125    40.2%  <- 1 of 1 avoidable at 1h
-  session_start                1         30,000       37,500    34.9%
-  compaction_or_reset          1          6,100        7,625     7.1%
+  CAUSE                    CALLS         TOKENS   COST (EIT) % PROMPT  % TOTAL
+  ttl_expiry                   1         34,500       43,125    40.2%    39.0%  <- 1 of 1 avoidable at 1h
+  session_start                1         30,000       37,500    34.9%    33.9%
+  compaction_or_reset          1          6,100        7,625     7.1%     6.9%
 
 TTL expiry
   Cost                         43,125   [derived]
   Share of prompt cost          40.2%   [derived]
+  Share of total cost           39.0%   [derived]   (prompt and output)
   Avoidable at 1h              34,500   [derived]
   Expiry is attributed by elimination, after the observable causes. MCP
   server changes, plugin toggles and tool-deny rules also invalidate the
@@ -29,6 +31,7 @@ Switching to the 1-hour TTL
   1h write premium costs         30,300   [counterfactual]
   Net change                   -9,375   [counterfactual]
   Share of prompt cost          -8.7%   [counterfactual]
+  Share of total cost           -8.5%   [counterfactual]   (prompt and output)
   A counterfactual, but with no assumed parameter: every input is
   observed. Both halves are shown because a net figure asks to be trusted
   and these can be checked. The avoided rewrite is not free -- the prefix
