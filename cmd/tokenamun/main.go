@@ -28,7 +28,8 @@ var version = "dev"
 const usage = `tokenamun - a profiler for coding-agent token usage
 
 Usage:
-  tokenamun sessions              list the sessions it can see
+  tokenamun sessions              list the sessions it can see, with what
+                                  each one cost; --sort cost ranks them
   tokenamun doctor                whether either source is set up to record here
   tokenamun profile [session]     where the tokens went, and what they cost
   tokenamun retrieval [session]   what content entered the context, and from where
@@ -76,6 +77,7 @@ Flags:
                   and stays exact within a model; this is for the total that
                   spans two of them, where EIT adds different-sized things.
   --no-cache      re-read every transcript, ignoring the parse cache
+  --sort ORDER    order for sessions: recent (default) | cost | calls
   --dir PATH      directory to look in (default: working directory)
   --source SRC    entire | local | any (default: any)
   -o FILE         output file (report; default tokenamun-report.html)
@@ -127,6 +129,7 @@ func run(args []string) error {
 	noCache := fs.Bool("no-cache", false, "re-read every transcript, ignoring the parse cache")
 	dir := fs.String("dir", ".", "directory to look in")
 	source := fs.String("source", "any", "entire | local | any")
+	sortBy := fs.String("sort", "", "order for `sessions`: recent | cost | calls")
 	out := fs.String("o", "tokenamun-report.html", "output file for the report")
 	interventionCost := fs.Float64("cost", 0, "measured intervention cost in EIT, for payback")
 	scanDir := fs.String("scan", "", "tree to scan for code metrics (default: --dir)")
@@ -185,7 +188,7 @@ func run(args []string) error {
 	case "doctor":
 		return cmdDoctor(*dir, *asJSON)
 	case "sessions":
-		return cmdSessions(*dir, *source, *asJSON)
+		return cmdSessions(*dir, *source, *sortBy, *asJSON)
 	case "profile":
 		return cmdProfile(*dir, *source, selector, *asJSON, *withPrices)
 	case "retrieval":
@@ -320,16 +323,10 @@ func discover(dir, source string) ([]model.SessionRef, error) {
 	return refs, nil
 }
 
-func cmdSessions(dir, source string, asJSON bool) error {
+func cmdSessions(dir, source, sortBy string, asJSON bool) error {
 	refs, err := discover(dir, source)
 	if err != nil {
 		return err
-	}
-	if asJSON {
-		return writeJSON(map[string]any{
-			"schema_version": report.SchemaVersion,
-			"sessions":       refs,
-		})
 	}
 	if len(refs) == 0 {
 		fmt.Println("No sessions found.")
@@ -359,16 +356,14 @@ func cmdSessions(dir, source string, asJSON bool) error {
 		fmt.Println("inside a session and `tokenamun profile current` will work.")
 		return nil
 	}
-	fmt.Printf("%-38s %-8s %-20s %s\n", "SESSION", "SOURCE", "LAST ACTIVE", "")
-	for _, r := range refs {
-		marker := ""
-		if r.Current {
-			marker = "<- this session"
-		}
-		fmt.Printf("%-38s %-8s %-20s %s\n", r.ID, r.Origin,
-			r.Modified.Format("2006-01-02 15:04"), marker)
+	l, err := report.BuildSessionList(refs, sortBy, parses.Load)
+	if err != nil {
+		return err
 	}
-	return nil
+	if asJSON {
+		return writeJSON(l)
+	}
+	return report.RenderSessionList(os.Stdout, l)
 }
 
 func cmdProfile(dir, source, selector string, asJSON, withPrices bool) error {

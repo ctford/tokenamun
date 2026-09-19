@@ -41,7 +41,14 @@ import (
 // p50/p95/max rather than only as a total and a count. A consumer dividing
 // the two was reading a mean, and a mean reads the same whether a command is
 // expensive on every run or ran once and dumped 200K tokens.
-const SchemaVersion = 6
+//
+// 7: `sessions` grew `calls` and `cost_eit` per session, and top-level
+// `sorted_by`, `unreadable` and `notes`. A consumer reading the old output
+// had no cost in it at all and had to derive one from the transcripts, which
+// is the deduplication rule in METHODOLOGY section 2 waiting to be got wrong:
+// summing assistant entries instead of requests overstates by 66-97% on the
+// fixtures here.
+const SchemaVersion = 7
 
 // Profile is a session overview.
 type Profile struct {

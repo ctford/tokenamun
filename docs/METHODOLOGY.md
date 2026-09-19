@@ -26,10 +26,10 @@ Counterfactuals render in their own section, never inside an observed total,
 and always with an `unknown` section. One that produces an empty `unknown`
 fails a test.
 
-`profile`, `retrieval`, `carry`, `cache`, `scan`, `hotspots`, `series` and
-`optimise` label every figure they print. `tree`, `report` and `compare` do
-not: each reports one quantity throughout, stated in its header, and a label
-on every cell would be noise.
+`sessions`, `profile`, `retrieval`, `carry`, `cache`, `scan`, `hotspots`,
+`series` and `optimise` label every figure they print. `tree`, `report` and
+`compare` do not: each reports one quantity throughout, stated in its header,
+and a label on every cell would be noise.
 
 ## 2. One API call, not one transcript line
 
