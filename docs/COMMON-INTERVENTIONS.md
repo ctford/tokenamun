@@ -20,6 +20,15 @@ Evidence grades used below: **vendor** (self-reported, own benchmark),
 (independent result materially disagrees), **structural** (follows from how the
 API works, hard to dispute). [Sources](#sources) are at the end.
 
+A source can be more than one of those at once, and Anthropic's own cost
+guide is the case that matters here. Its benchmark figures are **vendor** —
+own harness, own tasks, list prices on the day. Its account of what
+invalidates a cached prefix, and the multipliers, are **structural**: that is
+how the API bills, and `internal/cost` already prices with them. Grading the
+whole page at its weakest claim would discard the half this tool depends on;
+grading it at its strongest would dress a benchmark up as a law. Each claim
+below is graded on its own.
+
 ## The one thing everybody agrees on
 
 Input tokens dominate agentic coding spend — commonly cited at 93–99% of
@@ -78,13 +87,24 @@ pre-registered prediction of 2–4. Hence: four token classes priced separately,
 and an intervention that mutates context is reported net of the invalidation or
 not netted at all.
 
-**3. Nobody reports the success rate.** The LSP study's commitment is the one
-worth stealing — its metric is *tokens-to-success*, total context tokens over
-*successful* rollouts, and "we never report a token number without its success
-rate". Every vendor percentage here is a token number without a success rate. A
-65% output reduction that makes the agent re-ask for what it lost is not a 65%
-saving. Hence: Tokenamun cannot see task success, must not imply it can, and
-names the outcome question as unanswered every time.
+**3. Almost nobody reports the success rate.** The LSP study's commitment is
+the one worth stealing — its metric is *tokens-to-success*, total context
+tokens over *successful* rollouts, and "we never report a token number without
+its success rate". Most tool-vendor percentages here are token numbers without
+one. A 65% output reduction that makes the agent re-ask for what it lost is not
+a 65% saving.
+
+The exception is worth understanding rather than just noting. Anthropic's cost
+guide reports accuracy beside cost almost throughout — tool search at 45% less
+cost with accuracy unmoved, uploading a CSV instead of pasting it at 6/25 →
+25/25 correct for 92% less, a prompt audit at 14% cheaper for five points more.
+The asymmetry is structural rather than moral: a model vendor is paid whichever
+way the accuracy number lands, so publishing it costs nothing, while a tool
+vendor whose product *is* the reduction has one number that sells and one that
+can only hurt. That is a reason to read the grades carefully, not a reason to
+trust the model vendor's own benchmarks about its own models. Either way:
+Tokenamun cannot see task success, must not imply it can, and names the outcome
+question as unanswered every time.
 
 ## Volume: less content
 
@@ -100,8 +120,8 @@ Caveman, Headroom, RTK-style adapters.
   independent testing on real agentic tasks measured 8.5% — an eight-fold gap,
   and the cleanest example of why this tool exists. A second vendor figure in
   the same family reports 33.2% fewer input tokens over 54 runs *with 18/18
-  correctness*, which is worth singling out: it is the only claim in this
-  document that reports a success rate alongside a token count. Headroom's own repository
+  correctness*, which is worth singling out: among the tool vendors here it is
+  the only claim that reports a success rate alongside a token count. Headroom's own repository
   line is the honest one: "20% fewer tokens for coding agents, 60–95% fewer
   tokens for JSON" — the headline range is the JSON case and the coding-agent
   case is 20%. RTK claims 60–90% on "common dev commands" (vendor), where the
@@ -180,6 +200,34 @@ data so the same information costs fewer tokens.
   cheapest. The round-trip column tells you whether that is true for you rather
   than assuming it.
 
+### Shorter answers from the model itself
+
+The agent's own output: final summaries, the narration between tool calls, and
+whatever shape the system prompt asks answers to take.
+
+* **Acts on** `model output`, which is the largest box in some sessions here —
+  45% of one — and contains `model output / tool inputs` at 16% to 48%.
+* **Addressable, measured:** output tokens are observed per call and weighted
+  at 5.0. This is the one branch where volume and cost diverge by a multiple
+  upwards rather than a tenth downwards.
+* **Why it compounds:** in an agent loop every token the model writes comes
+  back as input on every later turn. It is billed once at 5.0 and then carried
+  — the residency argument the rest of this document makes, with a five-fold
+  head start.
+* **The evidence, graded: vendor.** One triage job under three final-answer
+  instructions: one line at $0.49 a run, the original two lines at $0.57, a
+  five-section memo at $1.40. The one-line form used 39% fewer output tokens
+  than the two-line and cost 14% less. All three scored between 78% and 85%
+  correct and the published figures do not say which format landed where in
+  that band, so the supportable reading is that nearly three times the output
+  spend bought nothing visible — not that brevity was free.
+* **What nobody measures:** where your own curve turns over. An answer format
+  too cramped to carry the finding costs a follow-up question, and a follow-up
+  question is a whole round trip.
+* **Check it:** `--at "model output" --optimise 0.7 --why "..."`. What comes
+  back is the direct saving; the carry it avoids on later turns is the larger
+  half and is not in it.
+
 ### Trimming instructions and the preamble
 
 `CLAUDE.md`, `AGENTS.md`, skills, tool schemas — everything sent before any
@@ -195,6 +243,16 @@ work happens.
   43-hour session) and dominant in a short one (38% of a 19-call session). If
   your work is many short sessions, this is your biggest line item; if it is
   few long ones, it is noise. `tokenamun period` tells you which you have.
+* **Stale instructions are not free, and the sign surprises people.** A prompt
+  written for an older model can cost *more* on a newer one: a support-desk
+  prompt carried from Opus 4.8 to Opus 5 ran 36% more expensive for no accuracy
+  gain, and auditing it turned that into 14% cheaper and five points better
+  (vendor). The patterns named are instructions that compensate for a weaker
+  model — "verify twice", hand-rolled reasoning scratchpads, mandatory
+  step-by-step procedures that force extra tool rounds. **Not measurable here:**
+  the preamble's size is observed and its contents are not, so this is a thing
+  to do rather than a thing to check. The before-and-after is observable, by
+  `tokenamun compare` on two sessions.
 
 ## Round trips: the same content, re-sent fewer times
 
@@ -222,6 +280,33 @@ forward.
   no boundary to clear at. It may matter much more for a working style of many
   short tasks in one session.
 
+### Pruning stale results at a task boundary
+
+Replacing large, finished tool results with a one-line extract while leaving
+the conversation otherwise intact. Distinct from clearing: the thread survives,
+so there is nothing to say again.
+
+* **Acts on** round trips, by ending the residency of content still being paid
+  for after it stopped being useful.
+* **Addressable, measured:** this is the intervention this tool is best placed
+  to price. `tokenamun carry` gives the cost of keeping a thing and `tree`
+  gives the round trips, so the ceiling is the carry on large tool results
+  after the point they were last needed.
+* **What is not observable:** that point. A transcript records when content
+  arrived and when the context reset, not when the agent stopped caring. Name
+  the boundary yourself and the tool will price it.
+* **The evidence, graded: vendor, and it cuts both ways.** On a long run a
+  prune saved 39% and compaction 32%. On a short one it saved *nothing*, and a
+  context-editing variant cost 74% more. That is the denominator problem in §1
+  conceded by the vendor: the technique is worth nothing until there is stale
+  content to prune, and a short session does not have any.
+* **Netting:** editing history breaks the prefix from that point. Measured
+  there it cached well anyway — 89% cache reads on the first request after a
+  boundary, 81% between them — because the edits sit at the tail, where the
+  next task was going to add content regardless. The rule that follows is to
+  prune in few large batches rather than many small ones, since each one pays
+  for a rebuild.
+
 ### Subagents
 
 Delegating exploration so the orchestrator's context never sees it.
@@ -236,6 +321,14 @@ Delegating exploration so the orchestrator's context never sees it.
   Without it, a claimed net saving is unverifiable — you are comparing a
   measured parent-side saving against an unmeasured child-side cost. Tokenamun
   reports which half it has.
+* **The evidence, graded: vendor, both directions.** Delegation is reported to
+  insure the median rather than the hard cases: on a deliberately easy slice a
+  frontier model alone reached $33 at the 90th percentile against $12 for the
+  delegated configuration, and its single most expensive run, $84, was also
+  wrong. On work that fits one context window, or that is one dependent chain,
+  the single model was cheaper every time. Both halves are consistent with the
+  measurement gap above — the saving lives in the child's spend, which is
+  exactly what is absent here.
 
 ### Compaction
 
@@ -245,6 +338,35 @@ Delegating exploration so the orchestrator's context never sees it.
   session is resident for the whole of it.
 * **Worth knowing:** compaction is also a cache miss, so it appears in
   `tokenamun cache` under its own cause rather than being blamed on the TTL.
+
+### Lowering effort
+
+Asking for less thinking, less verification and fewer tool calls per turn.
+
+* **Acts on** round trips first and output volume second, which is why it is
+  here rather than under price: the rate per token does not change, the number
+  of calls does.
+* **Observed, partly:** the effort of every call is in the transcript and
+  Tokenamun already reads it — a change of effort is one of the cache-miss
+  causes it attributes, and it is priced. What is missing is the
+  counterfactual. Nothing in one session says what the same work would have
+  cost at a lower setting, so this needs a second session rather than an
+  assumed ratio.
+* **The evidence, graded: vendor, and strongly workload-dependent.** On
+  long-horizon coding the curve is steep: about 2 points off for half the cost
+  at `medium`, about 8 points off for a quarter at `low`. On knowledge and
+  research work it is nearly flat, `medium` matching `high` at 70–87% of cost.
+  A single figure for "lower effort" would be meaningless. The shape is the
+  finding.
+* **The strongest version of this is closed to us.** Running everything at
+  `low` and re-running only the failures reached about 93% pass at roughly
+  $0.45 an attempt, against 91.7% at $0.93. It is the best cost result in that
+  document and it is unavailable to a profiler, because it needs a pass/fail
+  signal and Tokenamun cannot see one. Worth stating plainly: the largest lever
+  on this list is gated on the thing this tool explicitly cannot measure.
+* **Also:** changing effort mid-session invalidates the prefix from that point.
+  `tokenamun cache` prices that under `effort_change` — so the cost of
+  *switching* is measured even though the benefit of *having switched* is not.
 
 ## Price: the same content, cheaper per send
 
@@ -264,6 +386,17 @@ Moving from the 5-minute prompt cache to the 1-hour one —
   short bursts that never idles past five minutes buys a lifetime it never
   uses. On one 19-call session over 15 minutes this came out 23% worse; on a
   1,926-call session over 43 hours it was 7.4% better.
+* **There is a third option, and Tokenamun does not price it yet.** Rather
+  than buying the longer lifetime you can keep the short one warm: resend the
+  previous request with `max_tokens` set to 0 within four minutes of that
+  request's *start*, and every four minutes after. On the 5.1 generation, whose
+  cache reads are 0.025× rather than 0.1×, that measured 13–20% cheaper per
+  session than the 1-hour TTL whenever pauses ran for minutes; the 1-hour
+  setting only won once pauses approached 45 minutes, and then by about twelve
+  cents a session (vendor, over structural multipliers). Every input to that
+  comparison is observed here — the gaps, the prefix sizes, the per-model read
+  rate — so `tokenamun cache` offers a two-way counterfactual where the data
+  supports a three-way one.
 * **Check it:** `tokenamun cache`. The by-cause table is the whole answer.
 
 ### Avoiding mid-session cache invalidation
@@ -282,14 +415,40 @@ Fewer `/model` switches, fewer effort changes, fewer plugin toggles.
 * **Observed:** the model per API call, so per-model token and call
   distributions are available. Cost weights are model-relative, so a
   mixed-model session still adds up.
-* **The evidence, graded: vendor.** Routing the easy 80% of steps to a small
-  model and escalating the hard 20% is reported at ~12% of all-frontier cost.
-  If that holds even approximately it dominates every compression result in
-  this document — and unlike them it is measurable from this data, because the
-  model per API call is observed.
+* **The evidence, graded: vendor, and better than the routing claim it
+  replaces.** An earlier version of this entry cited "route the easy 80% of
+  steps to a small model, escalate the hard 20%, pay ~12% of all-frontier
+  cost". The controlled versions are less flattering and more useful. Two
+  shapes are distinguished: an **advisor**, where a cheaper executor escalates
+  hard decisions, and an **orchestrator**, where a frontier model plans and
+  delegates bulk work to cheaper workers.
+* **Where an orchestrator pays:** on a 21.6-million-token corpus — larger than
+  any context window — a lead over 25 cheaper workers cost 47–55% less than
+  the same model solo ($468–$552 an episode) and took about 2.3 hours against
+  15 to 20, for 10 to 12 points of accuracy. The condition is work that fans
+  out into independent pieces, not the price of the models.
+* **Where they do not, which is the half worth carrying:** on the full
+  BrowseComp set the single model alone reached the coordinator's accuracy at
+  22–30% *lower* cost. An advisor pairing on chart reading came in at 65.0
+  against the advisor model working alone at 67.5 — within noise — for about
+  2.6× the cost per task, because the executor consulted on nearly every task.
+  The stated rule is to baseline one model's whole effort curve before adding
+  a second, which is the same instinct as refusing to model an intervention
+  here.
+* **Price the tail, not the median.** On one 20-problem run, two problems
+  carried 43% of the spend. That is the strongest argument in that document
+  for looking at a distribution rather than a total, and it sits awkwardly
+  beside the rule below about never reporting by developer — a tail of
+  sessions can be one person's week. Left unresolved here deliberately; it is
+  a decision, not a feature.
 * **Not a token question:** switching model changes price *and* changes the
-  work. `tokenamun compare` on two sessions is the honest form, and even that
-  cannot see whether the output was as good.
+  count. The same text is reported to cost about 30% more tokens on Opus 4.7
+  and later, which is a tokenizer change rather than a behavioural one. A token
+  delta measured across a model switch is therefore not a saving and may not
+  have the right sign. It also means the byte-ratio estimator in
+  [`METHODOLOGY.md`](METHODOLOGY.md#7-what-it-cannot-measure) is calibrated per
+  session for a reason. `tokenamun compare` on two sessions is the honest form,
+  and even that cannot see whether the output was as good.
 
 ## Not measurable from a transcript
 
@@ -334,6 +493,15 @@ is not only cost. Claude Code already applies this automatically once
 deferrable definitions exceed 10% of the context window, so many teams have the
 effect without having chosen it.
 
+A later and better-controlled run is worth the update, because it holds
+accuracy fixed while varying the thing that matters. Growing a catalogue to
+502 tools nearly doubled the cost of a run with every definition loaded, and
+left it flat at every catalogue size behind tool search — 45% less at 502 —
+with accuracy 15 to 18 of 20 in every cell either way. Deferring a single
+public GitHub MCP server's toolset cut a run 20% at the same accuracy. The
+saving is still a function of how many schemas you had loaded, which is the
+point: it is a property of your baseline, and yours is not decomposable here.
+
 ### Fewer or smaller skills
 
 Definition sizes are on disk, not in the transcript. Entire records which
@@ -377,7 +545,7 @@ content was retrieved to find things, from where, how much was re-retrieved,
 and what carrying it cost. The post-intervention side needs a second session.
 `tokenamun period --since` is the before-and-after form.
 
-## Two things worth keeping in view
+## Three things worth keeping in view
 
 * **Prompt caching is the highest-leverage thing most teams already have.**
   Cached input at 10–25% of list price, applied to the 93–99% of spend that is
@@ -390,6 +558,14 @@ and what carrying it cost. The post-intervention side needs a second session.
   server bought precision at a token premium. Efficiency and quality are not
   opposite ends of one axis — which is another reason not to report a
   reduction as an improvement.
+* **The unit that matters is cost per completed task, and this tool measures
+  the numerator.** That is the stated golden rule of the vendor whose figures
+  get quoted at people hardest, and it is also the exact shape of what
+  Tokenamun cannot see. A session that spent less because the agent gave up is
+  indistinguishable here from one that spent less because it worked better. The
+  same document closes by saying its own numbers are directional and should be
+  tested on your own workload, which is this tool's whole argument arriving
+  from the other direction.
 
 ## Where to start
 
@@ -409,10 +585,15 @@ inversion this document exists to make possible.
 4. **Preamble size.** Observed exactly, bounded in decomposition, and the
    multiplier by call count is usually the surprise. Check whether your work is
    many short sessions before spending time here.
-5. **Output compression, including a compact format.** Real addressable volume,
-   an assumed ratio, and a behavioural risk nobody measures. Measure the ratio
-   on your own content before quoting anyone's.
-6. **MCP and tool-schema interventions.** Plausible, possibly large,
+5. **Effort and model choice.** Observed per call, but the counterfactual
+   needs a second session rather than an assumed ratio — which is a better
+   class of evidence than a ratio you picked, not a worse one. Sweep the effort
+   curve on one model before reaching for two.
+6. **Output volume, the model's and the tools'.** Real addressable volume, an
+   assumed ratio, and a behavioural risk nobody measures. The model's own
+   output is weighted at 5.0 and then carried, so start there. Measure the
+   ratio on your own content before quoting anyone's.
+7. **MCP and tool-schema interventions.** Plausible, possibly large,
    unmeasurable here. If you want evidence, measure at the request layer. That
    is a different tool, and saying so beats inventing a percentage.
 
@@ -466,7 +647,8 @@ It is also the failure mode this tool is closest to. A profiler that reported
 
 Anthropic — [Code execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp) ·
 [Advanced tool use / tool search](https://www.anthropic.com/engineering/advanced-tool-use) ·
-[Tool search tool docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool)
+[Tool search tool docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool) ·
+[Optimizing for cost and intelligence](https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence)
 
 Independent measurement — [Does a Language Server Save Tokens for Coding Agents? (arXiv 2608.13568)](https://arxiv.org/html/2608.13568) ·
 [How Do AI Agents Spend Your Money? (arXiv 2604.22750)](https://arxiv.org/pdf/2604.22750) ·

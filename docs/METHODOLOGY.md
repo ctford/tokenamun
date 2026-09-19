@@ -127,6 +127,21 @@ misses would have happened under any TTL:
 MCP, plugin and tool-set changes are not observable from a transcript, so they
 land in `unexplained` rather than being guessed at.
 
+The bucket can at least be named. A cached prefix is a byte-exact match over
+tools, then system, then messages, so anything that edits an earlier byte
+invalidates everything after it. Published causes that leave no trace in a
+transcript: adding, removing or reordering a tool, which invalidates the whole
+prefix rather than part of it; setting or changing a structured output format,
+which invalidates the conversation; editing the system prompt; and per-request
+data placed ahead of the stable prefix — a timestamp or a queue position —
+which turns every single request into a full cache write. That last one is the
+expensive one and the easiest to do by accident: a 25-token status line in the
+wrong position has been measured taking one run from $0.59 to $4.24.
+
+Naming them is not detecting them. They stay in `unexplained`, and the reason
+to list them is that a large `unexplained` line is a prompt to go and look at
+the harness rather than a shrug.
+
 Expiry usually dominates, but as a result rather than an assumption: on one
 team's week it was 24.4% of prompt cost over 640 calls. On another dataset it
 could be model switching instead.
