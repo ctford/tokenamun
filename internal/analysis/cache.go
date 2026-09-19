@@ -86,6 +86,17 @@ type CacheReport struct {
 	// calculation that made both came out at 11.1%.
 	LongerTTLNetEIT float64 `json:"longer_ttl_net_eit"`
 	LongerTTLShare  float64 `json:"longer_ttl_net_share_of_prompt_cost"`
+	// The two halves the net is made of, both as positive magnitudes:
+	// LongerTTLSavedEIT is what the avoided rewrites stop costing, and
+	// LongerTTLPremiumEIT is what the writes you still make cost extra at
+	// 2.0x. Net is the premium minus the saving.
+	//
+	// Reported separately because a single net figure asks to be trusted and
+	// these two can be checked. They are also the only way to see *why* the
+	// answer came out the way it did: a session with a big saving and a
+	// bigger premium looks identical, in the net, to one with neither.
+	LongerTTLSavedEIT   float64 `json:"longer_ttl_saved_eit"`
+	LongerTTLPremiumEIT float64 `json:"longer_ttl_premium_eit"`
 }
 
 // ttlBucket accumulates the counterfactual's inputs for one pricing.
@@ -147,12 +158,15 @@ func longerTTL(r *CacheReport, buckets ttlBuckets) {
 			avoidable = float64(b.writes5m)
 		}
 		r.AvoidableTokens += int64(avoidable)
-		old := float64(b.writes5m) * b.w.CacheWrite5m
 		// The avoided rewrite does not vanish: the prefix is still sent, as a
-		// cache read.
-		now := (float64(b.writes5m)-avoidable)*b.w.CacheWrite1h + avoidable*b.w.CacheRead
-		r.LongerTTLNetEIT += now - old
+		// cache read, so the saving is the difference between the two rates
+		// rather than the whole write.
+		r.LongerTTLSavedEIT += avoidable * (b.w.CacheWrite5m - b.w.CacheRead)
+		// Every write you still make reprices.
+		r.LongerTTLPremiumEIT += (float64(b.writes5m) - avoidable) *
+			(b.w.CacheWrite1h - b.w.CacheWrite5m)
 	}
+	r.LongerTTLNetEIT = r.LongerTTLPremiumEIT - r.LongerTTLSavedEIT
 	if r.TotalCostEIT > 0 {
 		r.LongerTTLShare = r.LongerTTLNetEIT / r.TotalCostEIT
 	}
@@ -375,6 +389,8 @@ func Merge(reports []CacheReport) CacheReport {
 		out.UnexplainedCost += r.UnexplainedCost
 		out.AvoidableTokens += r.AvoidableTokens
 		out.LongerTTLNetEIT += r.LongerTTLNetEIT
+		out.LongerTTLSavedEIT += r.LongerTTLSavedEIT
+		out.LongerTTLPremiumEIT += r.LongerTTLPremiumEIT
 		if r.ObservedTTL != "" {
 			ttls[r.ObservedTTL] = true
 		}

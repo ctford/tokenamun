@@ -47,8 +47,17 @@ type ExpiryReport struct {
 	// Avoidable is the part a 1-hour lifetime would have covered. Gaps over
 	// an hour expire under either TTL.
 	Avoidable model.Quantity `json:"avoidable_by_1h"`
-	// LongerTTLNet is what switching would have cost, net of repricing every
-	// other write from 1.25x to 2.0x. Negative is a saving.
+	// Calls is how many expiries were attributed, and WarmAt1h how many of
+	// them a longer lifetime would have covered. The rest ran over an hour
+	// and expire either way.
+	Calls    model.Quantity `json:"expiry_calls"`
+	WarmAt1h model.Quantity `json:"would_stay_warm_at_1h_calls"`
+	// Saved and Premium are the two halves of the net, as positive
+	// magnitudes: what the avoided rewrites stop costing, and what the
+	// surviving writes cost extra at 2.0x.
+	Saved   model.Quantity `json:"longer_ttl_saved"`
+	Premium model.Quantity `json:"longer_ttl_premium"`
+	// LongerTTLNet is Premium minus Saved. Negative is a saving.
 	LongerTTLNet   model.Quantity `json:"longer_ttl_net"`
 	LongerTTLShare model.Quantity `json:"longer_ttl_net_share"`
 	Note           string         `json:"note"`
@@ -57,6 +66,7 @@ type ExpiryReport struct {
 
 // BuildCache computes the cache report.
 func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
+	expiry := c.ByCause[analysis.CauseTTLExpiry]
 	r := Cache{
 		SchemaVersion: SchemaVersion,
 		Session:       sessionInfo(s),
@@ -68,6 +78,14 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 			Cost:      model.Der(c.ExpiryCostEIT, model.EIT),
 			Share:     model.Der(c.ExpiryShare, model.Ratio),
 			Avoidable: model.Der(float64(c.AvoidableTokens), model.Tokens),
+			Calls:     model.Der(float64(expiry.Calls), model.Calls),
+			WarmAt1h:  model.Der(float64(expiry.AvoidableCalls), model.Calls),
+			Saved: model.Quantity{
+				Value: c.LongerTTLSavedEIT, Unit: model.EIT, Prov: model.Counterfactual,
+			},
+			Premium: model.Quantity{
+				Value: c.LongerTTLPremiumEIT, Unit: model.EIT, Prov: model.Counterfactual,
+			},
 			LongerTTLNet: model.Quantity{
 				Value: c.LongerTTLNetEIT, Unit: model.EIT, Prov: model.Counterfactual,
 			},
@@ -75,10 +93,12 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 				Value: c.LongerTTLShare, Unit: model.Ratio, Prov: model.Counterfactual,
 			},
 			NetNote: "A counterfactual, but with no assumed parameter: every input " +
-				"is observed. The avoided rewrite is not free -- the prefix is still " +
-				"sent, as a cache read at a tenth of input price -- and every write " +
-				"you still make is repriced from 1.25x to 2.0x. Both are in the net " +
-				"figure. It comes out positive on a session of short bursts.",
+				"is observed. Both halves are shown because a net figure asks to be " +
+				"trusted and these can be checked. The avoided rewrite is not free -- " +
+				"the prefix is still sent, as a cache read -- so the saving is the gap " +
+				"between the two rates, not the whole write. The premium is every " +
+				"write you still make, repriced from 1.25x to 2.0x. On a session of " +
+				"short bursts the premium wins and switching costs you money.",
 			Note: "Expiry is attributed by elimination, after the observable causes. " +
 				"MCP server changes, plugin toggles and tool-deny rules also " +
 				"invalidate the cache and are not visible in a transcript, so they " +
@@ -146,6 +166,10 @@ func RenderCache(w io.Writer, r Cache) error {
 	fmt.Fprintf(b, "  %s\n\n", wrap(r.Expiry.Note, 72, "  "))
 
 	b.WriteString("Switching to the 1-hour TTL\n")
+	line(b, "  Expirations", r.Expiry.Calls)
+	line(b, "  Would stay warm", r.Expiry.WarmAt1h)
+	line(b, "  Avoided rewrites save", r.Expiry.Saved)
+	line(b, "  1h write premium costs", r.Expiry.Premium)
 	line(b, "  Net change", r.Expiry.LongerTTLNet)
 	fmt.Fprintf(b, "%-22s %13.1f%%   [%s]\n", "  Share of prompt cost",
 		r.Expiry.LongerTTLShare.Value*100, r.Expiry.LongerTTLShare.Prov)

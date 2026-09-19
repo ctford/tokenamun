@@ -435,3 +435,56 @@ func TestAvoidabilityIsCountedPerCallNotFlaggedPerCause(t *testing.T) {
 		t.Errorf("avoidable tokens = %d, want 50000 (not the row's 110,000)", agg.AvoidableTokens)
 	}
 }
+
+func TestLongerTTLNetIsThePremiumMinusTheSaving(t *testing.T) {
+	// The identity that makes the two halves worth printing. If they do not
+	// reconstruct the net, the breakdown is decoration.
+	for _, tc := range []struct {
+		name string
+		s    *model.Session
+	}{
+		{"idles, so there is something to avoid", session(
+			inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
+			inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
+		)},
+		{"short bursts, so there is not", session(
+			inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
+			inv(1, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
+		)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Cache(tc.s, TTL5m)
+			if got := r.LongerTTLPremiumEIT - r.LongerTTLSavedEIT; math.Abs(got-r.LongerTTLNetEIT) > 1e-6 {
+				t.Errorf("premium %.1f - saved %.1f = %.1f, but net is %.1f",
+					r.LongerTTLPremiumEIT, r.LongerTTLSavedEIT, got, r.LongerTTLNetEIT)
+			}
+			if r.LongerTTLSavedEIT < 0 || r.LongerTTLPremiumEIT < 0 {
+				t.Errorf("halves must be magnitudes, got saved %.1f premium %.1f",
+					r.LongerTTLSavedEIT, r.LongerTTLPremiumEIT)
+			}
+		})
+	}
+}
+
+func TestSwitchingCostsMoneyWhenNothingIdles(t *testing.T) {
+	// The result the whole calculation exists to be able to produce: a
+	// session of short bursts buys a lifetime it never uses and pays the 2.0x
+	// write premium on everything.
+	s := session(
+		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
+		inv(1, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
+		inv(2, 2*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
+	)
+	r := Cache(s, TTL5m)
+
+	if r.LongerTTLSavedEIT != 0 {
+		t.Errorf("saved = %.1f, want 0: nothing expired", r.LongerTTLSavedEIT)
+	}
+	// 110,000 written, all of it repriced by 0.75.
+	if want := 82_500.0; math.Abs(r.LongerTTLPremiumEIT-want) > 1 {
+		t.Errorf("premium = %.1f, want %.1f", r.LongerTTLPremiumEIT, want)
+	}
+	if r.LongerTTLNetEIT <= 0 {
+		t.Errorf("net = %.1f, want positive: switching should cost money here", r.LongerTTLNetEIT)
+	}
+}

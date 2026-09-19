@@ -23,11 +23,17 @@ TTL expiry
   rather than being blamed on the TTL.
 
 Switching to the 1-hour TTL
+  Expirations                       1   [derived]
+  Would stay warm                   1   [derived]
+  Avoided rewrites save         39,675   [counterfactual]
+  1h write premium costs         30,300   [counterfactual]
   Net change                   -9,375   [counterfactual]
   Share of prompt cost          -8.7%   [counterfactual]
   A counterfactual, but with no assumed parameter: every input is
-  observed. The avoided rewrite is not free -- the prefix is still sent,
-  as a cache read at a tenth of input price -- and every write you still
-  make is repriced from 1.25x to 2.0x. Both are in the net figure. It
-  comes out positive on a session of short bursts.
+  observed. Both halves are shown because a net figure asks to be trusted
+  and these can be checked. The avoided rewrite is not free -- the prefix
+  is still sent, as a cache read -- so the saving is the gap between the
+  two rates, not the whole write. The premium is every write you still
+  make, repriced from 1.25x to 2.0x. On a session of short bursts the
+  premium wins and switching costs you money.
 

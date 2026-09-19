@@ -146,6 +146,26 @@
       "unit": "tokens",
       "provenance": "derived"
     },
+    "expiry_calls": {
+      "value": 1,
+      "unit": "calls",
+      "provenance": "derived"
+    },
+    "would_stay_warm_at_1h_calls": {
+      "value": 1,
+      "unit": "calls",
+      "provenance": "derived"
+    },
+    "longer_ttl_saved": {
+      "value": 39675,
+      "unit": "eit",
+      "provenance": "counterfactual"
+    },
+    "longer_ttl_premium": {
+      "value": 30300,
+      "unit": "eit",
+      "provenance": "counterfactual"
+    },
     "longer_ttl_net": {
       "value": -9375,
       "unit": "eit",
@@ -157,7 +177,7 @@
       "provenance": "counterfactual"
     },
     "note": "Expiry is attributed by elimination, after the observable causes. MCP server changes, plugin toggles and tool-deny rules also invalidate the cache and are not visible in a transcript, so they appear as unexplained rather than being blamed on the TTL.",
-    "net_note": "A counterfactual, but with no assumed parameter: every input is observed. The avoided rewrite is not free -- the prefix is still sent, as a cache read at a tenth of input price -- and every write you still make is repriced from 1.25x to 2.0x. Both are in the net figure. It comes out positive on a session of short bursts."
+    "net_note": "A counterfactual, but with no assumed parameter: every input is observed. Both halves are shown because a net figure asks to be trusted and these can be checked. The avoided rewrite is not free -- the prefix is still sent, as a cache read -- so the saving is the gap between the two rates, not the whole write. The premium is every write you still make, repriced from 1.25x to 2.0x. On a session of short bursts the premium wins and switching costs you money."
   },
   "notes": [
     "The TTL each call used is observed, from the API's own 5m/1h split.",
