@@ -119,15 +119,22 @@ same commit.
   Terse is not silent: a short caveat must still be a claim — "A ceiling, not
   an estimate." — because a one-word label qualifies nothing. Code comments
   are the exception and stay as long as they need to be.
-* **`docs/` argues once.** A claim has one home and everywhere else links to
-  it: stated twice it drifts, and the copies disagree before anyone notices.
-  Why a number is computed the way it is belongs in the doc comment beside the
-  code — `docs/` says what it means. One illustration gives the same figure
-  everywhere it appears, on the same pricing basis. A command name is a claim,
-  so check it against `tokenamun help`; a "not yet built" section is a plan,
-  so it lives in `plans/`. Then stop at the load-bearing sentence: one that
-  adds no claim, number or consequence is a restatement, however well it
-  reads, and one epigram a section is the ration.
+* **`docs/` argues once, for one purpose.** When a document is too long, cut
+  against what the file is for, not against sentence length. Dense prose
+  compresses by about a tenth and reads worse for it, while a passage that
+  does not serve the file's purpose goes whole — and "every sentence carries a
+  claim" is where that analysis starts, not where it ends, because a section
+  can restate what another section established without containing one word of
+  filler.
+
+  Four things that follow. Our measurements stay, but another harness's
+  absolute figures are their baseline wearing our authority: keep the ratio,
+  drop the episode dollar. A claim has one home and everywhere else links to
+  it, since stated twice it drifts and the copies disagree before anyone
+  notices. Why a number is computed the way it is belongs in the doc comment
+  beside the code; `docs/` says what it means. And a command name is a claim,
+  so check it against `tokenamun help` — while a "not yet built" section is a
+  plan, so it lives in `plans/`.
 * **Filter by developer, never report by developer.** Scoping to whose
   sessions you look at is how you help somebody. A dimension that ranks people
   is the failure mode this tool is closest to.
