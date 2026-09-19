@@ -110,7 +110,6 @@ Details in [`METHODOLOGY.md`](METHODOLOGY.md).
 ## Also here
 
 - [`METHODOLOGY.md`](METHODOLOGY.md) — how every number is computed and labelled
-- [`AGENTS.md`](AGENTS.md) — conventions and the quality gates
 - [`docs/research-entire.md`](docs/research-entire.md) — what Entire's data contains, measured
 - [`docs/experiments.md`](docs/experiments.md) — using `series` for before/after
 - [`docs/interventions.md`](docs/interventions.md) — what people try to cut tokens, and what can be checked
