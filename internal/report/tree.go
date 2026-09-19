@@ -43,6 +43,20 @@ type Node struct {
 	// and forth on every call and is billed each time. "Round trips" is the
 	// reader's own word for it and needs no gloss.
 	RoundTrips float64 `json:"roundTrips,omitempty"`
+	// P50PerRetrieval, P95PerRetrieval and MaxPerRetrieval are what one
+	// retrieval here cost to carry, as billed. Cost and count give a mean,
+	// and a mean cannot tell "this command is verbose every time" from "one
+	// run of it went berserk" -- which are different findings with different
+	// answers. The percentiles are absent below PercentilesNeedAtLeast
+	// samples, where they would be noise dressed as precision; the maximum
+	// is one observed retrieval and is reported whatever the count.
+	P50PerRetrieval float64 `json:"p50PerRetrieval,omitempty"`
+	P95PerRetrieval float64 `json:"p95PerRetrieval,omitempty"`
+	MaxPerRetrieval float64 `json:"maxPerRetrieval,omitempty"`
+	// samples is one CarryEIT per retrieval underneath this node, which is
+	// what the three figures above are computed from. Unexported, like
+	// tokenCalls: it is the working, not a finding.
+	samples []float64
 	// tokenCalls is the accumulator behind ResidentCalls: the sum over
 	// retrievals of tokens x calls resident. Weighted by tokens, so a big file
 	// carried briefly does not read the same as a small one carried
@@ -431,6 +445,7 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 			Bytes: c.ObservedBytes(), Items: 1,
 			Detail:     leafDetail(c, it),
 			tokenCalls: c.Tokens * float64(it.ResidentFor),
+			samples:    []float64{it.CarryEIT},
 		}
 		if c.Tokens > 0 {
 			leaf.CarryPerToken = it.CarryEIT / c.Tokens
@@ -688,6 +703,7 @@ func collapseByName(grp *Node) *Node {
 		m.Bytes += leaf.Bytes
 		m.Items += leaf.Items
 		m.tokenCalls += leaf.tokenCalls
+		m.samples = append(m.samples, leaf.samples...)
 	}
 	out := &Node{Name: grp.Name, Kind: grp.Kind, Detail: grp.Detail}
 	for _, name := range order {
@@ -720,10 +736,16 @@ func rollUp(n *Node) {
 		if n.Tokens > 0 && n.tokenCalls > 0 {
 			n.RoundTrips = n.tokenCalls / n.Tokens
 		}
+		setDistribution(n)
 		return
 	}
 	n.Tokens, n.Carry, n.CarryUncached, n.Bytes, n.Items = 0, 0, 0, 0, 0
 	n.tokenCalls = 0
+	// Gathered from the children rather than kept on the branch, so a branch
+	// answers the same question about the retrievals under it that a leaf
+	// answers about its own: was this level uniformly expensive, or does it
+	// contain one event.
+	n.samples = nil
 	for _, child := range n.Children {
 		rollUp(child)
 		n.Tokens += child.Tokens
@@ -732,7 +754,9 @@ func rollUp(n *Node) {
 		n.Bytes += child.Bytes
 		n.Items += child.Items
 		n.tokenCalls += child.tokenCalls
+		n.samples = append(n.samples, child.samples...)
 	}
+	setDistribution(n)
 	if n.Tokens > 0 {
 		n.CarryPerToken = n.Carry / n.Tokens
 		n.RoundTrips = n.tokenCalls / n.Tokens

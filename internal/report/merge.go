@@ -114,6 +114,10 @@ func mergeInto(dst, src *Node) {
 		dst.Bytes += src.Bytes
 		dst.Items += src.Items
 		dst.tokenCalls += src.tokenCalls
+		// One sample per retrieval, kept across the merge: the worst single
+		// retrieval of a week is a fact about the week, not about whichever
+		// session happened to contain it.
+		dst.samples = append(dst.samples, src.samples...)
 		// A node is off the ramp only if every session's version of it was.
 		dst.Unscaled = dst.Unscaled && src.Unscaled
 		if dst.Detail == "" {
@@ -169,11 +173,13 @@ func demote(n *Node) {
 		Detail: n.Detail, DetailMore: n.DetailMore,
 		Tokens: n.Tokens, Carry: n.Carry, CarryUncached: n.CarryUncached,
 		Bytes: n.Bytes, Items: n.Items, tokenCalls: n.tokenCalls,
+		samples:  n.samples,
 		Unscaled: n.Unscaled,
 	}
 	n.Children = append(n.Children, child)
 	n.Tokens, n.Carry, n.CarryUncached = 0, 0, 0
 	n.Bytes, n.Items, n.tokenCalls = 0, 0, 0
+	n.samples = nil
 }
 
 // Readable loads every session it can and says which it could not.

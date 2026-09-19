@@ -65,6 +65,16 @@ type TreeNode struct {
 	// wants it has cost and tokens right beside it. This is the quantity that
 	// causes it and it explains itself.
 	RoundTrips float64 `json:"round_trips,omitempty"`
+	// P50PerRetrieval, P95PerRetrieval and MaxPerRetrieval are what one
+	// retrieval here cost to carry. Cost over retrievals is a mean, and a
+	// mean reads the same whether a command is expensive every time it runs
+	// or ran once and dumped 200K tokens -- which are different findings
+	// with different answers. The percentiles are absent below
+	// PercentilesNeedAtLeast retrievals rather than computed from four
+	// samples.
+	P50PerRetrieval float64 `json:"p50_per_retrieval,omitempty"`
+	P95PerRetrieval float64 `json:"p95_per_retrieval,omitempty"`
+	MaxPerRetrieval float64 `json:"max_per_retrieval,omitempty"`
 	// Unscaled marks a node with cost but no attributable token count, so
 	// neither rate is defined rather than being low. Grey in the viewer.
 	Unscaled bool `json:"unscaled,omitempty"`
@@ -163,6 +173,16 @@ func BuildTreeViewFrom(root *Node, info SessionInfo, at []string, mode string) (
 		"This is not a picture of the context window at any moment. It is what each " +
 			"token class was billed at, attributed to the content resident when it was sent.",
 	}
+	if mode == ModeCarry {
+		v.Notes = append(v.Notes,
+			"p50/p95/max is what one retrieval here cost to carry. A maximum near the "+
+				"p95 is a level that is expensive every time, and the answer is a policy "+
+				"change; a maximum far above it is one event, and the answer is a fix.",
+			"The percentiles are omitted, and shown as -/-, below "+
+				itoa(PercentilesNeedAtLeast)+" individually priced retrievals: a p95 over "+
+				"four samples is the fourth sample with a decimal point on it. The maximum "+
+				"is one observed retrieval and is shown whatever the count.")
+	}
 	if mode == ModeUncached {
 		v.Notes = append(v.Notes,
 			"This level is priced as though nothing cached: the same content, re-sent the "+
@@ -243,6 +263,14 @@ func flatten(n *Node, levelTotal, sessionTotal float64, mode string, path []stri
 	if !n.Unscaled && n.Tokens > 0 {
 		out.RoundTrips = n.RoundTrips
 	}
+	// Only in the billed mode: the samples are each retrieval's CarryEIT, so
+	// a distribution printed beside uncached costs would be in the other
+	// currency.
+	if mode == ModeCarry {
+		out.P50PerRetrieval = n.P50PerRetrieval
+		out.P95PerRetrieval = n.P95PerRetrieval
+		out.MaxPerRetrieval = n.MaxPerRetrieval
+	}
 	if levelTotal > 0 {
 		out.ShareOfLevel = cost / levelTotal
 	}
@@ -277,6 +305,9 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 	if v.Here.Items > 0 {
 		fmt.Fprintf(b, "  Retrievals         %14s\n", num(v.Here.Items))
 	}
+	if d := perRetrievalStr(v.Here); d != "" {
+		fmt.Fprintf(b, "  Per retrieval      %14s   (p50/p95/max)\n", d)
+	}
 	if v.Here.Detail != "" {
 		fmt.Fprintf(b, "\n%s\n", wrap(v.Here.Detail, 74, ""))
 	}
@@ -288,8 +319,8 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 	if len(v.Children) == 0 {
 		b.WriteString("Nothing inside: this is a leaf.\n\n")
 	} else {
-		fmt.Fprintf(b, "%-38s %8s %9s %13s %7s  %s\n",
-			"INSIDE", "OF LEVEL", "SESSION", "COST", "TRIPS", "CONTAINS")
+		fmt.Fprintf(b, "%-30s %8s %8s %12s %6s %18s  %s\n",
+			"INSIDE", "OF LEVEL", "SESSION", "COST", "TRIPS", "P50/P95/MAX", "CONTAINS")
 		for _, c := range v.Children {
 			// Round trips, not cost per token: it is the cause rather than
 			// the ratio, and it needs no explaining.
@@ -303,9 +334,9 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 			} else if c.Items == 1 {
 				contains = "1 retrieval"
 			}
-			fmt.Fprintf(b, "%-38s %8s %9s %13s %7s  %s\n",
-				trunc(c.Name, 38), pctStr(c.ShareOfLevel), pctStr(c.ShareOfSession),
-				num(int(c.Cost)), trips, contains)
+			fmt.Fprintf(b, "%-30s %8s %8s %12s %6s %18s  %s\n",
+				trunc(c.Name, 30), pctStr(c.ShareOfLevel), pctStr(c.ShareOfSession),
+				num(int(c.Cost)), trips, perRetrievalStr(c), contains)
 		}
 		b.WriteString("\n")
 	}

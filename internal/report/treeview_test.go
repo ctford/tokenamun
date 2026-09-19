@@ -233,6 +233,15 @@ func TestCLIAndViewerCannotDiverge(t *testing.T) {
 		if c.Unscaled != n.Unscaled {
 			t.Errorf("%s: one view greys this out and the other does not", c.Name)
 		}
+		// The distribution is the whole difference between "expensive every
+		// time" and "one event", so a reader who only has the CLI must not
+		// have to ask a person what the picture says.
+		if c.MaxPerRetrieval != n.MaxPerRetrieval ||
+			c.P50PerRetrieval != n.P50PerRetrieval ||
+			c.P95PerRetrieval != n.P95PerRetrieval {
+			t.Errorf("%s: the per-retrieval distribution differs between the two views",
+				c.Name)
+		}
 	}
 
 }

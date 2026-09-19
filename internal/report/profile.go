@@ -36,7 +36,12 @@ import (
 // `final_prompt_tokens` and `reset_calls` are absent rather than zero. A
 // consumer that read a missing final prompt as a zero one would be reading a
 // week of work as a context that ended empty.
-const SchemaVersion = 5
+//
+// 6: every tree node reports what one retrieval under it cost to carry, as
+// p50/p95/max rather than only as a total and a count. A consumer dividing
+// the two was reading a mean, and a mean reads the same whether a command is
+// expensive on every run or ran once and dumped 200K tokens.
+const SchemaVersion = 6
 
 // Profile is a session overview.
 type Profile struct {
