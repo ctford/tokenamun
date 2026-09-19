@@ -103,7 +103,7 @@ func TestGenerationIsPricedPerCall(t *testing.T) {
 
 func TestUnattributedCeilingsUseTheDearestCacheReadInTheSession(t *testing.T) {
 	s := costtest.MixedPricingSession()
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 
 	dearest := cost.MaxCacheRead(s.Invocations)
 	if dearest != cost.For(costtest.Expensive).CacheRead {

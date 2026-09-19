@@ -168,7 +168,7 @@ func cmdHotspots(dir, scanDir, source, selector string, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	out := report.BuildHotspots(s, analysis.Hotspots(s, scan, carry))
 	if asJSON {
 		return writeJSON(out)
@@ -290,6 +290,6 @@ func loadTree(dir, source, selector string, withPrices bool) (
 	if err != nil {
 		return nil, report.SessionInfo{}, err
 	}
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	return report.BuildTree(s, carry), info, nil
 }

@@ -89,7 +89,7 @@ func TestPeriodSaysWhatItCouldNotRead(t *testing.T) {
 		t.Errorf("the window must be stated: %q", p.Window)
 	}
 	// The summed tree must reconcile with the session it came from.
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	// Compared with a tolerance: the merge re-sums the leaves, so the branch
 	// totals are the same additions in a different order and float addition
 	// is not associative. A tolerance is the honest comparison, not a looser

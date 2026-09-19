@@ -33,7 +33,7 @@ func TestCarryPricesEachSendAtTheModelOfTheCallItWentOutOn(t *testing.T) {
 		}},
 	}
 
-	r := Carry(s, Cache(s, TTL5m))
+	r := Carry(s, Cache(s))
 	if len(r.Items) != 1 {
 		t.Fatalf("expected one carried item, got %d", len(r.Items))
 	}
@@ -70,7 +70,7 @@ func TestAColdFirstSendIsOneWriteNotTwo(t *testing.T) {
 			Bytes: 3_600, Tokens: 1_000,
 		}},
 	}
-	report := Cache(s, TTL5m)
+	report := Cache(s)
 	if !ColdCalls(report)[1] {
 		t.Fatal("the fixture needs call 1 to be a cache miss")
 	}
@@ -87,7 +87,7 @@ func TestAColdFirstSendIsOneWriteNotTwo(t *testing.T) {
 // and the accounting invariant holds whichever weights apply.
 func TestCarryOverTheMixedFixtureNeverExceedsWhatWasBilled(t *testing.T) {
 	s := costtest.MixedPricingSession()
-	r := Carry(s, Cache(s, TTL5m))
+	r := Carry(s, Cache(s))
 
 	wantPrompt, _ := cost.SessionCost(s.Invocations)
 	if r.PromptCostEIT != wantPrompt {
@@ -114,7 +114,7 @@ func TestCarryOverTheMixedFixtureNeverExceedsWhatWasBilled(t *testing.T) {
 // too, so that the bucketing cannot quietly go away.
 func TestTheTTLCounterfactualKeepsBothPricingsApart(t *testing.T) {
 	s := costtest.MixedPricingSession()
-	rates := Cache(s, TTL5m).ReadRates
+	rates := Cache(s).ReadRates
 	if len(rates) != 2 {
 		t.Fatalf("read rates %v, want both pricings in the fixture", rates)
 	}

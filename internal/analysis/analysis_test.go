@@ -56,7 +56,7 @@ func TestMissCausesAreAttributedToObservableCausesFirst(t *testing.T) {
 			CauseUnexplained},
 	}
 	for _, c := range cases {
-		r := Cache(session(c.prev, c.cur), TTL5m)
+		r := Cache(session(c.prev, c.cur))
 		var found string
 		for _, m := range r.Misses {
 			if m.Seq == 1 {
@@ -75,7 +75,7 @@ func TestCompactionIsNotMistakenForExpiry(t *testing.T) {
 	r := Cache(session(
 		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 200_000, 1000),
 		inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 30_000),
-	), TTL5m)
+	))
 	for _, m := range r.Misses {
 		if m.Seq == 1 && m.Cause != CauseCompaction {
 			t.Errorf("cause = %q, want compaction", m.Cause)
@@ -89,7 +89,7 @@ func TestSmallWritesAreNotMisses(t *testing.T) {
 	r := Cache(session(
 		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 100_000, 1500),
 		inv(1, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 101_500, 1200),
-	), TTL5m)
+	))
 	if len(r.Misses) != 0 {
 		t.Fatalf("expected no misses, got %+v", r.Misses)
 	}
@@ -101,7 +101,7 @@ func TestExpiryShareIsPricedNotCounted(t *testing.T) {
 		inv(1, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 30_000, 500),
 		inv(2, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 40_000),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 	if r.ExpiryCostEIT <= 0 {
 		t.Fatal("the expiry should have a cost")
 	}
@@ -122,7 +122,7 @@ func TestLongerTTLOnlyClaimsGapsItWouldHaveCovered(t *testing.T) {
 		inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
 		inv(2, 2*time.Hour+20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 60_000),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 	var avoidable, notAvoidable int
 	for _, m := range r.Misses {
 		if m.Cause != CauseTTLExpiry {
@@ -141,14 +141,14 @@ func TestLongerTTLOnlyClaimsGapsItWouldHaveCovered(t *testing.T) {
 
 func TestObservedTTLComesFromTheAPISplit(t *testing.T) {
 	s := session(inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000))
-	if got := Cache(s, TTL5m).ObservedTTL; got != "5m" {
+	if got := Cache(s).ObservedTTL; got != "5m" {
 		t.Errorf("observed TTL = %q, want 5m", got)
 	}
 
 	oneHour := inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000)
 	oneHour.Usage.CacheCreation5m = 0
 	oneHour.Usage.CacheCreation1h = 10_000
-	if got := Cache(session(oneHour), TTL5m).ObservedTTL; got != "1h" {
+	if got := Cache(session(oneHour)).ObservedTTL; got != "1h" {
 		t.Errorf("observed TTL = %q, want 1h", got)
 	}
 }
@@ -166,7 +166,7 @@ func TestCarryPricesResidencyNotSize(t *testing.T) {
 		{Seq: 0, Tool: "Read", Path: "early.go", Bytes: 3600, Tokens: 1000, InvocationSeq: 0},
 		{Seq: 1, Tool: "Read", Path: "late.go", Bytes: 3600, Tokens: 1000, InvocationSeq: 2},
 	}
-	r := Carry(s, Cache(s, TTL5m))
+	r := Carry(s, Cache(s))
 
 	if len(r.Items) != 2 {
 		t.Fatalf("expected both items, got %d", len(r.Items))
@@ -192,7 +192,7 @@ func TestCarryNeverExceedsTheSessionsPromptCost(t *testing.T) {
 	s.Retrievals = []model.RetrievedContent{
 		{Tool: "Read", Path: "a.go", Bytes: 3600, Tokens: 1000, InvocationSeq: 0},
 	}
-	r := Carry(s, Cache(s, TTL5m))
+	r := Carry(s, Cache(s))
 	var total float64
 	for _, it := range r.Items {
 		total += it.CarryEIT
@@ -215,7 +215,7 @@ func TestResidencyStopsAtAContextReset(t *testing.T) {
 	s.Retrievals = []model.RetrievedContent{
 		{Tool: "Read", Path: "a.go", Bytes: 3600, Tokens: 1000, InvocationSeq: 0},
 	}
-	r := Carry(s, Cache(s, TTL5m))
+	r := Carry(s, Cache(s))
 	if len(r.Resets) == 0 {
 		t.Fatal("the sharp drop at call 2 should be detected as a reset")
 	}
@@ -231,7 +231,7 @@ func TestAPIErrorCallsAreNotReadAsResets(t *testing.T) {
 		inv(1, time.Minute, "<synthetic>", "2.1.246", "high", 0, 0, 0),
 		inv(2, 2*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 110_000, 500),
 	)
-	r := Carry(s, Cache(s, TTL5m))
+	r := Carry(s, Cache(s))
 	if len(r.Resets) != 0 {
 		t.Fatalf("expected no resets, got %v", r.Resets)
 	}
@@ -243,7 +243,7 @@ func TestPreambleIsObservedAndCarriedByEveryCall(t *testing.T) {
 		inv(1, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 28_000, 500),
 		inv(2, 2*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 28_500, 500),
 	)
-	r := Carry(s, Cache(s, TTL5m))
+	r := Carry(s, Cache(s))
 	if r.Preamble != 28_001 {
 		t.Fatalf("preamble = %d, want the first call's whole prompt", r.Preamble)
 	}
@@ -264,7 +264,7 @@ func TestErrorEntriesAreNotTreatedAsThePreviousCall(t *testing.T) {
 		inv(1, time.Minute, model.SyntheticModel, "2.1.246", "high", 0, 0, 0),
 		inv(2, 40*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 11_000, 350_000),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 
 	var got string
 	for _, m := range r.Misses {
@@ -295,7 +295,7 @@ func TestRebuildAfterCompactionIsAttributedToTheCompaction(t *testing.T) {
 		inv(1, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 6_000, 0),
 		inv(2, 90*time.Second, "claude-opus-5", "2.1.246", "high", 1, 400, 6_100),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 	for _, m := range r.Misses {
 		if m.Seq == 2 && m.Cause != CauseCompaction {
 			t.Fatalf("cause = %q, want compaction", m.Cause)
@@ -316,7 +316,7 @@ func TestCompactionIsFoundWhenSeqIsNotTheSliceIndex(t *testing.T) {
 		inv(11, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 6_000, 0),
 		inv(12, 90*time.Second, "claude-opus-5", "2.1.246", "high", 1, 400, 6_100),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 	for _, m := range r.Misses {
 		if m.Seq == 12 && m.Cause != CauseCompaction {
 			t.Errorf("cause = %q, want compaction", m.Cause)
@@ -393,7 +393,7 @@ func TestLongerTTLPricesEachModelsWritesAtItsOwnRate(t *testing.T) {
 		inv(2, 25*time.Minute, "claude-fable-5-1", "2.1.246", "high", 1, 0, 100_000),
 		inv(3, 45*time.Minute, "claude-fable-5-1", "2.1.246", "high", 1, 0, 100_000),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 
 	if got := r.AvoidableTokens; got != 200_000 {
 		t.Fatalf("avoidable = %d, want 200000 (one expiry under each pricing)", got)
@@ -423,7 +423,7 @@ func TestAvoidabilityIsCountedPerCallNotFlaggedPerCause(t *testing.T) {
 		inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
 		inv(2, 2*time.Hour+20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 60_000),
 	)
-	agg := Cache(s, TTL5m).ByCause[CauseTTLExpiry]
+	agg := Cache(s).ByCause[CauseTTLExpiry]
 
 	if agg.Calls != 2 {
 		t.Fatalf("expiry calls = %d, want 2", agg.Calls)
@@ -453,7 +453,7 @@ func TestLongerTTLNetIsThePremiumMinusTheSaving(t *testing.T) {
 		)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := Cache(tc.s, TTL5m)
+			r := Cache(tc.s)
 			if got := r.LongerTTLPremiumEIT - r.LongerTTLSavedEIT; math.Abs(got-r.LongerTTLNetEIT) > 1e-6 {
 				t.Errorf("premium %.1f - saved %.1f = %.1f, but net is %.1f",
 					r.LongerTTLPremiumEIT, r.LongerTTLSavedEIT, got, r.LongerTTLNetEIT)
@@ -475,7 +475,7 @@ func TestSwitchingCostsMoneyWhenNothingIdles(t *testing.T) {
 		inv(1, time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
 		inv(2, 2*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 
 	if r.LongerTTLSavedEIT != 0 {
 		t.Errorf("saved = %.1f, want 0: nothing expired", r.LongerTTLSavedEIT)
@@ -512,7 +512,7 @@ func TestGapBoundariesAreConsistentAtBothLifetimes(t *testing.T) {
 				inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
 				inv(1, tc.gap, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
 			)
-			r := Cache(s, TTL5m)
+			r := Cache(s)
 			var got Miss
 			for _, m := range r.Misses {
 				if m.Seq == 1 {
@@ -537,7 +537,7 @@ func TestBreakEvenIsWhereTheAvoidedReadIsPaidFor(t *testing.T) {
 		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 1_150_000),
 		inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 750_000),
 	)
-	r := Cache(s, TTL5m)
+	r := Cache(s)
 
 	if r.Writes5m != 1_900_000 || r.AvoidableTokens != 750_000 {
 		t.Fatalf("setup drifted: writes %d avoidable %d", r.Writes5m, r.AvoidableTokens)
@@ -561,7 +561,7 @@ func TestMixedPricingIsVisibleInTheCacheReport(t *testing.T) {
 		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
 		inv(1, 20*time.Minute, "claude-sonnet-5", "2.1.246", "high", 1, 0, 50_000),
 	)
-	if got := Cache(same, TTL5m).ReadRates; len(got) != 1 {
+	if got := Cache(same).ReadRates; len(got) != 1 {
 		t.Errorf("two models on one pricing gave rates %v, want one", got)
 	}
 
@@ -569,8 +569,78 @@ func TestMixedPricingIsVisibleInTheCacheReport(t *testing.T) {
 		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
 		inv(1, 20*time.Minute, "claude-fable-5-1", "2.1.246", "high", 1, 0, 50_000),
 	)
-	got := Cache(mixed, TTL5m).ReadRates
+	got := Cache(mixed).ReadRates
 	if len(got) != 2 || got[0] != 0.025 || got[1] != 0.1 {
 		t.Errorf("rates = %v, want [0.025 0.1] sorted and distinct", got)
 	}
+}
+
+// onHour builds a call whose cache write the API reported as an
+// ephemeral_1h write, which is what a session running under
+// promptCacheTtl=1h looks like in a transcript.
+func onHour(seq int, at time.Duration, read, create int64) model.ModelInvocation {
+	m := inv(seq, at, "claude-opus-5", "2.1.246", "high", 0, read, create)
+	m.Usage.CacheCreation5m, m.Usage.CacheCreation1h = 0, create
+	return m
+}
+
+func TestExpiryIsJudgedAgainstTheLifetimeTheWriteAskedFor(t *testing.T) {
+	// The 5m/1h split is observed per write, so the lifetime a prefix was
+	// given is not something to assume. Twelve minutes is past one lifetime
+	// and well inside the other, so the same gap has to be read differently
+	// depending on which was in force -- and both readings are observed.
+	twelve := 12 * time.Minute
+
+	onFive := session(
+		inv(0, 0, "claude-opus-5", "2.1.246", "high", 0, 0, 50_000),
+		inv(1, twelve, "claude-opus-5", "2.1.246", "high", 0, 0, 60_000))
+	if got := missAt(Cache(onFive), 1).Cause; got != CauseTTLExpiry {
+		t.Errorf("on the 5-minute lifetime a twelve-minute gap is expiry, got %q", got)
+	}
+
+	// The same gap on the 1-hour lifetime. The prefix was warm, so whatever
+	// rebuilt it was not expiry: saying it was points the reader at a TTL
+	// they are already using, and hides the cause that actually applies.
+	onOne := session(onHour(0, 0, 0, 50_000), onHour(1, twelve, 0, 60_000))
+	r := Cache(onOne)
+	if r.ObservedTTL != "1h" {
+		t.Fatalf("observed TTL = %q, want 1h", r.ObservedTTL)
+	}
+	m := missAt(r, 1)
+	if m.Cause != CauseUnexplained {
+		t.Errorf("cause = %q, want %q: the prefix had not expired",
+			m.Cause, CauseUnexplained)
+	}
+	if m.AvoidableByTTL {
+		t.Error("a session already on the longer lifetime cannot be helped by it")
+	}
+	if r.ExpiryCostEIT != 0 {
+		t.Errorf("expiry cost = %.0f, want 0", r.ExpiryCostEIT)
+	}
+	if r.UnexplainedCost == 0 {
+		t.Error("the cost has to land somewhere, and unexplained is where it belongs")
+	}
+}
+
+func TestAPrefixWrittenAtBothLifetimesExpiresWithItsShortestPart(t *testing.T) {
+	// A cached prefix is a chain: invalidating an early segment invalidates
+	// everything after it, so a prefix holding a 5-minute segment is warm
+	// only as long as that segment is. The longer part of the write does not
+	// protect it.
+	both := inv(0, 0, "claude-opus-5", "2.1.246", "high", 0, 0, 50_000)
+	both.Usage.CacheCreation1h = 20_000
+	both.Usage.CacheCreation5m = 30_000
+	s := session(both, onHour(1, 12*time.Minute, 0, 60_000))
+	if got := missAt(Cache(s), 1).Cause; got != CauseTTLExpiry {
+		t.Errorf("cause = %q, want %q: the 5-minute segment governs", got, CauseTTLExpiry)
+	}
+}
+
+func missAt(r CacheReport, seq int) Miss {
+	for _, m := range r.Misses {
+		if m.Seq == seq {
+			return m
+		}
+	}
+	return Miss{}
 }

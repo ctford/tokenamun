@@ -208,7 +208,7 @@ func carrySession(t *testing.T) *model.Session {
 
 func TestCarryGoldenOutput(t *testing.T) {
 	s := carrySession(t)
-	r := BuildCarry(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	r := BuildCarry(s, analysis.Carry(s, analysis.Cache(s)))
 
 	var text bytes.Buffer
 	if err := RenderCarry(&text, r); err != nil {
@@ -226,7 +226,7 @@ func TestCarryGoldenOutput(t *testing.T) {
 
 func TestCacheGoldenOutput(t *testing.T) {
 	s := carrySession(t)
-	r := BuildCache(s, analysis.Cache(s, analysis.TTL5m))
+	r := BuildCache(s, analysis.Cache(s))
 
 	var text bytes.Buffer
 	if err := RenderCache(&text, r); err != nil {
@@ -334,7 +334,7 @@ func TestHotspotsGoldenOutput(t *testing.T) {
 			},
 		}},
 	}
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	out := BuildHotspots(s, analysis.Hotspots(s, scan, carry))
 
 	var text bytes.Buffer
@@ -351,7 +351,7 @@ func TestHotspotsGoldenOutput(t *testing.T) {
 func TestHotspotsHaveNoDeveloperDimension(t *testing.T) {
 	s := carrySession(t)
 	out := BuildHotspots(s, analysis.Hotspots(s, codescan.Report{},
-		analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))))
+		analysis.Carry(s, analysis.Cache(s))))
 
 	banned := []string{"developer", "author", "committer", "email", "username", "user_id"}
 	for _, key := range jsonKeys(t, out) {
@@ -421,7 +421,7 @@ func TestCompareSaysItIsNotAControlledExperiment(t *testing.T) {
 
 func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 	s := carrySession(t)
-	p := BuildTreemap(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	p := BuildTreemap(s, analysis.Carry(s, analysis.Cache(s)))
 
 	var out bytes.Buffer
 	if err := RenderTreemap(&out, p); err != nil {
@@ -482,7 +482,7 @@ func TestTreemapIsSelfContainedAndHonestAboutWhatItShows(t *testing.T) {
 
 func TestTreemapRampScalesToWhatTheViewerCanDraw(t *testing.T) {
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	p := BuildTreemap(s, carry)
 
 	if p.RampMax <= 0 {
@@ -659,7 +659,7 @@ func TestTheReportCarriesTheEye(t *testing.T) {
 
 func TestCacheWarnsWhenTheSetSpansPricings(t *testing.T) {
 	warned := func(s *model.Session) bool {
-		for _, w := range BuildCache(s, analysis.Cache(s, analysis.TTL5m)).Warnings {
+		for _, w := range BuildCache(s, analysis.Cache(s)).Warnings {
 			if w.Code == "mixed_pricing" {
 				return true
 			}

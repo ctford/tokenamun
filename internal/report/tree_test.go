@@ -48,7 +48,7 @@ func treeFixture() *model.Session {
 func built(t *testing.T) *Node {
 	t.Helper()
 	s := treeFixture()
-	return BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	return BuildTree(s, analysis.Carry(s, analysis.Cache(s)))
 }
 
 func child(t *testing.T, n *Node, name string) *Node {
@@ -148,7 +148,7 @@ func TestDirectoryReadsAreLabelledAsDirectories(t *testing.T) {
 		Seq: 9, ToolID: "t9", Tool: "Bash", Channel: model.ChanShell,
 		CommandBinary: "cat", CommandDetail: "cat", Path: "docs/decisions", Bytes: 3000, Tokens: 830, InvocationSeq: 0,
 	})
-	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s)))
 	decisions := child(t, child(t, tree, "file content"), "docs/decisions")
 
 	var found bool
@@ -292,7 +292,7 @@ func TestRepeatedLeavesMergeEvenBesideBranches(t *testing.T) {
 		model.RetrievedContent{Seq: 7, ToolID: "t7", Tool: "Read", Channel: model.ChanFileRead, Path: "docs/decisions/a.md",
 			Bytes: 4000, Tokens: 1000, InvocationSeq: 2},
 	)
-	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s)))
 	files := child(t, tree, "file content")
 
 	// The branch is still there and its repeated leaves have merged.
@@ -448,7 +448,7 @@ func TestEachToolsArgumentsCarryTheirOwnResidency(t *testing.T) {
 	// weighted by argument bytes. Inheriting one session-wide average put the
 	// same number on every row, which is a shade that says nothing.
 	s := treeFixture()
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	tree := BuildTree(s, carry)
 
 	args := child(t, child(t, tree, "model output"), "tool inputs")
@@ -522,7 +522,7 @@ func TestTheArgumentSurvivesBeingMovedOutOfTheTooltip(t *testing.T) {
 	// Shortening a tooltip must not lose what it said, only relocate it.
 	// The carry fixture overshoots, so it has a remainder to explain.
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	tree := BuildTree(s, carry)
 	for _, name := range []string{"unattributed", "preamble"} {
 		n := child(t, tree, name)
@@ -553,7 +553,7 @@ func TestShellArgumentsOpenUpByCommand(t *testing.T) {
 	// question about it, whether the content is a pattern or different every
 	// time, has no answer in the tool.
 	s := treeFixture()
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	tree := BuildTree(s, carry)
 
 	args := child(t, child(t, tree, "model output"), "tool inputs")

@@ -18,7 +18,7 @@ import (
 // the named interventions: the one hypothetical that is left is held to it.
 func TestAHypotheticalAlwaysRendersItsUnknowns(t *testing.T) {
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	o, err := ParseOptimisation([]string{"cli output"}, []float64{0.5},
 		[]string{"A guess, not a measurement."}, "proxy")
 	if err != nil {
@@ -60,7 +60,7 @@ func TestAHypotheticalAlwaysRendersItsUnknowns(t *testing.T) {
 // savings only add where the parts do not overlap.
 func TestSeveralPartsComposeIntoOneAnswer(t *testing.T) {
 	s := carrySession(t)
-	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s)))
 
 	single := func(at string, becomes float64) Hypothetical {
 		t.Helper()
@@ -133,7 +133,7 @@ func TestSeveralPartsComposeIntoOneAnswer(t *testing.T) {
 // only party that can see the containment.
 func TestPartsThatContainOneAnotherAreRefused(t *testing.T) {
 	s := carrySession(t)
-	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	tree := BuildTree(s, analysis.Carry(s, analysis.Cache(s)))
 	for _, paths := range [][]string{
 		{"cli output", "cli output"},
 		// Matching is case-insensitive everywhere else in the tree, so the
@@ -175,7 +175,7 @@ func TestMismatchedOptimiseColumnsAreRefused(t *testing.T) {
 // compared quantities that are not comparable and nothing looked wrong.
 func TestBothDenominatorsArePrintedByBothCommands(t *testing.T) {
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	tree := BuildTree(s, carry)
 
 	o, err := ParseOptimisation([]string{"cli output"}, []float64{0.5},
@@ -207,7 +207,7 @@ func TestBothDenominatorsArePrintedByBothCommands(t *testing.T) {
 		}
 	}
 
-	c := BuildCache(s, analysis.Cache(s, analysis.TTL5m))
+	c := BuildCache(s, analysis.Cache(s))
 	if c.SessionCost.Value <= c.PromptCost.Value {
 		t.Errorf("the session total should exceed prompt cost: %.0f against %.0f",
 			c.SessionCost.Value, c.PromptCost.Value)

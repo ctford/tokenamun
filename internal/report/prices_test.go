@@ -114,12 +114,12 @@ func TestEveryRendererThatPrintsDollarsPrintsThePin(t *testing.T) {
 
 	p := BuildProfile(s)
 	p.Session = info
-	view, err := BuildTreeViewFrom(BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))),
+	view, err := BuildTreeViewFrom(BuildTree(s, analysis.Carry(s, analysis.Cache(s))),
 		info, nil, ModeCarry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cacheReport := BuildCacheOf(info, analysis.Cache(s, analysis.TTL5m))
+	cacheReport := BuildCacheOf(info, analysis.Cache(s))
 
 	fan := crossModelFanOut()
 	fanned, err := WithProfilePrices(BuildProfile(fan), fan)

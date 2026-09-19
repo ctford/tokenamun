@@ -11,7 +11,7 @@ import (
 func treeViewFixture(t *testing.T) (view TreeView, carry analysis.CarryReport) {
 	t.Helper()
 	s := carrySession(t)
-	carry = analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry = analysis.Carry(s, analysis.Cache(s))
 	v, err := BuildTreeView(s, carry, nil, ModeCarry)
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestTreeViewDrillsInByNameAndSaysHow(t *testing.T) {
 
 func TestTreeViewErrorsNameWhatIsActuallyThere(t *testing.T) {
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 
 	_, err := BuildTreeView(s, carry, []string{"no such branch"}, ModeCarry)
 	if err == nil {
@@ -118,7 +118,7 @@ func TestTreeViewErrorsNameWhatIsActuallyThere(t *testing.T) {
 
 func TestTreeViewUncachedModeCostsMoreThanAsBilled(t *testing.T) {
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 
 	billed, err := BuildTreeView(s, carry, nil, ModeCarry)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestTreeViewCarriesTheSameExplanationsAsTheTooltips(t *testing.T) {
 	// A node's meaning is in the viewer's tooltip. If the CLI does not carry
 	// it, an agent has to ask a person what the box says.
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	// The viewer's own payload, not a bare tree: what the tooltips say is
 	// whatever went into the HTML, and anything the CLI adds or leaves out on
 	// the way is exactly what this test is for.
@@ -188,7 +188,7 @@ func TestTreeViewCarriesTheSameExplanationsAsTheTooltips(t *testing.T) {
 // and the tool has a class of question it can only answer to humans.
 func TestCLIAndViewerCannotDiverge(t *testing.T) {
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	payload := BuildTreemap(s, carry)
 
 	v, err := BuildTreeView(s, carry, nil, ModeCarry)
@@ -322,7 +322,7 @@ func TestRoundTripsDoNotMoveWithTheCostMode(t *testing.T) {
 	// moves. If this ever fails, one of the two has been derived from the
 	// other and the viewer's shade has quietly become a price.
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 
 	billed, err := BuildTreeView(s, carry, nil, ModeCarry)
 	if err != nil {
@@ -355,7 +355,7 @@ func TestResidencyIsBoundedByAContextResetNotByTheSession(t *testing.T) {
 	// alternative -- residency running past a compaction -- would overstate
 	// the cost of everything fetched early.
 	s := carrySession(t)
-	cache := analysis.Cache(s, analysis.TTL5m)
+	cache := analysis.Cache(s)
 	carry := analysis.Carry(s, cache)
 	if len(carry.Resets) == 0 {
 		t.Skip("the fixture has no context reset")
@@ -403,7 +403,7 @@ func TestTheRampMaximumIsAlwaysALeaf(t *testing.T) {
 	// observed exactly rather than averaged. Worth knowing when reading the
 	// number at the dark end of the legend.
 	s := carrySession(t)
-	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
+	carry := analysis.Carry(s, analysis.Cache(s))
 	p := BuildTreemap(s, carry)
 	if p.RampMax <= 0 {
 		t.Skip("the fixture has no residency")

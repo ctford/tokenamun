@@ -463,7 +463,7 @@ func carryOf(dir, source, selector string) (report.Carry, error) {
 }
 
 func carryOne(s *model.Session) report.Carry {
-	return report.BuildCarry(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	return report.BuildCarry(s, analysis.Carry(s, analysis.Cache(s)))
 }
 
 func cmdCache(dir, source, selector string, asJSON, withPrices bool) error {
@@ -481,7 +481,7 @@ func cmdCache(dir, source, selector string, asJSON, withPrices bool) error {
 		}
 		var reports []analysis.CacheReport
 		for _, s := range sessions {
-			reports = append(reports, analysis.Cache(s, analysis.TTL5m))
+			reports = append(reports, analysis.Cache(s))
 		}
 		r := report.BuildCacheOf(info, analysis.Merge(reports))
 		if asJSON {
@@ -494,7 +494,7 @@ func cmdCache(dir, source, selector string, asJSON, withPrices bool) error {
 	if err != nil {
 		return err
 	}
-	r := report.BuildCache(s, analysis.Cache(s, analysis.TTL5m))
+	r := report.BuildCache(s, analysis.Cache(s))
 	if r.Session, err = pricedIf(withPrices, r.Session, s); err != nil {
 		return err
 	}

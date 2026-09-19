@@ -224,7 +224,17 @@ type CauseAgg struct {
 
 // Cache attributes every large cache miss in a session to a cause and prices
 // it. Everything except the final elimination step is observed.
-func Cache(s *model.Session, ttl time.Duration) CacheReport {
+//
+// The lifetime each gap is judged against is observed too, which is why
+// there is no TTL parameter. It used to take one, and every caller passed
+// five minutes: on a session running under promptCacheTtl=1h the report
+// printed `observed_ttl: 1h` and, in the same breath, blamed a twelve-minute
+// gap on expiry. That is a `derived` figure contradicted by an `observed`
+// one three lines above it, and it points the reader at a lifetime they are
+// already using instead of at the harness change that really invalidated the
+// prefix. The split is in the usage object; there was never anything to
+// assume.
+func Cache(s *model.Session) CacheReport {
 	r := CacheReport{ByCause: map[string]CauseAgg{}}
 	var buckets ttlBuckets
 
@@ -246,6 +256,16 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 		r.ObservedTTL = "5m"
 	default:
 		r.ObservedTTL = "none observed"
+	}
+
+	// The lifetime to assume for a call that no observed write precedes --
+	// a session resumed onto a prefix another one wrote. The session's own
+	// writes are the best evidence available for what it was configured
+	// with, and where they are absent or disagree the shorter lifetime is
+	// the one that still lets an expiry be detected.
+	fallback := TTL5m
+	if r.Writes1h > 0 && r.Writes5m == 0 {
+		fallback = TTL1h
 	}
 
 	for i, inv := range s.Invocations {
@@ -271,7 +291,7 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 		if prev, ok := lastRealCall(s.Invocations, i); ok {
 			m.Gap = gapBetween(prev, inv)
 			m.GapSecond = m.Gap.Seconds()
-			m.Cause = causeOf(prev, inv, prompt, m.Gap, ttl)
+			m.Cause = causeOf(prev, inv, prompt, m.Gap, lifetimeAt(s.Invocations, i, fallback))
 			// Compaction shrinks the prompt on the call that summarises, but
 			// the new prefix is written on the call after it. Attributing
 			// that rebuild to the compaction rather than leaving it
@@ -313,6 +333,37 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 		r.ReadRates = appendRate(r.ReadRates, b.w.CacheRead)
 	}
 	return r
+}
+
+// lifetimeAt is the lifetime of the prefix the call at i met, read off the
+// write that established it.
+//
+// A cache entry's TTL is fixed when it is written, and a read refreshes it
+// for the same lifetime rather than a new one, so the governing write is the
+// most recent one before this call -- not the most recent call, which may
+// have been a pure read.
+//
+// A prefix written at both lifetimes takes the shorter. The cached prefix is
+// a chain matched byte-exactly from the front, so whatever invalidates an
+// early segment invalidates everything after it: a prefix holding a
+// five-minute segment is warm for five minutes however long the rest of it
+// was paid to live.
+func lifetimeAt(invs []model.ModelInvocation, i int, fallback time.Duration) time.Duration {
+	for k := i - 1; k >= 0; k-- {
+		u := invs[k].Usage
+		if u.CacheCreation == 0 || !invs[k].IsRealCall() {
+			continue
+		}
+		if u.CacheCreation1h > 0 && u.CacheCreation5m == 0 {
+			return TTL1h
+		}
+		// Either an observed five-minute write, or a total with no split to
+		// read: PromptCost charges an unsplit write at the 5m rate for the
+		// same reason, which is that it is the assumption that does not
+		// flatter the session.
+		return TTL5m
+	}
+	return fallback
 }
 
 // causeOf attributes a miss, testing observable causes before falling back to

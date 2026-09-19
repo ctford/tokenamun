@@ -22,7 +22,7 @@ func wrapperTree(t *testing.T) *Node {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return BuildTree(s, analysis.Carry(s, analysis.Cache(s, analysis.TTL5m)))
+	return BuildTree(s, analysis.Carry(s, analysis.Cache(s)))
 }
 
 func at(t *testing.T, tree *Node, path ...string) *Node {
