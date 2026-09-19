@@ -123,6 +123,25 @@ were 6% of volume and 43% of cost. That reordering is the point. A tool that
 calls a 40K-token read expensive without knowing whether it was billed at 0.1×
 or 1.25× is not measuring cost.
 
+### Across the subagent boundary
+
+A subagent runs in its own context, so its spend is reported *beside* the
+session's totals and never folded into them: adding its cache reads to the
+parent's would describe a prompt that was never sent. `profile` prints both,
+and their sum.
+
+That sum is the one figure in the report that spans contexts, and so the one
+that can span models without the session having switched model. Dispatching
+cheap subagents from an expensive parent is a deliberate pattern, and in EIT
+it adds quantities of different sizes. The combined total therefore carries
+its own mixed-pricing signal, computed over the parent's calls *and* its
+subagents' — the session-level one is about this context alone, which is what
+every other figure is about.
+
+The number stays and is qualified rather than withheld. It is exact whenever
+the parent and its subagents share a model, which is the common case, and
+where it is not exact the caveat names the flag that is.
+
 ## 4. Carry: content is cheap, keeping it is not
 
 The model has no memory between calls, so everything still in the context is

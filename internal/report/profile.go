@@ -67,7 +67,15 @@ import (
 // `mise run` or `npx` as a leaf was reading an aggregate of everything the
 // runner ran as though it were one thing, with the per-retrieval distribution
 // underneath it describing the worst target and no way to tell which.
-const SchemaVersion = 8
+//
+// 9: the subagent block says when its `combined_cost` spans two pricings,
+// as `combined_mixed_pricing` and a `combined_caveat`. A consumer reading
+// `mixed_pricing` as covering that figure was reading a guarantee about the
+// parent's own calls only: a session on one model that dispatched subagents
+// to another reported `false` beside a combined total that added two models'
+// EIT, which is a sum of differently-sized quantities and the error the unit
+// is defined to make visible.
+const SchemaVersion = 9
 
 // Profile is a session overview.
 type Profile struct {
@@ -103,6 +111,12 @@ type SessionInfo struct {
 	// so a total that spans two of them adds quantities of different sizes.
 	// Reported rather than corrected: correcting it needs a price list, which
 	// is configuration this tool does not have.
+	//
+	// This session's own calls, and no others. It is the claim "this context
+	// switched model", which is what every figure in this report but one is
+	// about. The exception is the subagent block's combined total, which
+	// spans contexts and carries its own signal: see
+	// SubagentReport.CombinedMixedPricing.
 	MixedPricing bool `json:"mixed_pricing,omitempty"`
 	// Prices is what this cost in money. Absent unless --prices asked, and
 	// then it is the answer MixedPricing describes the lack of.
@@ -180,11 +194,38 @@ type SubagentReport struct {
 	// ShareOfCombined is how much of that total happened out of sight of
 	// every other figure in this report.
 	ShareOfCombined model.Quantity `json:"share_of_combined"`
+	// CombinedMixedPricing is true when CombinedCost spans more than one
+	// pricing, which is a claim about this session *and its subagents* and
+	// so a different one from SessionInfo.MixedPricing.
+	//
+	// A second signal rather than a wider one, because the existing flag has
+	// a reading that other code depends on: sessions.go marks a row
+	// "switched model" from it, and a parent that never changed model did
+	// not switch anything by dispatching a subagent elsewhere. Widening it
+	// would have made that marker wrong on every fan-out session to keep
+	// this one figure honest.
+	CombinedMixedPricing bool `json:"combined_mixed_pricing,omitempty"`
+	// CombinedCaveat qualifies CombinedCost when the models differ, rather
+	// than the figure being withheld. It is exact whenever the parent and
+	// its subagents share a model, which is the common case, and where it is
+	// not exact the caveat says where the sound number is.
+	CombinedCaveat string `json:"combined_caveat,omitempty"`
 }
+
+// combinedCaveat is what CombinedCost says about itself when parent and
+// subagents are priced differently. Within the 64-character cap, and a claim
+// rather than a label: it says what the number does wrong and what to run
+// instead.
+const combinedCaveat = "Adds two models' EIT. Only --prices adds across models."
 
 // buildSubagents summarises subagent spend, or returns nil when there was
 // none. Priced per call with cost.SessionCost, because a subagent can run on
 // a different model from its parent.
+//
+// That same sentence is why the combined total is checked for mixed pricing
+// over both sets of calls. A parent on one model dispatching subagents to
+// another is a deliberate and common pattern, and it is exactly where the
+// combined figure is most wanted and least sound.
 func buildSubagents(s *model.Session, sessionCost float64) *SubagentReport {
 	if len(s.Subagents) == 0 {
 		return nil
@@ -196,6 +237,17 @@ func buildSubagents(s *model.Session, sessionCost float64) *SubagentReport {
 	share := 0.0
 	if combined > 0 {
 		share = total / combined
+	}
+	// A fresh slice: appending the subagents' calls onto the session's own
+	// would be appending a second context's calls to the field the estimator
+	// reads, which model.Session keeps them out of on purpose.
+	both := make([]model.ModelInvocation, 0, len(s.Invocations)+len(invs))
+	both = append(both, s.Invocations...)
+	both = append(both, invs...)
+	mixed := cost.Mixed(both)
+	caveat := ""
+	if mixed {
+		caveat = combinedCaveat
 	}
 	u := s.SubagentUsage()
 	var toolCalls int
@@ -211,6 +263,9 @@ func buildSubagents(s *model.Session, sessionCost float64) *SubagentReport {
 		TotalCost:       model.Der(total, model.EIT),
 		CombinedCost:    model.Der(combined, model.EIT),
 		ShareOfCombined: model.Der(share, model.Ratio),
+
+		CombinedMixedPricing: mixed,
+		CombinedCaveat:       caveat,
 	}
 }
 
@@ -405,6 +460,9 @@ func RenderText(w io.Writer, p Profile) error {
 		line(b, "  Their output", sa.Output)
 		line(b, "  Their cost", sa.TotalCost)
 		line(b, "  Session + subagents", sa.CombinedCost)
+		if sa.CombinedCaveat != "" {
+			fmt.Fprintf(b, "  ! %s\n", sa.CombinedCaveat)
+		}
 		pct(b, "  Share out of sight", sa.ShareOfCombined)
 		b.WriteString("  Every other figure here is this session's own context.\n")
 		b.WriteString("\n")
