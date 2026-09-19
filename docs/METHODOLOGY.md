@@ -195,23 +195,15 @@ misses would have happened under any TTL:
 | `unexplained` | none of the above | — |
 
 **The lifetime is observed, not assumed.** A cache entry's TTL is fixed when
-it is written, and the API reports which one it was as
-`ephemeral_5m_input_tokens` or `ephemeral_1h_input_tokens`. So the threshold a
-gap is measured against is read off the write that established the prefix --
-the most recent write before the call, not the most recent call, since a read
-refreshes an entry for its own lifetime rather than a new one. A prefix
-written at both lifetimes takes the shorter: the prefix is matched byte-exactly
-from the front, so a five-minute segment early in it expires the whole chain
-behind it however long the rest was paid to live.
-
-This was assumed for a while, and always at five minutes. A session running
-under `promptCacheTtl=1h` then reported `observed_ttl: 1h` and, three lines
-below, charged a twelve-minute gap to expiry -- a `derived` figure contradicted
-by an `observed` one in the same table, pointing at a lifetime the session
-already had. Where no write precedes a call at all, which is a session resumed
-onto a prefix another one wrote, the session's own writes are the fallback, and
-a session with none or with both takes five minutes: the shorter lifetime is
-the one that still lets an expiry be detected.
+it is written, and the API reports which one as `ephemeral_5m_input_tokens` or
+`ephemeral_1h_input_tokens`, so the threshold a gap is measured against is read
+off the write that established the prefix — the most recent write, not the most
+recent call, since a read refreshes an entry for its own lifetime rather than a
+new one. A prefix written at both takes the shorter: it is matched from the
+front, so an early segment expiring takes everything after it. Where no write
+precedes a call, which is a session resumed onto a prefix another one wrote,
+the session's own writes are the fallback, and an ambiguous session takes five
+minutes — the shorter lifetime is the one that still lets an expiry be detected.
 
 MCP, plugin and tool-set changes are not observable from a transcript, so they
 land in `unexplained` rather than being guessed at.
