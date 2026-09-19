@@ -52,13 +52,33 @@ func TestMissingTTLSplitFallsBackToTheCheaperWriteRate(t *testing.T) {
 	eq(t, Default.PromptCost(inconsistent), 1250)
 }
 
-func TestFableReadsAreCheaperStill(t *testing.T) {
+func TestTheCheapCacheReadBelongsToAGenerationNotAFamily(t *testing.T) {
+	// Published rates: claude-fable-5-1 and claude-mythos-5-1 read cache at
+	// $0.25/MTok against $10 input; claude-fable-5 and claude-mythos-5 read
+	// at $1/MTok, the standard 0.1x. Matching the family substring gave
+	// Fable 5 the cheaper rate and under-stated its cache reads fourfold --
+	// on the class that is most of prompt volume. Each boundary is named,
+	// because the earlier test only ever asked about 5.1.
+	cheap := []string{"claude-fable-5-1", "claude-mythos-5-1"}
+	standard := []string{
+		"claude-fable-5", "claude-mythos-5",
+		"claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5", "something-new",
+	}
+	for _, id := range cheap {
+		if For(id).CacheRead != 0.025 {
+			t.Errorf("%s reads cache at 0.025x, got %v", id, For(id).CacheRead)
+		}
+	}
+	for _, id := range standard {
+		if For(id) != Default {
+			t.Errorf("%s uses the default weights, got %+v", id, For(id))
+		}
+	}
+
+	// And the discount has to actually reach the arithmetic.
 	u := model.TokenUsage{CacheRead: 1_000_000}
 	if For("claude-fable-5-1").PromptCost(u) >= For("claude-opus-5").PromptCost(u) {
-		t.Fatal("fable cache reads are 0.025x, not 0.1x")
-	}
-	if For("claude-sonnet-5") != Default || For("something-new") != Default {
-		t.Fatal("unknown and mainstream models should use the default weights")
+		t.Error("the cheaper read rate did not reach PromptCost")
 	}
 }
 

@@ -46,8 +46,9 @@ var Default = Weights{
 	Output:       5.0,
 }
 
-// fable reads cache at 0.025x rather than 0.1x, which moves every break-even.
-var fable = Weights{
+// cheapCacheRead applies to the models that read cache at 0.025x rather than
+// 0.1x, which moves every break-even.
+var cheapCacheRead = Weights{
 	Input:        1.0,
 	CacheRead:    0.025,
 	CacheWrite5m: 1.25,
@@ -56,12 +57,22 @@ var fable = Weights{
 }
 
 // For returns the weights for a model ID. Unknown models get Default, which is
-// the right failure mode: it is the common case, not a guess about a new model.
+// the right failure mode: it is the common case, not a guess about a new
+// model, and 0.1x over-states the cost of a model that turns out to be
+// cheaper rather than under-stating it.
+//
+// The 0.025x read is a property of the 5.1 generation, NOT of the Fable
+// family. Published rates: claude-fable-5-1 and claude-mythos-5-1 read at
+// $0.25/MTok against $10 input; claude-fable-5 and claude-mythos-5 read at
+// $1/MTok, which is the standard 0.1x. Matching on "fable" therefore priced a
+// Fable 5 session's cache reads at a quarter of what they cost -- on the
+// class that is ~97% of prompt volume, so very nearly a fourfold
+// under-statement of the session.
 func For(modelID string) Weights {
 	id := strings.ToLower(modelID)
 	switch {
-	case strings.Contains(id, "fable"), strings.Contains(id, "mythos"):
-		return fable
+	case strings.Contains(id, "fable-5-1"), strings.Contains(id, "mythos-5-1"):
+		return cheapCacheRead
 	default:
 		return Default
 	}

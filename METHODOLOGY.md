@@ -66,7 +66,7 @@ Prices are per-class multiples of a model's own input price:
 | Class | Multiplier |
 | --- | --- |
 | Fresh input | 1.0× |
-| Cache read | 0.1× (0.025× on some models) |
+| Cache read | 0.1×, and 0.025× on Claude Fable 5.1 and Mythos 5.1 — the 5.1 generation, not the whole Fable family |
 | Cache write, 5-minute TTL | 1.25× |
 | Cache write, 1-hour TTL | 2.0× |
 | Output | 5.0× |
