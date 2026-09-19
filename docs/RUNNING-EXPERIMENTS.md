@@ -73,9 +73,9 @@ volume and cache-weighted EIT precisely so this distinction cannot be lost
 when someone repeats the experiment differently.
 
 **Comparison across a series.** `tokenamun compare` takes two sessions or
-checkpoints; a probe series is *n* of those in order. The planned addition is a
-thin one: label a run, keep the measurements, and emit the series as a table or
-JSON — see the note below.
+checkpoints; a probe series is *n* of those in order, and `tokenamun series`
+reads the saved profile JSON of each — median and range per step, and the
+payback division against a measured intervention cost.
 
 ## What Tokenamun does not cover
 
@@ -108,9 +108,9 @@ with medians and ranges reported rather than single values.
 
 Tokenamun's contribution here is to make repeats cheap rather than to substitute
 for them: if each probe run is one `tokenamun profile --json`, running five and
-taking a median costs five probe runs and no extra analysis work. The planned
-`series` output reports median and range rather than a point value for exactly
-this reason.
+taking a median costs five probe runs and no extra analysis work. `tokenamun
+series` reports median and range rather than a point value for exactly this
+reason.
 
 ## For the book
 
@@ -134,6 +134,12 @@ had to leave as a bound:
 tokenamun profile --json <refactoring-session> > step-07-cost.json
 ```
 
+and once the series is complete, the medians and the payback division:
+
+```bash
+tokenamun series step-*-probe.json --cost <refactoring cost in EIT>
+```
+
 Three things worth building into the driver rather than hoping to reconstruct
 later, all of which are cheap at the time and impossible afterwards:
 
@@ -143,11 +149,3 @@ later, all of which are cheap at the time and impossible afterwards:
 3. **Keep the probe task byte-identical** across runs, and record it. A probe
    that drifts silently invalidates the whole series, and it is the easiest
    thing in this design to get wrong.
-
-### Not yet built
-
-`tokenamun series` — labelled probe runs, median and range per step, and the
-payback arithmetic against a measured refactoring cost — is not in the v0.1
-plan and should be. It is a small command over analyses that already exist
-rather than a new subsystem: the measurements come from `profile` and `scan`,
-and the only new thing is the table and the break-even division.

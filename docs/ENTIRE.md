@@ -229,8 +229,9 @@ Observed, deduplicated, across all 8 sessions:
 Roughly **711K tokens of content sat behind 856M tokens of billed input.**
 
 The lever is not the size of what gets retrieved. It is how long it stays
-resident and how many calls re-send it. A 5K-token file read at call 20 of a
-600-call session is not a 5K-token decision, it is a ~2.9M-token decision.
+resident and how many calls re-send it. A 5K-token read at call 20 of `S1` is
+re-sent over its remaining 671 calls: 3.4M tokens of volume, ~336K
+cost-weighted while the prefix stays warm at 0.1×.
 
 This is derivable, not speculative, because **the prompt size of every API call
 is observed**: `input_tokens + cache_read_input_tokens +

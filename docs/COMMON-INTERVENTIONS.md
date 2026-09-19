@@ -242,7 +242,7 @@ work happens.
 * **A caution:** the preamble's cost looks tiny in a long session (1.3% of one
   43-hour session) and dominant in a short one (38% of a 19-call session). If
   your work is many short sessions, this is your biggest line item; if it is
-  few long ones, it is noise. `tokenamun period` tells you which you have.
+  few long ones, it is noise. `tokenamun length` tells you which you have.
 * **Stale instructions are not free, and the sign surprises people.** A prompt
   written for an older model can cost *more* on a newer one: a support-desk
   prompt carried from Opus 4.8 to Opus 5 ran 36% more expensive for no accuracy
@@ -543,7 +543,7 @@ precedent: the mechanism being sound does not make the direction obvious.
 What the intervention *replaces* is measurable here, and precisely: how much
 content was retrieved to find things, from where, how much was re-retrieved,
 and what carrying it cost. The post-intervention side needs a second session.
-`tokenamun period --since` is the before-and-after form.
+`tokenamun tree all --since` and `--until` are the before-and-after form.
 
 ## Three things worth keeping in view
 
