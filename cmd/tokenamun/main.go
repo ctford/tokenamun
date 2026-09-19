@@ -509,12 +509,14 @@ func (r *repeatable) Set(v string) error {
 func cmdDoctor(dir string, asJSON bool) error {
 	checks := entire.Diagnose(dir)
 	local, localErr := claudecode.DiscoverLocal(dir)
+	horizon := claudecode.MeasureHorizon()
 
 	if asJSON {
 		return writeJSON(map[string]any{
 			"schema_version":    report.SchemaVersion,
 			"entire":            checks,
 			"local_transcripts": len(local),
+			"horizon":           horizon,
 		})
 	}
 
@@ -523,6 +525,12 @@ func cmdDoctor(dir string, asJSON bool) error {
 	fmt.Printf("Claude Code transcripts   %s\n", localState(local, localErr))
 	fmt.Println("  No setup needed: Claude Code writes these itself. This is the")
 	fmt.Println("  source that works from a cold start.")
+	if lines := horizonLines(horizon); len(lines) > 0 {
+		fmt.Println()
+		for _, line := range lines {
+			fmt.Printf("  %s\n", line)
+		}
+	}
 	fmt.Println()
 	fmt.Println("Entire")
 	for _, c := range checks {
@@ -540,6 +548,47 @@ func cmdDoctor(dir string, asJSON bool) error {
 	}
 	fmt.Println()
 	return nil
+}
+
+// horizonLines says how far back the transcripts reach and what bounds them.
+//
+// Doctor's other answers are about whether a source is set up at all. This
+// one is about a source that is set up, working, and still cannot answer the
+// question you asked it -- because `--since 90d` against a 30-day disk
+// returns 30 days and calls it 90. Nothing else in the tool would tell you.
+//
+// The age is [observed] and the retention period is configuration read from
+// Claude Code's settings, so they are labelled apart even here, where there
+// is no table to put the labels in.
+func horizonLines(h claudecode.Horizon) []string {
+	if h.Sessions+h.Subagents == 0 {
+		return nil
+	}
+	policy := "its default"
+	if h.CleanupConfigured {
+		policy = "your cleanupPeriodDays"
+	}
+	lines := []string{
+		fmt.Sprintf("History reaches back %d days [observed], over %d sessions and %d",
+			h.OldestAgeDays(), h.Sessions, h.Subagents),
+		"subagent transcripts in every project. Claude Code deletes its own",
+		fmt.Sprintf("transcripts after %d days (%s).", h.CleanupPeriodDays, policy),
+	}
+	if h.AtLimit() {
+		return append(lines,
+			fmt.Sprintf("The oldest is at that limit, so history before %s is already",
+				h.Oldest.Format("2006-01-02")),
+			"gone. A --since longer than that returns less than it asks for,",
+			"without saying so.")
+	}
+	// Deliberately not "nothing has been deleted". An oldest file inside the
+	// period rules out a deletion in the last few days and nothing more: a
+	// month of history could have been pruned during a month of not using
+	// Claude Code, and the gap would look exactly like this.
+	return append(lines,
+		"That is inside the period, so this horizon is set by how long Claude",
+		"Code has been used here -- unless use stopped for a while, which would",
+		"hide an older deletion behind the gap.")
 }
 
 // localState says how many Claude Code transcripts were found.

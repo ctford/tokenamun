@@ -13,6 +13,13 @@ import (
 // verified against Claude Code 2.1.x: one directory per project, named by
 // slugifying the absolute working directory, containing one JSONL file per
 // session named by session ID.
+//
+// Not the whole layout. A session that calls Agent also gets a directory of
+// its own alongside its transcript, holding one JSONL per subagent at
+// <project>/<session-id>/subagents/agent-*.jsonl. Those are real transcripts
+// with real usage in them, and this comment claiming a flat directory is how
+// they went unread. Session discovery below still lists only the top level,
+// which is right for enumerating sessions and wrong for totalling spend.
 func ProjectsDir() string {
 	if h, err := os.UserHomeDir(); err == nil {
 		return filepath.Join(h, ".claude", "projects")
