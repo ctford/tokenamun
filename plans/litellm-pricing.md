@@ -157,12 +157,15 @@ the call, and so the model, that incurred it. Neither the carry tree nor
 to pick one model for the whole tree, which is the error the money total
 exists to avoid.
 
-## What is still missing
+## What this left for later
 
-Per-node and per-cause dollars, as above. The attribution they need is now
-partly in place after [`per-call-pricing.md`](per-call-pricing.md).
+**Still open: per-node and per-cause dollars**, as above. The attribution
+they need is now partly in place after
+[`per-call-pricing.md`](per-call-pricing.md).
 
-`--prices` did not reach the subagent block either, which on a fan-out
-session is most of the cost. Built since, along with a soundness fix to the
-combined total it sits beside: see
-[`subagent-dollars.md`](subagent-dollars.md).
+**Since closed: the subagent boundary.** `--prices` did not reach the
+subagent block, which on a fan-out session is most of the cost — and the
+combined total it sits beside was adding two models' EIT without saying so.
+Both fixed in [`subagent-dollars.md`](subagent-dollars.md), which also
+records what it left in turn: `profile all` still drops the subagent block,
+and `sessions` still does not take `--prices`.
