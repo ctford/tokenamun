@@ -10,24 +10,19 @@ tokenamun optimise --at "cli output" --optimise 0.5 --why "quieter test runner o
 This document is the other half of that: a catalogue of the interventions
 people actually try, what part of a session each one acts on, how good the
 published evidence for each is, and which of them can be checked against your
-own data at all. It used to be a set of built-in estimates. Those were deleted,
-because a vendor's figure applied to your session is that vendor's claim
-wearing this tool's authority — see
-[the deletion](#why-there-are-no-built-in-estimates) at the end.
+own data at all. It used to be a set of built-in estimates; see
+[why they were deleted](#why-there-are-no-built-in-estimates) at the end.
 
 Evidence grades used below: **vendor** (self-reported, own benchmark),
 **independent** (third party reproduced or measured), **contested**
 (independent result materially disagrees), **structural** (follows from how the
 API works, hard to dispute). [Sources](#sources) are at the end.
 
-A source can be more than one of those at once, and Anthropic's own cost
-guide is the case that matters here. Its benchmark figures are **vendor** —
-own harness, own tasks, list prices on the day. Its account of what
-invalidates a cached prefix, and the multipliers, are **structural**: that is
-how the API bills, and `internal/cost` already prices with them. Grading the
-whole page at its weakest claim would discard the half this tool depends on;
-grading it at its strongest would dress a benchmark up as a law. Each claim
-below is graded on its own.
+A source can be more than one of those at once, so each claim below is graded
+on its own. Anthropic's cost guide is the case that matters: its benchmark
+figures are **vendor** — own harness, own tasks, list prices on the day — while
+its account of what invalidates a cached prefix, and the multipliers, are
+**structural**, and `internal/cost` already prices with them.
 
 ## The one thing everybody agrees on
 
@@ -39,7 +34,8 @@ how much new work is happening. An arXiv study of agent spending finds input
 dominance holds *even with prompt caching in use*.
 
 Measurement here agrees emphatically: across eight sessions, ~711K tokens of
-unique tool-result content sat behind ~856M tokens of billed input. The content
+unique tool-result content sat behind ~856M tokens of billed input
+([`ENTIRE.md`](ENTIRE.md#the-thing-that-reframes-the-whole-tool)). The content
 is not the cost. **Carrying** the content is the cost.
 
 That is the good news for a profiler — the dominant term is a function of when
@@ -94,7 +90,7 @@ its success rate". Most tool-vendor percentages here are token numbers without
 one. A 65% output reduction that makes the agent re-ask for what it lost is not
 a 65% saving.
 
-The exception is worth understanding rather than just noting. Anthropic's cost
+The exception is worth understanding. Anthropic's cost
 guide reports accuracy beside cost almost throughout — tool search at 45% less
 cost with accuracy unmoved, uploading a CSV instead of pasting it at 6/25 →
 25/25 correct for 92% less, a prompt audit at 14% cheaper for five points more.
@@ -120,9 +116,9 @@ Caveman, Headroom, RTK-style adapters.
   independent testing on real agentic tasks measured 8.5% — an eight-fold gap,
   and the cleanest example of why this tool exists. A second vendor figure in
   the same family reports 33.2% fewer input tokens over 54 runs *with 18/18
-  correctness*, which is worth singling out: among the tool vendors here it is
-  the only claim that reports a success rate alongside a token count. Headroom's own repository
-  line is the honest one: "20% fewer tokens for coding agents, 60–95% fewer
+  correctness*, the only claim among the tool vendors here that reports a
+  success rate alongside a token count. Headroom's own repository line is the
+  honest one: "20% fewer tokens for coding agents, 60–95% fewer
   tokens for JSON" — the headline range is the JSON case and the coding-agent
   case is 20%. RTK claims 60–90% on "common dev commands" (vendor), where the
   session-level effect depends entirely on what share of your output those
@@ -256,9 +252,7 @@ work happens.
 
 ## Round trips: the same content, re-sent fewer times
 
-The model has no memory between calls, so everything still in the context is
-sent again on every call and billed each time. Arriving early and staying is
-what makes content expensive — not being large.
+Arriving early and staying is what makes content expensive — not being large.
 
 ### Clearing before a new task
 
@@ -327,8 +321,8 @@ Delegating exploration so the orchestrator's context never sees it.
   delegated configuration, and its single most expensive run, $84, was also
   wrong. On work that fits one context window, or that is one dependent chain,
   the single model was cheaper every time. Both halves are consistent with the
-  measurement gap above — the saving lives in the child's spend, which is
-  exactly what is absent here.
+  measurement gap above — the saving lives in the child's spend, and that is
+  the half absent here.
 
 ### Compaction
 
@@ -378,9 +372,9 @@ Moving from the 5-minute prompt cache to the 1-hour one —
 * **Acts on** price. It changes nothing about what is in the context.
 * **This is the best-evidenced intervention in this document, and the only one
   with no assumed parameter.** Which TTL each call used is observed from the
-  API's own 5m/1h split. Misses are attributed per cause — model switch, Claude
-  Code upgrade, compaction, effort change are all observable — with TTL expiry
-  reached by elimination. The multipliers are published.
+  API's own 5m/1h split, the multipliers are published, and misses are
+  attributed per cause rather than all blamed on expiry
+  ([`METHODOLOGY.md`](METHODOLOGY.md#5-cache-misses-are-attributed-to-a-cause)).
 * **It can cost more than it saves,** and that is the point of computing it. The
   1-hour TTL prices *every* cache write at 2.0× instead of 1.25×. A session of
   short bursts that never idles past five minutes buys a lifetime it never
@@ -433,8 +427,7 @@ Fewer `/model` switches, fewer effort changes, fewer plugin toggles.
   against the advisor model working alone at 67.5 — within noise — for about
   2.6× the cost per task, because the executor consulted on nearly every task.
   The stated rule is to baseline one model's whole effort curve before adding
-  a second, which is the same instinct as refusing to model an intervention
-  here.
+  a second.
 * **Price the tail, not the median.** On one 20-problem run, two problems
   carried 43% of the spend. That is the strongest argument in that document
   for looking at a distribution rather than a total, and it sits awkwardly
@@ -499,8 +492,8 @@ accuracy fixed while varying the thing that matters. Growing a catalogue to
 left it flat at every catalogue size behind tool search — 45% less at 502 —
 with accuracy 15 to 18 of 20 in every cell either way. Deferring a single
 public GitHub MCP server's toolset cut a run 20% at the same accuracy. The
-saving is still a function of how many schemas you had loaded, which is the
-point: it is a property of your baseline, and yours is not decomposable here.
+saving is still a function of how many schemas you had loaded: a property of
+your baseline, and yours is not decomposable here.
 
 ### Fewer or smaller skills
 
@@ -548,29 +541,26 @@ and what carrying it cost. The post-intervention side needs a second session.
 ## Three things worth keeping in view
 
 * **Prompt caching is the highest-leverage thing most teams already have.**
-  Cached input at 10–25% of list price, applied to the 93–99% of spend that is
-  input. `cache_read` against `cache_creation` is observed, so "is your caching
+  Cached input at 2.5–12% of list price
+  ([`METHODOLOGY.md`](METHODOLOGY.md#3-volume-is-not-cost) has the per-model
+  multipliers), applied to the 93–99% of spend that is input. `cache_read` against `cache_creation` is observed, so "is your caching
   actually working" is not a counterfactual question at all. It is probably the
-  cheapest real finding this tool can produce, which is why it heads the list
-  below.
+  cheapest real finding this tool can produce.
 * **Accuracy moves with efficiency in both directions.** Tool search improved
   tool-selection accuracy; TOON's accuracy claim is contested; the language
   server bought precision at a token premium. Efficiency and quality are not
-  opposite ends of one axis — which is another reason not to report a
-  reduction as an improvement.
+  opposite ends of one axis.
 * **The unit that matters is cost per completed task, and this tool measures
   the numerator.** That is the stated golden rule of the vendor whose figures
   get quoted at people hardest, and it is also the exact shape of what
   Tokenamun cannot see. A session that spent less because the agent gave up is
   indistinguishable here from one that spent less because it worked better. The
   same document closes by saying its own numbers are directional and should be
-  tested on your own workload, which is this tool's whole argument arriving
-  from the other direction.
+  tested on your own workload.
 
 ## Where to start
 
-Ranked by evidence quality rather than by claimed upside, which is the
-inversion this document exists to make possible.
+Ranked by evidence quality rather than by claimed upside.
 
 1. **Cache hygiene.** Observed end to end, no assumed parameter, and the
    largest number measured here by a wide margin: 40% of one session's
@@ -630,18 +620,13 @@ from +9% to +54%, median code-review time +441%, and PRs merged with no review
 at all up 31%.
 
 It is also the failure mode this tool is closest to. A profiler that reported
-"tokens per developer" would be worse than no profiler. Hence:
-
-* **Filtering by developer is fine; reporting by developer is not.** Analysing
-  your own sessions, or a colleague's at their request, is how you help. A
-  column comparing people is how a leaderboard starts. The line is between
-  choosing whose work to look at and publishing a ranking of it.
-* No developer dimension in any command's output, including `hotspots`.
-* Findings are framed against the engineering system — subsystems, file
-  properties, retrieval patterns — never against people.
-* A reduction is never reported as an improvement without the outcome question
-  attached. Spending fewer tokens to do worse work is not a win, and Tokenamun
-  cannot see work quality, so it must not imply that it can.
+"tokens per developer" would be worse than no profiler. What follows from that
+is in [`METHODOLOGY.md`](METHODOLOGY.md#9-not-a-productivity-metric), and one
+distinction is worth stating in full here: **filtering by developer is fine;
+reporting by developer is not.** Analysing your own sessions, or a colleague's
+at their request, is how you help. A column comparing people is how a
+leaderboard starts. The line is between choosing whose work to look at and
+publishing a ranking of it.
 
 ## Sources
 
