@@ -414,3 +414,24 @@ func TestLongerTTLPricesEachModelsWritesAtItsOwnRate(t *testing.T) {
 		}
 	}
 }
+
+func TestAvoidabilityIsCountedPerCallNotFlaggedPerCause(t *testing.T) {
+	// Two expiries in one cause row: one gap a longer lifetime would have
+	// covered, one it would not. A bool here said "avoidable" about both.
+	s := session(
+		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
+		inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
+		inv(2, 2*time.Hour+20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 60_000),
+	)
+	agg := Cache(s, TTL5m).ByCause[CauseTTLExpiry]
+
+	if agg.Calls != 2 {
+		t.Fatalf("expiry calls = %d, want 2", agg.Calls)
+	}
+	if agg.AvoidableCalls != 1 {
+		t.Errorf("avoidable calls = %d, want 1", agg.AvoidableCalls)
+	}
+	if agg.AvoidableTokens != 50_000 {
+		t.Errorf("avoidable tokens = %d, want 50000 (not the row's 110,000)", agg.AvoidableTokens)
+	}
+}

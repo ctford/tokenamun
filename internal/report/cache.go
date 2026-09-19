@@ -25,13 +25,19 @@ type Cache struct {
 }
 
 // CauseRow is one attributed cause of cache rebuilding.
+//
+// AvoidableCalls and AvoidableTokens replaced a single bool. A flag on a row
+// of twenty calls says "a longer TTL would have avoided this" about all of
+// them on the evidence of one, which is the kind of rounding-up this tool
+// exists to refuse.
 type CauseRow struct {
-	Cause       string         `json:"cause"`
-	Calls       model.Quantity `json:"calls"`
-	Rebuilt     model.Quantity `json:"rebuilt_tokens"`
-	Cost        model.Quantity `json:"cost"`
-	Share       model.Quantity `json:"share_of_prompt_cost"`
-	TTLWouldFix bool           `json:"avoidable_by_longer_ttl"`
+	Cause           string         `json:"cause"`
+	Calls           model.Quantity `json:"calls"`
+	Rebuilt         model.Quantity `json:"rebuilt_tokens"`
+	Cost            model.Quantity `json:"cost"`
+	Share           model.Quantity `json:"share_of_prompt_cost"`
+	AvoidableCalls  model.Quantity `json:"avoidable_by_longer_ttl_calls"`
+	AvoidableTokens model.Quantity `json:"avoidable_by_longer_ttl_tokens"`
 }
 
 // ExpiryReport isolates what a longer TTL could have addressed.
@@ -88,12 +94,13 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 
 	for cause, agg := range c.ByCause {
 		r.Causes = append(r.Causes, CauseRow{
-			Cause:       cause,
-			Calls:       model.Obs(float64(agg.Calls), model.Calls),
-			Rebuilt:     model.Obs(float64(agg.Tokens), model.Tokens),
-			Cost:        model.Der(agg.CostEIT, model.EIT),
-			Share:       model.Der(agg.Share, model.Ratio),
-			TTLWouldFix: agg.TTLFixes,
+			Cause:           cause,
+			Calls:           model.Obs(float64(agg.Calls), model.Calls),
+			Rebuilt:         model.Obs(float64(agg.Tokens), model.Tokens),
+			Cost:            model.Der(agg.CostEIT, model.EIT),
+			Share:           model.Der(agg.Share, model.Ratio),
+			AvoidableCalls:  model.Der(float64(agg.AvoidableCalls), model.Calls),
+			AvoidableTokens: model.Der(float64(agg.AvoidableTokens), model.Tokens),
 		})
 	}
 	sort.SliceStable(r.Causes, func(i, j int) bool { return r.Causes[i].Cost.Value > r.Causes[j].Cost.Value })
@@ -122,8 +129,9 @@ func RenderCache(w io.Writer, r Cache) error {
 	fmt.Fprintf(b, "  %-22s %7s %14s %12s %8s\n", "CAUSE", "CALLS", "TOKENS", "COST (EIT)", "% COST")
 	for _, c := range r.Causes {
 		marker := ""
-		if c.TTLWouldFix {
-			marker = "  <- a longer TTL would have avoided this"
+		if n := int(c.AvoidableCalls.Value); n > 0 {
+			marker = fmt.Sprintf("  <- %s of %s avoidable at 1h",
+				num(n), num(int(c.Calls.Value)))
 		}
 		fmt.Fprintf(b, "  %-22s %7s %14s %12s %7.1f%%%s\n",
 			trunc(c.Cause, 22), num(int(c.Calls.Value)), num(int(c.Rebuilt.Value)),

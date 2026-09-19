@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "session": {
     "id": "carry-fixture",
     "selector": "carry-fixture",
@@ -52,7 +52,16 @@
         "unit": "ratio",
         "provenance": "derived"
       },
-      "avoidable_by_longer_ttl": true
+      "avoidable_by_longer_ttl_calls": {
+        "value": 1,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "avoidable_by_longer_ttl_tokens": {
+        "value": 34500,
+        "unit": "tokens",
+        "provenance": "derived"
+      }
     },
     {
       "cause": "session_start",
@@ -76,7 +85,16 @@
         "unit": "ratio",
         "provenance": "derived"
       },
-      "avoidable_by_longer_ttl": false
+      "avoidable_by_longer_ttl_calls": {
+        "value": 0,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "avoidable_by_longer_ttl_tokens": {
+        "value": 0,
+        "unit": "tokens",
+        "provenance": "derived"
+      }
     },
     {
       "cause": "compaction_or_reset",
@@ -100,7 +118,16 @@
         "unit": "ratio",
         "provenance": "derived"
       },
-      "avoidable_by_longer_ttl": false
+      "avoidable_by_longer_ttl_calls": {
+        "value": 0,
+        "unit": "calls",
+        "provenance": "derived"
+      },
+      "avoidable_by_longer_ttl_tokens": {
+        "value": 0,
+        "unit": "tokens",
+        "provenance": "derived"
+      }
     }
   ],
   "ttl_expiry": {

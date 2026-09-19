@@ -9,7 +9,7 @@ Session carry-fixture
 
 Why the cache was rebuilt
   CAUSE                    CALLS         TOKENS   COST (EIT)   % COST
-  ttl_expiry                   1         34,500       43,125    40.2%  <- a longer TTL would have avoided this
+  ttl_expiry                   1         34,500       43,125    40.2%  <- 1 of 1 avoidable at 1h
   session_start                1         30,000       37,500    34.9%
   compaction_or_reset          1          6,100        7,625     7.1%
 

@@ -159,12 +159,19 @@ func longerTTL(r *CacheReport, buckets ttlBuckets) {
 }
 
 // CauseAgg totals one cause.
+//
+// The avoidable part is a count, not a flag. It used to be a bool ORed across
+// the group, so one avoidable miss among twenty marked the whole row as
+// something a longer lifetime would have fixed. Expiry is the only cause that
+// can be avoidable at all, and even there it is only the gaps under an hour --
+// which on real sessions is most of the tokens and not all of them.
 type CauseAgg struct {
-	Calls    int     `json:"calls"`
-	Tokens   int64   `json:"rebuilt_tokens"`
-	CostEIT  float64 `json:"cost_eit"`
-	Share    float64 `json:"share_of_prompt_cost"`
-	TTLFixes bool    `json:"avoidable_by_longer_ttl"`
+	Calls           int     `json:"calls"`
+	Tokens          int64   `json:"rebuilt_tokens"`
+	CostEIT         float64 `json:"cost_eit"`
+	Share           float64 `json:"share_of_prompt_cost"`
+	AvoidableCalls  int     `json:"avoidable_by_longer_ttl_calls"`
+	AvoidableTokens int64   `json:"avoidable_by_longer_ttl_tokens"`
 }
 
 // Cache attributes every large cache miss in a session to a cause and prices
@@ -237,7 +244,10 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 		agg.Calls++
 		agg.Tokens += m.Rebuilt
 		agg.CostEIT += m.CostEIT
-		agg.TTLFixes = agg.TTLFixes || m.AvoidableByTTL
+		if m.AvoidableByTTL {
+			agg.AvoidableCalls++
+			agg.AvoidableTokens += m.Rebuilt
+		}
 		r.ByCause[m.Cause] = agg
 
 		if m.Cause == CauseTTLExpiry {
@@ -373,7 +383,8 @@ func Merge(reports []CacheReport) CacheReport {
 			cur.Calls += agg.Calls
 			cur.Tokens += agg.Tokens
 			cur.CostEIT += agg.CostEIT
-			cur.TTLFixes = cur.TTLFixes || agg.TTLFixes
+			cur.AvoidableCalls += agg.AvoidableCalls
+			cur.AvoidableTokens += agg.AvoidableTokens
 			out.ByCause[cause] = cur
 		}
 	}

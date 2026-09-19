@@ -14,7 +14,12 @@ import (
 
 // SchemaVersion is the JSON output contract. Agents consume this output, so a
 // key change is a breaking change even while the project is experimental.
-const SchemaVersion = 1
+//
+// 2: cache's per-cause `avoidable_by_longer_ttl` bool became
+// `avoidable_by_longer_ttl_calls` and `_tokens`. The bool was ORed over the
+// group, so a consumer reading it as "this row is avoidable" was reading an
+// overclaim.
+const SchemaVersion = 2
 
 // Profile is a session overview.
 type Profile struct {
