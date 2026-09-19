@@ -1,54 +1,10 @@
 package cost
 
 import (
-	"encoding/json"
 	"math"
-	"os"
+	"strings"
 	"testing"
 )
-
-// catalogPath is the pinned LiteLLM extract. scripts/refresh-prices.sh writes
-// it; nothing at run time fetches it.
-const catalogPath = "litellm-prices.json"
-
-// catalogRates are one model's published rates, in USD per token.
-//
-// CacheWrite1h is a pointer because upstream omits it on a few legacy aliases
-// and an omitted rate is not a free one.
-type catalogRates struct {
-	Input        float64  `json:"input"`
-	CacheRead    float64  `json:"cache_read"`
-	CacheWrite5m float64  `json:"cache_write_5m"`
-	CacheWrite1h *float64 `json:"cache_write_1h"`
-	Output       float64  `json:"output"`
-}
-
-type catalogFile struct {
-	Upstream struct {
-		Repo      string `json:"repo"`
-		File      string `json:"file"`
-		Commit    string `json:"commit"`
-		Retrieved string `json:"retrieved"`
-	} `json:"upstream"`
-	PriceUnit string                  `json:"price_unit"`
-	Models    map[string]catalogRates `json:"models"`
-}
-
-func loadCatalog(t *testing.T) catalogFile {
-	t.Helper()
-	raw, err := os.ReadFile(catalogPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", catalogPath, err)
-	}
-	var c catalogFile
-	if err := json.Unmarshal(raw, &c); err != nil {
-		t.Fatalf("parse %s: %v", catalogPath, err)
-	}
-	if len(c.Models) == 0 {
-		t.Fatalf("%s has no models", catalogPath)
-	}
-	return c
-}
 
 // TestWeightsMatchPublishedRates checks every constant in this package against
 // a published rate, for every model in the pinned extract.
@@ -69,7 +25,7 @@ func loadCatalog(t *testing.T) catalogFile {
 // prices a whole session at cost.For(firstModel) passes this test with every
 // constant correct. Neither test catches the other's bug.
 func TestWeightsMatchPublishedRates(t *testing.T) {
-	c := loadCatalog(t)
+	c := catalog()
 	if c.PriceUnit != "usd_per_token" {
 		t.Fatalf("price_unit = %q, want usd_per_token", c.PriceUnit)
 	}
@@ -115,7 +71,7 @@ func assertWeight(t *testing.T, class string, published, constant float64) {
 // carries three special cases; if a refresh drops the models they name, the
 // table test above still passes while checking nothing about them.
 func TestCatalogCoversTheModelsWeSpecialCase(t *testing.T) {
-	c := loadCatalog(t)
+	c := catalog()
 	for _, id := range []string{
 		"claude-fable-5", "claude-fable-5-1",
 		"claude-mythos-5", "claude-mythos-5-1",
@@ -123,6 +79,60 @@ func TestCatalogCoversTheModelsWeSpecialCase(t *testing.T) {
 	} {
 		if _, ok := c.Models[id]; !ok {
 			t.Errorf("%s is special-cased in For() but absent from the extract", id)
+		}
+	}
+}
+
+// TestInputPriceKnowsTheModelsWeProfile is the cheerful half. EIT is defined
+// as a multiple of a model's input price, so this one number is the whole
+// conversion to money.
+func TestInputPriceKnowsTheModelsWeProfile(t *testing.T) {
+	for _, id := range []string{
+		"claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5",
+		"claude-fable-5-1", "claude-mythos-5-1",
+	} {
+		price, ok := InputPrice(id)
+		if !ok {
+			t.Errorf("%s: no price", id)
+			continue
+		}
+		if price <= 0 || price > 1e-3 {
+			t.Errorf("%s: %v USD/token is not a plausible input price", id, price)
+		}
+	}
+	if got, _ := InputPrice("CLAUDE-OPUS-5"); got == 0 {
+		t.Error("case should not decide whether a model has a price")
+	}
+}
+
+// TestInputPriceRefusesWhatItDoesNotKnow is the half that matters. A default
+// price is a wrong bill that looks like a right one, and silent fall-through
+// is how the fable bug survived as long as it did.
+func TestInputPriceRefusesWhatItDoesNotKnow(t *testing.T) {
+	for _, id := range []string{
+		"",
+		"gpt-4o",
+		"claude-opus-6",
+		// Resold, at the reseller's rates. Not a spelling of the bare key.
+		"eu.anthropic.claude-opus-5",
+		"bedrock/us-gov-east-1/anthropic.claude-opus-5",
+		"databricks/claude-opus-5",
+	} {
+		if price, ok := InputPrice(id); ok {
+			t.Errorf("%q priced at %v; an unknown model must have no price, not a default one", id, price)
+		}
+	}
+}
+
+// TestCatalogPinNamesTheCommit guards the line that has to appear beside every
+// dollar figure. "From LiteLLM" is not a source: published rates move, so the
+// answer has to name the commit they were read from.
+func TestCatalogPinNamesTheCommit(t *testing.T) {
+	pin := CatalogPin()
+	c := catalog()
+	for _, want := range []string{c.Upstream.Repo, c.Upstream.Commit[:12], c.Upstream.Retrieved} {
+		if want == "" || !strings.Contains(pin, want) {
+			t.Errorf("pin %q does not name %q", pin, want)
 		}
 	}
 }

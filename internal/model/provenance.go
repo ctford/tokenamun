@@ -39,6 +39,11 @@ const (
 	Calls   Unit = "calls"
 	Ratio   Unit = "ratio"
 	Seconds Unit = "seconds"
+	// USD is the one unit here that a session does not contain. Tokens are
+	// counted; dollars are tokens multiplied by a third-party price list,
+	// so a quantity in USD is only as good as the catalog pin printed
+	// beside it, and something must print that pin.
+	USD Unit = "usd"
 )
 
 // Quantity is a number that knows where it came from and what it counts.
