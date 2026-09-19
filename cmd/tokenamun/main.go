@@ -17,8 +17,8 @@ import (
 	"github.com/ctford/tokenamun/internal/claudecode"
 	"github.com/ctford/tokenamun/internal/codescan"
 	"github.com/ctford/tokenamun/internal/entire"
-	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
+	"github.com/ctford/tokenamun/internal/parsecache"
 	"github.com/ctford/tokenamun/internal/report"
 )
 
@@ -75,6 +75,7 @@ Flags:
                   Taken by profile, cache and tree. EIT is the default unit
                   and stays exact within a model; this is for the total that
                   spans two of them, where EIT adds different-sized things.
+  --no-cache      re-read every transcript, ignoring the parse cache
   --dir PATH      directory to look in (default: working directory)
   --source SRC    entire | local | any (default: any)
   -o FILE         output file (report; default tokenamun-report.html)
@@ -123,6 +124,7 @@ func run(args []string) error {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	withPrices := fs.Bool("prices", false, "also total it in money, from the pinned catalog")
+	noCache := fs.Bool("no-cache", false, "re-read every transcript, ignoring the parse cache")
 	dir := fs.String("dir", ".", "directory to look in")
 	source := fs.String("source", "any", "entire | local | any")
 	out := fs.String("o", "tokenamun-report.html", "output file for the report")
@@ -155,6 +157,13 @@ func run(args []string) error {
 	// of fifteen signatures would be the same global with more typing.
 	if window, err = model.ParseWindow(*since, *until); err != nil {
 		return err
+	}
+	// Held in a package variable for the same reason the window is: every
+	// command that reads a transcript wants it, and threading it through
+	// fifteen signatures would be the same global with more typing. A nil
+	// cache parses everything, which is what --no-cache asks for.
+	if !*noCache {
+		parses = parsecache.Open()
 	}
 	selector := "latest"
 	if len(positional) > 0 {
@@ -277,6 +286,10 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 
 // window scopes discovery to a period. Zero means everything.
 var window model.Window
+
+// parses remembers parsed sessions between invocations, so a second question
+// about unchanged transcripts does not re-read them. Nil parses every time.
+var parses *parsecache.Cache
 
 // discover lists candidate sessions from the requested sources, most recently
 // active first.
@@ -526,7 +539,7 @@ func loadSelected(dir, source, selector string) (*model.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ingest.Load(ref)
+	return parses.Load(ref)
 }
 
 // selectSession resolves a selector against the discovered sessions.

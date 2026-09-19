@@ -10,7 +10,6 @@ import (
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/codescan"
 	"github.com/ctford/tokenamun/internal/cost"
-	"github.com/ctford/tokenamun/internal/ingest"
 	"github.com/ctford/tokenamun/internal/model"
 	"github.com/ctford/tokenamun/internal/report"
 )
@@ -215,9 +214,7 @@ func loadSessions(dir, source string) ([]*model.Session, report.SessionInfo, err
 	if len(refs) == 0 {
 		return nil, report.SessionInfo{}, fmt.Errorf("no sessions in %s", window)
 	}
-	sessions, failed := report.Readable(refs, func(r model.SessionRef) (*model.Session, error) {
-		return ingest.Load(r)
-	})
+	sessions, failed := report.Readable(refs, parses.Load)
 	if len(sessions) == 0 {
 		return nil, report.SessionInfo{}, fmt.Errorf(
 			"none of the %d sessions in %s could be read", len(refs), window)

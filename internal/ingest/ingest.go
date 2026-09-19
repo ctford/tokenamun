@@ -61,6 +61,24 @@ func LoadWith(ref model.SessionRef, opts Options) (*model.Session, error) {
 	return s, nil
 }
 
+// Sources lists every file on disk that LoadWith reads for a ref.
+//
+// It exists so that a cache can key on all of them rather than only on the
+// transcript it was handed: a session's parse also takes in the subagent
+// transcripts beside it, and one of those can be written after its parent's
+// last line. Nothing for an Entire recording, which is a single committed
+// blob named by an immutable ref, with no siblings to find.
+//
+// Next to loadSubagents deliberately. The two have to agree about which files
+// a parse depends on, and the way to keep them agreeing is to keep them
+// where the next person changes both.
+func Sources(ref model.SessionRef) []string {
+	if ref.InGit || ref.Transcript == "" {
+		return nil
+	}
+	return append([]string{ref.Transcript}, claudecode.SubagentTranscripts(ref.Transcript)...)
+}
+
 // loadSubagents parses the transcripts of the subagents a session launched
 // and attaches their spend to it.
 //
