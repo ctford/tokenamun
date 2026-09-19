@@ -62,9 +62,17 @@ func cmdReport(dir, source, selector, title, outPath string, asJSON bool) error 
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	if err := report.RenderTreemap(f, payload); err != nil {
+		_ = f.Close()
 		return err
+	}
+	// Closed explicitly rather than deferred, because this file is being
+	// written: a deferred close discards the error, and the error a close
+	// reports on a write is the buffer that never reached the disk. Saying
+	// "wrote week.html" over a failed flush is the one outcome worth ruling
+	// out here.
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("writing %s: %w", outPath, err)
 	}
 	fmt.Printf("wrote %s (%d retrievals)\n", outPath, payload.Tree.Items)
 	fmt.Println("Area is cost-weighted tokens. It is not a picture of the context window.")

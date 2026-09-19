@@ -101,7 +101,12 @@ func TestZeroRatioStillCounts(t *testing.T) {
 }
 
 func TestHashIsStableAndDistinguishes(t *testing.T) {
-	if Hash("abc") != Hash("abc") {
+	// Two equal strings built differently, rather than the same literal
+	// twice: the property is that equal content hashes equally, and writing
+	// it as Hash("abc") != Hash("abc") is an expression a linter is right to
+	// call meaningless.
+	assembled := "ab" + string(rune('c'))
+	if Hash("abc") != Hash(assembled) {
 		t.Fatal("hashing must be stable, or repeated-retrieval detection breaks")
 	}
 	if Hash("abc") == Hash("abd") {

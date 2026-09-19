@@ -52,7 +52,7 @@ func LoadWith(ref model.SessionRef, opts Options) (*model.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only: nothing to flush, nothing to lose
 	return ParseWith(f, ref, opts)
 }
 

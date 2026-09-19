@@ -137,19 +137,18 @@ func checkpointRefs(repo string) ([]string, error) {
 
 // treeBlobs lists every blob in every checkpoint tree, with sizes.
 func treeBlobs(repo string, refs []string) ([]blobRef, error) {
-	args := append([]string{"ls-tree", "-r", "--long", "-z"}, refs...)
-	out, err := gitOutput(repo, args...)
-	if err != nil {
-		return nil, err
-	}
-
 	// `ls-tree` over several refs does not say which ref a line came from, so
 	// they are listed one at a time. Still one process per ref for this step,
 	// which is the price of knowing the ref -- and it only runs when a
 	// repository actually has checkpoints.
+	//
+	// A batched call over every ref used to run first and have its output
+	// thrown away by this loop: a git process per scan doing nothing, and an
+	// error path that could fail the whole read where the loop below is
+	// deliberately tolerant of one bad ref.
 	var blobs []blobRef
 	for _, ref := range refs {
-		out, err = gitOutput(repo, "ls-tree", "-r", "--long", ref)
+		out, err := gitOutput(repo, "ls-tree", "-r", "--long", ref)
 		if err != nil {
 			continue
 		}

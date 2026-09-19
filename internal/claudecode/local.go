@@ -110,7 +110,7 @@ func transcriptCWD(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only: nothing to flush, nothing to lose
 
 	dec := json.NewDecoder(f)
 	for i := 0; i < 50; i++ {
