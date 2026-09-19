@@ -1,6 +1,10 @@
 # Finding the one bad retrieval
 
-Status: proposed, 2026-09-19. Nothing here is built.
+Status: **next up**. Decided 2026-09-19; nothing here is built yet.
+
+> **Decided:** start here. Build `carry all` first, then distribution per
+> leaf, then the `EnteredAt` column. The separate `outliers` command stays
+> unbuilt; re-describe `carry` in the help instead.
 
 Second round of feedback from the same week of use. The question behind it:
 can the tool detect a *pathological* event — one test run among 3,795 that

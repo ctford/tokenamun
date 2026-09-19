@@ -2,6 +2,11 @@
 
 Status: proposed, 2026-09-19. Nothing here is built.
 
+> **Decided:** wrapper leaves are split by measurement, not by an allow-list
+> — see item 3. Everything else in this file is still open, and item 1 (cost
+> in `sessions`, with the parse cache under it) is the next thing to pick up
+> once [`outlier-detection.md`](outlier-detection.md) is done.
+
 Ten suggestions from an agent that profiled a 271-session week with this tool
 and hit its edges. Checked against the code before ranking. Two are already
 done, one asks for the wrong fix to a real problem, and the ordering wants
@@ -102,12 +107,12 @@ Their fix is an allow-list — `mise run`, `pnpm exec`, `npm run`, `npx`,
 also a hardcoded name list of the kind this repo generally refuses, and it
 will be wrong for whatever wrapper someone adopts next.
 
-**Worth considering instead: split on measurement rather than on names.**
+**Decided: split on measurement rather than on names.**
 Descend a token when a leaf's second tokens are high-cardinality and do not
 look like paths — `LooksLikeCommand` is already the predicate for "this token
 is a command, not a filename". A wrapper is then something the data
-identifies rather than something we list. If that proves fiddly, take the
-allow-list; it is better than the status quo either way.
+identifies rather than something we list. If it proves fiddly in practice, fall back to the allow-list and say in a
+comment why the list is a list -- but the measurement is what to try first.
 
 Their item 7 belongs here, not separately. A leaf saying "nothing inside:
 this is a leaf" reads identically for a genuine atom and for 3,795 lumped

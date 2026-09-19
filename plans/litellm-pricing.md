@@ -2,6 +2,10 @@
 
 Status: proposed, 2026-09-19. Nothing here is built.
 
+> **Decided:** EIT stays the default output unit permanently. Dollars are
+> opt-in via `--prices`, and only on the cross-model surfaces where EIT is
+> unsound. Stage 1 is still worth shipping on its own.
+
 ## The problem this solves
 
 `internal/cost/cost.go` says it plainly:
@@ -136,15 +140,15 @@ Any report that prints dollars must print the catalog pin beside them, the way
 `Estimator` already prints its method. A dollar figure whose source is not
 stated is the kind of number this tool exists not to produce.
 
-## Two decisions not made here
+## One decision not made here
 
 1. **How dollars are labelled.** They are `[derived]` from observed tokens and
    a third-party constant, which is arguably `[derived-approx]`: the catalog
    can be stale, or wrong about a model you use. Leaning `[derived]` with a
    mandatory pin line, but it is a judgement about what the labels promise.
-2. **Whether EIT stays the default.** It should, permanently. It needs no
-   price list and is exact within a model. Dollars are opt-in, for the
-   cross-model case only.
+2. ~~**Whether EIT stays the default.**~~ Decided: it does, permanently. It
+   needs no price list and is exact within a model. Dollars are opt-in, for
+   the cross-model case only.
 
 ## Not in scope, but adjacent
 
