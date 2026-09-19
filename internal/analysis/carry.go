@@ -129,6 +129,12 @@ type CarriedItem struct {
 // per call, not per block -- so residency is priced by call. Caching is
 // prefix-based and retrievals sit in the prefix, so this follows the mechanism
 // rather than guessing.
+//
+// By call means by that call's model as well as its cache class. A span can
+// cross a model switch, and the cache read is the one weight that differs
+// between models: 0.025x on the 5.1 generation against 0.1x elsewhere. Since
+// carry is nearly all cache reads, pricing a span at whichever model came
+// first was close to a fourfold error on any session that mixed them.
 func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 	return CarryWith(s, cacheReport, nil)
 }
@@ -141,34 +147,140 @@ func Carry(s *model.Session, cacheReport CacheReport) CarryReport {
 // separate model of it. A clear and a compaction do the same thing to carry
 // cost -- they truncate every open residency span -- so the counterfactual is
 // the observed session with more resets in it.
-// weightsFor picks one pricing for a whole session, from the first model seen.
+// spanPricer prices a piece of content's residency call by call.
 //
-// An earlier version of this comment claimed to be the only place left that
-// made this approximation. It was not -- report/profile.go, report/tree.go
-// and report/treenames.go all did the same thing and none of them said so --
-// and a comment asserting a property the code does not have is worse than no
-// comment, because it stops the next person looking. Those three are now
-// priced per call, which leaves this one.
+// Carry is the residency of one item over a span of calls, and those calls
+// can span models, so pricing the span at one rate is wrong the moment a
+// session mixes the 5.1 generation with anything else: its cache reads are
+// 0.025x against 0.1x, and carry is nearly all cache reads. A bucket is not
+// enough here, because a bucket loses the order and the order is what says
+// which send was the write. So the span is walked.
 //
-// Carry prices the residency of one content item over a span of calls, and
-// those calls can span models, so doing it properly means pricing each send
-// at the model of the call it went out on rather than the span at one rate.
-// A bucket is not enough: the span has to be walked. Until it is, a session
-// that mixes the 5.1 generation with anything else has its carry priced at
-// whichever came first, and since carry is nearly all cache reads that is
-// the 0.025x-against-0.1x term, close to a fourfold error on the dominant
-// class. An Opus/Sonnet switch changes nothing at all: every other weight is
-// the same for every model.
-func weightsFor(s *model.Session) cost.Weights {
-	if ms := s.Models(); len(ms) > 0 {
-		return cost.For(ms[0])
+// Only the cache read actually differs between the models published so far.
+// The walk prices every class per call anyway, because the next difference
+// will not announce itself.
+type spanPricer struct {
+	weights []cost.Weights
+	cold    map[int]bool
+}
+
+func newSpanPricer(s *model.Session, cold map[int]bool) spanPricer {
+	w := make([]cost.Weights, len(s.Invocations))
+	for i, inv := range s.Invocations {
+		w[i] = cost.For(inv.Model)
 	}
-	return cost.Default
+	return spanPricer{weights: w, cold: cold}
+}
+
+// at is the pricing of one call, by sequence. Out of range -- an item that
+// entered on the first call looks back past it -- falls back to the default
+// rather than to a neighbour's, because a call that is not there has no
+// model.
+func (p spanPricer) at(call int) cost.Weights {
+	if call < 0 || call >= len(p.weights) {
+		return cost.Default
+	}
+	return p.weights[call]
+}
+
+// resident is what one piece of content's residency cost.
+type resident struct {
+	// Billed is the cost as actually billed, each send at the model and the
+	// cache class of the call it went out on.
+	Billed float64
+	// InputEIT is the same sends at full input price: the no-caching
+	// counterfactual on the same trajectory.
+	InputEIT float64
+	// EntryInput is one more send at full input price, at the model of the
+	// call the content entered on. Two of the callers here count the
+	// entering call's own send in their counterfactual and one does not;
+	// see the note on carried.
+	EntryInput float64
+	// Sends is how many sends were priced, Warm and Cold how they split
+	// after the first, and Span how many calls the content was resident for.
+	Sends, Warm, Cold, Span int
+}
+
+// arrived prices content that is new at the start of the span: its first
+// send writes it to the cache and the rest read it, or write it again on a
+// call that rebuilt the prefix.
+//
+// Pricing the first send as a read understated late-arriving content by more
+// than an order of magnitude, which is why the write is charged even when
+// the content arrived on the final call and was never re-read.
+//
+// The write is the first call of the span rather than a subtraction from the
+// warm total. Those agree unless the first call was itself cold, where the
+// old arithmetic charged a write for the cold call and another for the
+// substitution; in call order there is one.
+func (p spanPricer) arrived(tokens float64, from, end int, resets []int) resident {
+	r := resident{EntryInput: tokens * p.at(from-1).Input}
+	stop := stopAt(from, end, resets)
+	if from >= stop {
+		// Content that arrives on the final call is still sent once.
+		w := p.at(from - 1)
+		return resident{Billed: tokens * w.CacheWrite5m, InputEIT: tokens * w.Input,
+			EntryInput: r.EntryInput, Sends: 1}
+	}
+	for k := from; k < stop; k++ {
+		w := p.at(k)
+		r.InputEIT += tokens * w.Input
+		r.Sends++
+		r.Span++
+		switch {
+		case k == from:
+			r.Billed += tokens * w.CacheWrite5m
+		case p.cold[k]:
+			r.Billed += tokens * w.CacheWrite5m
+			r.Cold++
+		default:
+			r.Billed += tokens * w.CacheRead
+			r.Warm++
+		}
+	}
+	return r
+}
+
+// carried prices content that was already resident when the span began, so
+// no send in it is a write of new content.
+//
+// The preamble is the one of these: it is the first call's whole prompt, and
+// what a compaction leaves behind is not in the transcript, so nothing here
+// claims a rewrite of it.
+func (p spanPricer) carried(tokens float64, from, end int, resets []int) resident {
+	var r resident
+	stop := stopAt(from, end, resets)
+	for k := from; k < stop; k++ {
+		w := p.at(k)
+		r.InputEIT += tokens * w.Input
+		r.Sends++
+		r.Span++
+		if p.cold[k] {
+			r.Billed += tokens * w.CacheWrite5m
+			r.Cold++
+			continue
+		}
+		r.Billed += tokens * w.CacheRead
+		r.Warm++
+	}
+	return r
+}
+
+// stopAt is where a residency span ends: the end of the session, or the
+// first reset in it, because content does not survive a compaction.
+func stopAt(from, end int, resets []int) int {
+	stop := end
+	for _, reset := range resets {
+		if reset >= from && reset < stop {
+			stop = reset
+		}
+	}
+	return stop
 }
 
 func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) CarryReport {
-	w := weightsFor(s)
 	cold := ColdCalls(cacheReport)
+	price := newSpanPricer(s, cold)
 
 	r := CarryReport{
 		Calls:        len(s.Invocations),
@@ -184,8 +296,8 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 		callPrompt, _ := cost.PerCall(inv)
 		r.PromptCostEIT += callPrompt
 		// The same tokens at full input price: what this session would have
-		// cost with no cache at all.
-		r.PromptCostUncachedEIT += float64(p) * w.Input
+		// cost with no cache at all, at this call's own input rate.
+		r.PromptCostUncachedEIT += float64(p) * cost.For(inv.Model).Input
 		if !inv.IsRealCall() {
 			continue
 		}
@@ -210,10 +322,10 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	// claimed here. This is also why the counterfactual resets below do not
 	// apply to it: a clear certainly rebuilds the preamble rather than losing
 	// it, and an intervention that clears must price that write itself.
-	r.PreambleCarryEIT = residencyCost(float64(r.Preamble), 1, len(s.Invocations), cold, r.Resets, w)
-	preambleWarm, preambleCold := residency(1, len(s.Invocations), cold, r.Resets)
-	r.PreambleCarryUncachedEIT = float64(r.Preamble) * float64(preambleWarm+preambleCold) * w.Input
-	r.PreambleRoundTrips = float64(preambleWarm + preambleCold)
+	preamble := price.carried(float64(r.Preamble), 1, len(s.Invocations), r.Resets)
+	r.PreambleCarryEIT = preamble.Billed
+	r.PreambleCarryUncachedEIT = preamble.InputEIT
+	r.PreambleRoundTrips = float64(preamble.Sends)
 
 	// Everything else is priced against the resets that a counterfactual adds
 	// as well as the ones that happened. r.Resets itself stays observed.
@@ -223,15 +335,15 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 	}
 
 	// What you typed is carried like anything else.
-	carryTyped(&r, s, w, cold, resets)
+	carryTyped(&r, s, price, resets)
 
 	// Residency per call, for anything attributed to a call rather than to a
 	// retrieval: the arguments the model wrote into a tool call take their
 	// residency from the call that wrote them.
-	r.RoundTripsByCall = roundTripsByCall(s, cold, resets)
+	r.RoundTripsByCall = roundTripsByCall(s, resets)
 
 	// The model's own output is carried too.
-	carryOutput(&r, s, w, cold, resets)
+	carryOutput(&r, s, price, resets)
 
 	// The arguments the model wrote into tool calls are carried too, but they
 	// are part of its output rather than a separate quantity: they are
@@ -244,26 +356,23 @@ func CarryWith(s *model.Session, cacheReport CacheReport, extraResets []int) Car
 		if entered < 0 {
 			continue
 		}
-		warm, coldN := residency(entered+1, len(s.Invocations), cold, resets)
-		// The call that first carries the content in writes it to cache; the
-		// rest read it. Content that arrives on the final call is still sent
-		// once, so it keeps the write and has no reads.
-		warm, coldN = chargeFirstSendAsWrite(warm, coldN)
+		// Walked rather than counted: each send is priced at the model of
+		// the call it went out on, so a retrieval that lived across a model
+		// switch is billed at both.
+		res := price.arrived(c.Tokens, entered+1, len(s.Invocations), resets)
 
 		r.Items = append(r.Items, CarriedItem{
 			RetrievalSeq: c.Seq,
 			Tool:         c.Tool, Path: c.Path,
 			Bytes: c.Bytes, Tokens: c.Tokens,
 			EnteredAt:   entered,
-			ResidentFor: 1 + warm + coldN,
-			WarmCalls:   warm,
-			ColdCalls:   coldN,
-			// The first send writes the content to cache; the rest read it.
-			CarryEIT: c.Tokens * (w.CacheWrite5m + float64(warm)*w.CacheRead +
-				float64(coldN)*w.CacheWrite5m),
+			ResidentFor: res.Sends,
+			WarmCalls:   res.Warm,
+			ColdCalls:   res.Cold,
+			CarryEIT:    res.Billed,
 			// Every send at full input price: the counterfactual of no caching
 			// at all, on the same trajectory.
-			CarryUncachedEIT: c.Tokens * float64(1+warm+coldN) * w.Input,
+			CarryUncachedEIT: res.InputEIT,
 		})
 	}
 	sort.SliceStable(r.Items, func(i, j int) bool { return r.Items[i].CarryEIT > r.Items[j].CarryEIT })
@@ -276,25 +385,6 @@ func ratioOf(s *model.Session) float64 {
 		return s.Estimator.BytesPerToken
 	}
 	return 3.6
-}
-
-// residency counts the warm and cold calls between from and end, stopping at
-// the first reset: content does not survive a compaction.
-func residency(from, end int, cold map[int]bool, resets []int) (warm, coldN int) {
-	stop := end
-	for _, reset := range resets {
-		if reset >= from && reset < stop {
-			stop = reset
-		}
-	}
-	for k := from; k < stop; k++ {
-		if cold[k] {
-			coldN++
-		} else {
-			warm++
-		}
-	}
-	return warm, coldN
 }
 
 // mergeResets combines detected resets with counterfactual ones, sorted and
@@ -317,37 +407,32 @@ func mergeResets(detected, extra []int) []int {
 	return out
 }
 
-func residencyCost(tokens float64, from, end int, cold map[int]bool, resets []int, w cost.Weights) float64 {
-	warm, coldN := residency(from, end, cold, resets)
-	// Priced through the same weights as everything else by constructing the
-	// equivalent usage, so there is one place that knows the rates.
-	return w.PromptCost(model.TokenUsage{CacheRead: int64(tokens) * int64(warm)}) +
-		w.PromptCost(model.TokenUsage{
-			CacheCreation:   int64(tokens) * int64(coldN),
-			CacheCreation5m: int64(tokens) * int64(coldN),
-		})
-}
-
 // carryTyped prices re-sending what you typed.
 //
 // The mean is weighted by tokens: an early prompt goes round far more often
 // than a late one, so an unweighted mean over prompts would describe nobody's
 // experience.
-func carryTyped(r *CarryReport, s *model.Session, w cost.Weights,
-	cold map[int]bool, resets []int) {
+func carryTyped(r *CarryReport, s *model.Session, price spanPricer, resets []int) {
 	var tokensTotal, tokenCalls float64
 	for _, pe := range s.PromptEntries {
 		if pe.Bytes == 0 || pe.InvocationSeq < 0 {
 			continue
 		}
-		warm, coldN := residency(pe.InvocationSeq+1, len(s.Invocations), cold, resets)
-		sends := 1 + warm + coldN
-		warm, coldN = chargeFirstSendAsWrite(warm, coldN)
-
 		tokens := float64(pe.Bytes) / ratioOf(s)
-		r.PromptCarryEIT += tokens *
-			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
-		r.PromptCarryUncachedEIT += tokens * float64(sends) * w.Input
+		res := price.arrived(tokens, pe.InvocationSeq+1, len(s.Invocations), resets)
+		// The counterfactual counts the entering call's own send as well,
+		// which the item ranking does not. Kept as it was: which sends a
+		// no-caching figure should count is a question about the
+		// counterfactual, not about which weights apply to it.
+		sends := res.Sends
+		uncached := res.InputEIT
+		if res.Span > 0 {
+			sends++
+			uncached += res.EntryInput
+		}
+
+		r.PromptCarryEIT += res.Billed
+		r.PromptCarryUncachedEIT += uncached
 		tokensTotal += tokens
 		tokenCalls += tokens * float64(sends)
 	}
@@ -362,8 +447,7 @@ func carryTyped(r *CarryReport, s *model.Session, w cost.Weights,
 // call; this is the second part, which is invisible if you only look at
 // output tokens. Thinking is excluded, because its text is not in the
 // transcript and whether it is re-sent cannot be established from one.
-func carryOutput(r *CarryReport, s *model.Session, w cost.Weights,
-	cold map[int]bool, resets []int) {
+func carryOutput(r *CarryReport, s *model.Session, price spanPricer, resets []int) {
 	var tokensTotal, tokenCalls float64
 	for _, inv := range s.Invocations {
 		r.ThinkingTokens += inv.Usage.Thinking
@@ -371,13 +455,16 @@ func carryOutput(r *CarryReport, s *model.Session, w cost.Weights,
 		if !inv.IsRealCall() || carried <= 0 {
 			continue
 		}
-		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, resets)
-		sends := 1 + warm + coldN
-		warm, coldN = chargeFirstSendAsWrite(warm, coldN)
+		res := price.arrived(float64(carried), inv.Seq+1, len(s.Invocations), resets)
+		sends := res.Sends
+		uncached := res.InputEIT
+		if res.Span > 0 {
+			sends++
+			uncached += res.EntryInput
+		}
 
-		r.AssistantCarryEIT += float64(carried) *
-			(w.CacheWrite5m + float64(warm)*w.CacheRead + float64(coldN)*w.CacheWrite5m)
-		r.AssistantCarryUncachedEIT += float64(carried) * float64(sends) * w.Input
+		r.AssistantCarryEIT += res.Billed
+		r.AssistantCarryUncachedEIT += uncached
 		tokensTotal += float64(carried)
 		tokenCalls += float64(carried) * float64(sends)
 	}
@@ -387,31 +474,15 @@ func carryOutput(r *CarryReport, s *model.Session, w cost.Weights,
 }
 
 // roundTripsByCall is how many calls re-sent whatever arrived on each call.
-func roundTripsByCall(s *model.Session, cold map[int]bool, resets []int) map[int]int {
+func roundTripsByCall(s *model.Session, resets []int) map[int]int {
 	out := map[int]int{}
 	for _, inv := range s.Invocations {
 		if !inv.IsRealCall() {
 			continue
 		}
-		warm, coldN := residency(inv.Seq+1, len(s.Invocations), cold, resets)
-		out[inv.Seq] = 1 + warm + coldN
+		// The call itself plus every later call that re-sent what it
+		// produced, up to the first reset.
+		out[inv.Seq] = 1 + stopAt(inv.Seq+1, len(s.Invocations), resets) - (inv.Seq + 1)
 	}
 	return out
-}
-
-// chargeFirstSendAsWrite converts one of the later sends into the first one.
-//
-// New content is what a request writes to the cache, so the call that carries
-// something in is charged at the write rate and the rest are reads. Pricing
-// the first send as a read understated late-arriving content by more than an
-// order of magnitude: content that arrives near the end is written once and
-// barely re-read, so the write is nearly all of its cost.
-func chargeFirstSendAsWrite(warm, coldN int) (int, int) {
-	switch {
-	case warm > 0:
-		return warm - 1, coldN
-	case coldN > 0:
-		return warm, coldN - 1
-	}
-	return warm, coldN
 }

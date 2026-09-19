@@ -19,7 +19,7 @@ Code-scan coverage
 Unattributed
   Retrievals                        3   [observed]
   Bytes                        1.1 KB   [observed]
-  Carry cost                      465   [derived]
+  Carry cost                      397   [derived]
   Output that could not be attributed to a file. On sessions run in auto
   mode this is most of it, because file reads go through the shell and a
   build log has no path.

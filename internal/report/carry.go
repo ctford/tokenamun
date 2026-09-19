@@ -97,7 +97,7 @@ func BuildCarry(s *model.Session, c analysis.CarryReport) Carry {
 			"Carry is the cost of re-sending content on later calls, not the cost of fetching it.",
 			"The call a retrieval entered at is what separates two retrievals of the same size: content that arrives early is re-sent for the rest of the session, content that arrives at the end is written once.",
 			"Cold calls rebuilt the prefix and were billed at the cache write rate; warm calls were read at a tenth of input price.",
-			"Per-item cache class is not directly observable: the API reports one split per call, so residency is priced per call.",
+			"Per-item cache class is not directly observable: the API reports one split per call, so residency is priced per call -- at that call's own model as well as its own cache class.",
 		},
 	}
 

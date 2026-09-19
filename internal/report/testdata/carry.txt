@@ -23,7 +23,7 @@ Most expensive to carry (not the largest)
   docs/adr/0003-retries.md                  663  call 4       1      0          829
   (Bash output)                              59  call 1       4      1          161
   (Bash output)                              59  call 2       3      1          155
-  (Bash output)                              59  call 3       2      1          149
+  (Bash output)                              59  call 3       2      0           80
   internal/payment/charge.go                  1  call 5       1      0            2
 
 Unattributed growth             -3.3%   [derived]

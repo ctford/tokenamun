@@ -129,6 +129,12 @@ The model has no memory between calls, so everything still in the context is
 re-sent on every later call, and priced at whatever class that re-send was
 billed at. A single number for an item's cost would hide exactly that.
 
+Each send is also priced at the model of the call it went out on, because a
+residency span can cross a model switch and the cache read is the one
+multiplier that differs between models. The span is walked rather than
+counted: the first send in it writes the content to the cache, and the rest
+read it, or write it again on a call that rebuilt the prefix.
+
 Size is not the interesting quantity; arrival time is. A 5K-token read at call
 20 of a 691-call session is re-sent 671 times — at 0.1× while the prefix stays
 warm, which makes it a ~336K decision rather than a 3.4M one.
