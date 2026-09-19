@@ -126,28 +126,18 @@ session's totals and never folded into them: adding its cache reads to the
 parent's would describe a prompt that was never sent. `profile` prints both,
 and their sum.
 
-That sum is the one figure in the report that spans contexts, and so the one
-that can span models without the session having switched model. Dispatching
-cheap subagents from an expensive parent is a deliberate pattern, and in EIT
-it adds quantities of different sizes. The combined total therefore carries
-its own mixed-pricing signal, computed over the parent's calls *and* its
-subagents' — the session-level one is about this context alone, which is what
-every other figure is about.
+That sum is the one figure that spans contexts, and so the one that can span
+models without the session having switched — dispatching cheap subagents from
+an expensive parent is a deliberate pattern. It therefore carries its own
+mixed-pricing signal, computed over the parent's calls *and* its subagents',
+and it is exact whenever they share a model, which is the common case.
 
-The number is qualified rather than withheld: it is exact whenever the parent
-and its subagents share a model, which is the common case, and where it is not
-the caveat names the flag that is.
+`tokenamun sessions` **ranks on the combined figure**: a session that
+dispatched its work to subagents caused that spend whichever context it landed
+in. Every other figure, there and elsewhere, is this context alone.
 
-`tokenamun sessions` reports the same pair per row and **ranks on the
-combined one**. Ranking a week is what that order is for, and a session that
-dispatched its work to subagents caused the spend whichever context it landed
-in. The per-session figure stays what every other command reports: this
-context, and nothing else.
-
-`--prices` reaches both figures: what the subagents cost, and the combined
-total, each priced per call at its own model and so sound across the boundary
-that EIT is not. They print in the subagent block, which the money block points
-at, because the money block is this context like everything else.
+`--prices` reaches both, each priced per call at its own model and so sound
+across the boundary that EIT is not.
 
 ## 4. Carry: content is cheap, keeping it is not
 

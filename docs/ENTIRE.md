@@ -6,9 +6,8 @@ between 2026-08-25 and 2026-08-28. Sessions are referred to as S1–S8 and all
 paths and identifiers below are placeholders; only the measurements are real.
 
 Entire itself was not installed on this machine (no `entire` binary on `PATH`,
-no `~/.entire`). Everything below was read directly off disk and out of git.
-That is a useful constraint: **Tokenamun does not need the Entire CLI to be
-installed, only its data.**
+no `~/.entire`). Everything below was read directly off disk and out of git:
+**Tokenamun does not need the Entire CLI installed, only its data.**
 
 ## Where the data lives
 
@@ -109,7 +108,7 @@ All four token classes the spec asks for are present, plus thinking tokens and
  "skill_events": [...], "initial_attribution": {...}, "prompt_attributions": [...]}
 ```
 
-Genuinely valuable, and not available anywhere else:
+Not available anywhere else:
 
 * **`files_touched`** — ties token spend to the files a change actually landed in.
   This is what makes "changes in subsystem X cost 2.3× more exploration" possible.
@@ -122,7 +121,7 @@ Genuinely valuable, and not available anywhere else:
 
 ### `token_usage` on a checkpoint is not safe to sum
 
-This is the trap the spec warns about, and it is real. Of 41 checkpoints:
+The trap is real. Of 41 checkpoints:
 
 * 28 have a `checkpoint_transcript_start` and a small `token_usage` that behaves
   like a **delta** for that checkpoint.
@@ -143,7 +142,7 @@ transcript accounts for 443 million. All 41 checkpoints report the same
 `cli_version`, so version-sniffing won't save us and there is no field that
 declares which semantics apply.
 
-**Design consequence, and it is load-bearing:** Tokenamun derives *all* token
+**Design consequence:** Tokenamun derives *all* token
 accounting from `full.jsonl` (deduplicated by `requestId`) and never from
 checkpoint `token_usage`. Checkpoints are used for slicing, git attribution,
 `files_touched` and skill events only. Where a checkpoint lacks an offset, the
@@ -198,24 +197,15 @@ lines for the paths they touch.
 Unique `tool_result` payload bytes per session, with the share that is
 byte-identical to content retrieved earlier in the same session:
 
-| session | tool-result bytes | repeated-identical | largest contributor |
-| --- | --- | --- | --- |
-| `S1` | 1,238,793 | **24.1%** | Read 636 KB in 3 calls (avg 212 KB) |
-| `S2` | 667,981 | 1.6% | Bash 596 KB in 667 calls |
-| `S3` | 317,817 | 0.2% | Bash 226 KB in 181 calls |
-| `S4` | 86,212 | 0% | Bash only |
-| `S5` | 79,950 | 0% | Bash only |
-| `S6` | 76,540 | 0% | Bash only |
-| `S7` | 72,088 | 0% | Bash only |
-| `S8` | 20,876 | 0% | Bash only |
-| **total** | **2,560,257** | | |
+2,560,257 bytes across the eight. `S1` is 1,238,793 of them and re-retrieved
+**24.1%** — 298 KB of identical content, mostly three Read calls averaging
+212 KB. `S2` was 1.6%, `S3` 0.2%, and the other five were zero, Bash only.
 
-Content hashing works and finds something real: one session re-retrieved 298 KB
-of identical content. The other sessions are near-clean, which is itself a
-finding — repeated retrieval is a *session-shaped* problem, not a universal one,
-so this analysis needs to be run per session rather than averaged.
+Content hashing works and finds something real. That the rest are near-clean is
+itself the finding: repeated retrieval is *session-shaped*, not universal, so
+it is run per session rather than averaged.
 
-## The thing that reframes the whole tool
+## Prompt size is observed on every call
 
 Observed, deduplicated, across all 8 sessions:
 
@@ -227,14 +217,12 @@ Observed, deduplicated, across all 8 sessions:
 | Unique tool-result content (≈ bytes/3.6) | ~711,000 |
 
 Roughly **711K tokens of content sat behind 856M tokens of billed input.**
+What makes content expensive is how long it stays resident, not how large it
+is; the arithmetic is in
+[`METHODOLOGY.md`](METHODOLOGY.md#4-carry-content-is-cheap-keeping-it-is-not).
 
-The lever is not the size of what gets retrieved. It is how long it stays
-resident and how many calls re-send it. A 5K-token read at call 20 of `S1` is
-re-sent over its remaining 671 calls: 3.4M tokens of volume, ~336K
-cost-weighted while the prefix stays warm at 0.1×.
-
-This is derivable, not speculative, because **the prompt size of every API call
-is observed**: `input_tokens + cache_read_input_tokens +
+That is derivable rather than speculative because **the prompt size of every
+API call is observed**: `input_tokens + cache_read_input_tokens +
 cache_creation_input_tokens` is exactly what the request cost. The trajectory
 for session `S1`:
 

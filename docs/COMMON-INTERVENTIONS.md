@@ -33,7 +33,7 @@ dominance holds *even with prompt caching in use*.
 
 Measurement here agrees emphatically: across eight sessions, ~711K tokens of
 unique tool-result content sat behind ~856M tokens of billed input
-([`ENTIRE.md`](ENTIRE.md#the-thing-that-reframes-the-whole-tool)). The content
+([`ENTIRE.md`](ENTIRE.md#prompt-size-is-observed-on-every-call)). The content
 is not the cost. **Carrying** the content is the cost.
 
 That is the good news for a profiler — the dominant term is a function of when
@@ -205,12 +205,12 @@ whatever shape the system prompt asks answers to take.
   — the residency argument the rest of this document makes, with a five-fold
   head start.
 * **The evidence, graded: vendor.** One triage job under three final-answer
-  instructions: one line at $0.49 a run, the original two lines at $0.57, a
-  five-section memo at $1.40. The one-line form used 39% fewer output tokens
-  than the two-line and cost 14% less. All three scored between 78% and 85%
-  correct and the published figures do not say which format landed where in
-  that band, so the supportable reading is that nearly three times the output
-  spend bought nothing visible — not that brevity was free.
+  instructions: one line, the original two, and a five-section memo at nearly
+  3× the one-line cost. The one-line form used 39% fewer output tokens than
+  the two-line and cost 14% less. All three scored 78–85% correct, and the
+  figures do not say which format landed where in that band — so the
+  supportable reading is that the extra spend bought nothing visible, not that
+  brevity was free.
 * **What nobody measures:** where your own curve turns over. An answer format
   too cramped to carry the finding costs a follow-up question, and a follow-up
   question is a whole round trip.
@@ -310,11 +310,11 @@ Delegating exploration so the orchestrator's context never sees it.
   measured parent-side saving against an unmeasured child-side cost. Tokenamun
   reports which half it has.
 * **The evidence, graded: vendor, both directions.** Delegation is reported to
-  insure the median rather than the hard cases: on a deliberately easy slice a
-  frontier model alone reached $33 at the 90th percentile against $12 for the
-  delegated configuration, and its single most expensive run, $84, was also
-  wrong. On work that fits one context window, or that is one dependent chain,
-  the single model was cheaper every time. Both halves are consistent with the
+  insure the tail rather than the median: on one easy slice the frontier model
+  alone cost nearly 3× the delegated configuration at the 90th percentile, and
+  its single most expensive run was also wrong. On work that fits one context
+  window, or that is one dependent chain, the single model was cheaper every
+  time. Both halves are consistent with the
   measurement gap above — the saving lives in the child's spend, and that is
   the half absent here.
 
@@ -347,11 +347,11 @@ Asking for less thinking, less verification and fewer tool calls per turn.
   A single figure for "lower effort" would be meaningless. The shape is the
   finding.
 * **The strongest version of this is closed to us.** Running everything at
-  `low` and re-running only the failures reached about 93% pass at roughly
-  $0.45 an attempt, against 91.7% at $0.93. It is the best cost result in that
+  `low` and re-running only the failures reached about 93% pass at roughly half
+  the cost per attempt, against 91.7%. It is the best cost result in that
   document and it is unavailable to a profiler, because it needs a pass/fail
-  signal and Tokenamun cannot see one. Worth stating plainly: the largest lever
-  on this list is gated on the thing this tool explicitly cannot measure.
+  signal and Tokenamun cannot see one: the largest lever on this list is gated
+  on the thing this tool explicitly cannot measure.
 * **Also:** changing effort mid-session invalidates the prefix from that point.
   `tokenamun cache` prices that under `effort_change` — so the cost of
   *switching* is measured even though the benefit of *having switched* is not.
@@ -410,11 +410,11 @@ Fewer `/model` switches, fewer effort changes, fewer plugin toggles.
   shapes are distinguished: an **advisor**, where a cheaper executor escalates
   hard decisions, and an **orchestrator**, where a frontier model plans and
   delegates bulk work to cheaper workers.
-* **Where an orchestrator pays:** on a 21.6-million-token corpus — larger than
-  any context window — a lead over 25 cheaper workers cost 47–55% less than
-  the same model solo ($468–$552 an episode) and took about 2.3 hours against
-  15 to 20, for 10 to 12 points of accuracy. The condition is work that fans
-  out into independent pieces, not the price of the models.
+* **Where an orchestrator pays:** on a corpus larger than any context window,
+  a lead over 25 cheaper workers cost 47–55% less than the same model solo and
+  finished in about 2.3 hours against 15 to 20, for 10 to 12 points of
+  accuracy. The condition is work that fans out into independent pieces, not
+  the price of the models.
 * **Where they do not, which is the half worth carrying:** on the full
   BrowseComp set the single model alone reached the coordinator's accuracy at
   22–30% *lower* cost. An advisor pairing on chart reading came in at 65.0
@@ -423,11 +423,10 @@ Fewer `/model` switches, fewer effort changes, fewer plugin toggles.
   The stated rule is to baseline one model's whole effort curve before adding
   a second.
 * **Price the tail, not the median.** On one 20-problem run, two problems
-  carried 43% of the spend. That is the strongest argument in that document
-  for looking at a distribution rather than a total, and it sits awkwardly
-  beside the rule below about never reporting by developer — a tail of
-  sessions can be one person's week. Left unresolved here deliberately; it is
-  a decision, not a feature.
+  carried 43% of the spend — the strongest case anywhere here for reading a
+  distribution rather than a total. It sits awkwardly beside the rule below
+  against reporting by developer, since a tail of sessions can be one person's
+  week. Left unresolved deliberately: it is a decision, not a feature.
 * **Not a token question:** switching model changes price *and* changes the
   count. The same text is reported to cost about 30% more tokens on Opus 4.7
   and later, which is a tokenizer change rather than a behavioural one. A token
@@ -451,9 +450,9 @@ Saying so is more useful than a fabricated percentage.
   attached — and the first of those is the expensive case the intervention
   exists for. Reporting 0% would be wrong in the expensive direction.
 * **What you can bound:** the whole preamble. On one session with real MCP
-  traffic that ceiling was **1.3% of session cost** — worth knowing next to the
-  7.1% of MCP *results* in the same session, which is the number someone
-  reaches for and which this intervention does not touch. Results arrive either
+  traffic that ceiling was **1.3% of session cost**, next to the 7.1% of MCP
+  *results* in the same session — which is the number someone reaches for, and
+  which this intervention does not touch. Results arrive either
   way; only the schemas leave.
 * **The evidence, graded: vendor, with independent support.** Anthropic's
   code-execution-with-MCP figure is 150,000 → 2,000 tokens, 98.7%. That is one
@@ -571,23 +570,20 @@ Ranked by evidence quality rather than by claimed upside.
 
 ## Why there are no built-in estimates
 
-There used to be eight: `cache-ttl`, `repeated-retrieval`,
-`clear-on-new-task`, `output-compression`, `file-compression`, `caveman`, `rtk`
-and `mcp-to-cli`, with a plugin protocol for adding more. They are gone.
+There used to be eight, with a plugin protocol for adding more. They are gone.
 
 Everything that shrinks content does the same two things — pick a part of the
-session, make it smaller — and the answer is always the product of that part's
-share and the change. So a named intervention added nothing but a vendor's name
-and a default ratio, and it added one thing it should not: the appearance that
-the tool knew something about that vendor. The `caveman` row reported 13% of a
-session. That figure came from `--ratio`'s default of 50%, applied to measured
-volume, on evidence that spans 2% to 17%. It looked like a finding and was an
-assumption with a logo on it.
+session, make it smaller — and the answer is always that part's share times the
+change. A named intervention added nothing but a vendor's name and a default
+ratio, plus one thing it should not: the appearance that the tool knew
+something about that vendor. The `caveman` row reported 13% of a session. That
+came from `--ratio`'s default of 50% applied to measured volume, on evidence
+spanning 2% to 17% — a finding in appearance, an assumption with a logo on it.
 
-Two of the eight were real models — `cache-ttl` and `repeated-retrieval`, both
-with every input observed — and their content survives as the measurements
-above, in `tokenamun cache` and `tokenamun retrieval`, where they are reported
-as what they are rather than as counterfactuals.
+Two of the eight were real models, `cache-ttl` and `repeated-retrieval`, with
+every input observed. They survive as measurements, in `tokenamun cache` and
+`tokenamun retrieval`, reported as what they are rather than as
+counterfactuals.
 
 ## The anti-pattern to avoid building
 
@@ -603,9 +599,9 @@ at all up 31%.
 
 It is also the failure mode this tool is closest to. A profiler that reported
 "tokens per developer" would be worse than no profiler. What follows from that
-is in [`METHODOLOGY.md`](METHODOLOGY.md#9-not-a-productivity-metric), and one
-distinction is worth stating in full here: **filtering by developer is fine;
-reporting by developer is not.** Analysing your own sessions, or a colleague's
+is in [`METHODOLOGY.md`](METHODOLOGY.md#9-not-a-productivity-metric). One
+distinction belongs here in full: **filtering by developer is fine; reporting
+by developer is not.** Analysing your own sessions, or a colleague's
 at their request, is how you help. A column comparing people is how a
 leaderboard starts. The line is between choosing whose work to look at and
 publishing a ranking of it.

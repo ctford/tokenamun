@@ -7,27 +7,16 @@ which parts a profiler can help with and which it cannot.
 
 ## The method it has to support
 
-His design, reduced to its moving parts:
+Three properties carry that design, and an experiment of this shape needs all
+three: a **fixed probe task**, which holds the work constant so the codebase is
+the only thing varying; a **discard** of each generated change, which keeps the
+steps independent; and a **fresh sub-agent** per probe, which stops learning
+leaking between runs. Fifteen refactoring steps, one probe after each.
 
-1. Establish baseline metrics on the code before any refactoring.
-2. Apply one refactoring step.
-3. Have a **fresh sub-agent** perform an **identical representative change** —
-   adding an `ItemWatchStore` trait with three methods to a Firestore data
-   access layer, following existing patterns.
-4. Record token consumption for that probe.
-5. **Discard** the generated change, so steps stay independent.
-6. Repeat 2–5 for each of 15 refactoring steps.
-
-Metrics tracked: data-access-layer total lines of code, largest single file
-line count, input tokens per probe, output tokens per probe.
-
-Result: input tokens for the probe fell from **159,564 to 27,360**, an 83%
-reduction, while output tokens stayed roughly flat — the refactoring didn't
-make the change itself smaller, it made finding the place to make it cheaper.
-
-This is a good design. The fixed probe task is the key idea: it holds the work
-constant so the codebase is the only thing varying. The discard keeps steps
-independent. The fresh sub-agent stops learning leaking between runs.
+Its result is the worked example below: probe input tokens fell from
+**159,564 to 27,360**, an 83% reduction, while output tokens stayed flat. The
+refactoring did not make the change smaller, it made finding the place to make
+it cheaper.
 
 ## What Tokenamun covers
 
