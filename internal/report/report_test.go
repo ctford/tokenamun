@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/codescan"
@@ -697,5 +698,41 @@ func TestTheReportCarriesTheEye(t *testing.T) {
 	// The title belongs to whoever passed --title; the eye sits beside it.
 	if !strings.Contains(html, `<span id="title">`) {
 		t.Error("the caller's title must stay its own element")
+	}
+}
+
+func TestCacheWarnsWhenTheSetSpansPricings(t *testing.T) {
+	warned := func(s *model.Session) bool {
+		for _, w := range BuildCache(s, analysis.Cache(s, analysis.TTL5m)).Warnings {
+			if w.Code == "mixed_pricing" {
+				return true
+			}
+		}
+		return false
+	}
+	base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	call := func(seq int, at time.Duration, id string) model.ModelInvocation {
+		return model.ModelInvocation{
+			Seq: seq, Model: id, Version: "2.1.246", Timestamp: base.Add(at),
+			Usage: model.TokenUsage{
+				Input: 1, CacheCreation: 50_000, CacheCreation5m: 50_000,
+			},
+		}
+	}
+
+	one := &model.Session{Invocations: []model.ModelInvocation{
+		call(0, 0, "claude-opus-5"),
+		call(1, 20*time.Minute, "claude-sonnet-5"),
+	}}
+	if warned(one) {
+		t.Error("warned on two models that share a pricing")
+	}
+
+	two := &model.Session{Invocations: []model.ModelInvocation{
+		call(0, 0, "claude-opus-5"),
+		call(1, 20*time.Minute, "claude-fable-5-1"),
+	}}
+	if !warned(two) {
+		t.Error("no warning on a set spanning 0.1x and 0.025x cache reads")
 	}
 }

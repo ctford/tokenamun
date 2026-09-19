@@ -104,7 +104,7 @@ func BuildCache(s *model.Session, c analysis.CacheReport) Cache {
 				"invalidate the cache and are not visible in a transcript, so they " +
 				"appear as unexplained rather than being blamed on the TTL.",
 		},
-		Warnings: s.Warnings,
+		Warnings: mixedPricingWarning(s.Warnings, c.ReadRates),
 		Notes: []string{
 			"The TTL each call used is observed, from the API's own 5m/1h split.",
 			"A cache entry's lifetime runs from request start and a read refreshes it, so calls starting closer together than the TTL keep the prefix warm.",
@@ -137,6 +137,9 @@ func RenderCache(w io.Writer, r Cache) error {
 	line(b, "  Writes at 5m", r.Writes5m)
 	line(b, "  Writes at 1h", r.Writes1h)
 	line(b, "  Prompt cost", r.PromptCost)
+	for _, w := range r.Warnings {
+		fmt.Fprintf(b, "  ! %s\n", wrap(w.Detail, 70, "    "))
+	}
 	b.WriteString("\n")
 
 	if len(r.Causes) == 0 {
@@ -177,6 +180,26 @@ func RenderCache(w io.Writer, r Cache) error {
 
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// mixedPricingWarning adds a warning when the set spans more than one
+// pricing.
+//
+// It belongs here and not only in `profile` because this report's headline is
+// a share -- the net as a percentage of prompt cost -- and a mixed
+// denominator is harder to notice than a mixed total. The numerator is each
+// pricing's own arithmetic and is right either way.
+func mixedPricingWarning(ws []model.Warning, rates []float64) []model.Warning {
+	if len(rates) < 2 {
+		return ws
+	}
+	return append(ws, model.Warning{
+		Code: "mixed_pricing",
+		Detail: "This set spans more than one cache-read rate, so the EIT " +
+			"totals add quantities of different sizes. Each pricing's " +
+			"counterfactual is computed at its own rates; the share it is " +
+			"expressed against is the mixed one.",
+	})
 }
 
 // BuildCacheOf assembles the report from an already-merged analysis, for the

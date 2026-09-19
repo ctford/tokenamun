@@ -2,6 +2,7 @@
 package analysis
 
 import (
+	"sort"
 	"time"
 
 	"github.com/ctford/tokenamun/internal/cost"
@@ -97,6 +98,15 @@ type CacheReport struct {
 	// bigger premium looks identical, in the net, to one with neither.
 	LongerTTLSavedEIT   float64 `json:"longer_ttl_saved_eit"`
 	LongerTTLPremiumEIT float64 `json:"longer_ttl_premium_eit"`
+	// ReadRates is every distinct cache-read multiple in this set, sorted.
+	// More than one means the EIT totals above sum quantities of different
+	// sizes, in the class that dominates prompt cost -- so the net is still
+	// each pricing's own arithmetic, correctly added, but the *share* it is
+	// expressed against is a mixed denominator.
+	//
+	// The read rate is the term that actually varies between the pricings
+	// here, which is why it stands in for the whole weight set.
+	ReadRates []float64 `json:"cache_read_rates"`
 }
 
 // ttlBucket accumulates the counterfactual's inputs for one pricing.
@@ -287,6 +297,9 @@ func Cache(s *model.Session, ttl time.Duration) CacheReport {
 		}
 	}
 	longerTTL(&r, buckets)
+	for _, b := range buckets {
+		r.ReadRates = appendRate(r.ReadRates, b.w.CacheRead)
+	}
 	return r
 }
 
@@ -373,6 +386,18 @@ func ColdCalls(r CacheReport) map[int]bool {
 	return cold
 }
 
+// appendRate adds a cache-read multiple to a sorted distinct set.
+func appendRate(rates []float64, rate float64) []float64 {
+	for _, r := range rates {
+		if r == rate {
+			return rates
+		}
+	}
+	rates = append(rates, rate)
+	sort.Float64s(rates)
+	return rates
+}
+
 // Merge adds cache reports together, for a period or a team.
 //
 // Cost is additive across sessions, so the totals add: each report was
@@ -398,6 +423,9 @@ func Merge(reports []CacheReport) CacheReport {
 		out.LongerTTLNetEIT += r.LongerTTLNetEIT
 		out.LongerTTLSavedEIT += r.LongerTTLSavedEIT
 		out.LongerTTLPremiumEIT += r.LongerTTLPremiumEIT
+		for _, rate := range r.ReadRates {
+			out.ReadRates = appendRate(out.ReadRates, rate)
+		}
 		if r.ObservedTTL != "" {
 			ttls[r.ObservedTTL] = true
 		}

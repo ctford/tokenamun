@@ -551,3 +551,26 @@ func TestBreakEvenIsWhereTheAvoidedReadIsPaidFor(t *testing.T) {
 		t.Errorf("net = %.1f, which is the avoided-rewrite-is-free answer", r.LongerTTLNetEIT)
 	}
 }
+
+func TestMixedPricingIsVisibleInTheCacheReport(t *testing.T) {
+	// The cache report's headline is a share, and a mixed denominator is
+	// harder to spot than a mixed total. The set of read rates is what says
+	// so: the read is the term that differs between the pricings here, and
+	// it is also the class that dominates prompt cost.
+	same := session(
+		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
+		inv(1, 20*time.Minute, "claude-sonnet-5", "2.1.246", "high", 1, 0, 50_000),
+	)
+	if got := Cache(same, TTL5m).ReadRates; len(got) != 1 {
+		t.Errorf("two models on one pricing gave rates %v, want one", got)
+	}
+
+	mixed := session(
+		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
+		inv(1, 20*time.Minute, "claude-fable-5-1", "2.1.246", "high", 1, 0, 50_000),
+	)
+	got := Cache(mixed, TTL5m).ReadRates
+	if len(got) != 2 || got[0] != 0.025 || got[1] != 0.1 {
+		t.Errorf("rates = %v, want [0.025 0.1] sorted and distinct", got)
+	}
+}
