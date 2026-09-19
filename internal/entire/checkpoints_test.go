@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -338,5 +339,121 @@ func TestEveryCheckpointRefIsMarkedAsLivingInGit(t *testing.T) {
 	}
 	if !got[0].InGit || got[0].Repo != "/somewhere/repo" || got[0].Origin != model.FromEntire {
 		t.Errorf("ref is not shaped for the git loader: %+v", got[0])
+	}
+}
+
+// Checkpoints on a remote you have not fetched is the failure that cost the
+// most: Entire's refs are outside the default fetch refspec, so a clone and a
+// pull both leave them behind, and a repository holding one person's share of
+// a team's week looks exactly like a repository holding all of it. A low
+// checkpoint count is not an error, so only the comparison catches it.
+//
+// Tested against a second repository on disk used as origin. `ls-remote`
+// against a path is the same code path as against a URL, and touches no
+// network.
+
+// gitRepoWithOrigin initialises a repository whose origin is another
+// directory.
+func gitRepoWithOrigin(t *testing.T, remote string) string {
+	t.Helper()
+	requireGit(t)
+	repo := t.TempDir()
+	git(t, repo, "", "init", "-q", ".")
+	git(t, repo, "", "remote", "add", "origin", remote)
+	return repo
+}
+
+func session(id, when string, size int) cpSession {
+	return cpSession{id: id, createdAt: when, transcript: strings.Repeat("x", size)}
+}
+
+func TestRemoteCheckpointsCountsWhatOriginIsHolding(t *testing.T) {
+	remote := checkpointRepo(t,
+		checkpoint{ulid: "01JEEEEEEEEEEEEEEEEEEEEEEA", sessions: []cpSession{session("a", "2026-09-01T10:00:00Z", 10)}},
+		checkpoint{ulid: "01JEEEEEEEEEEEEEEEEEEEEEEB", sessions: []cpSession{session("b", "2026-09-01T11:00:00Z", 10)}},
+		checkpoint{ulid: "01JEEEEEEEEEEEEEEEEEEEEEEC", sessions: []cpSession{session("c", "2026-09-01T12:00:00Z", 10)}},
+	)
+	local := gitRepoWithOrigin(t, remote)
+
+	if got := RemoteCheckpoints(local); got != 3 {
+		t.Errorf("origin is holding 3 checkpoints, counted %d", got)
+	}
+}
+
+func TestOnlyCheckpointRefsCountAsCheckpoints(t *testing.T) {
+	// refs/entire/ carries more than checkpoints, and counting the rest would
+	// invent a gap between local and origin that is not there -- which would
+	// tell somebody to fetch when they are already whole.
+	remote := checkpointRepo(t, checkpoint{
+		ulid:     "01JFFFFFFFFFFFFFFFFFFFFFFA",
+		sessions: []cpSession{session("a", "2026-09-01T10:00:00Z", 10)},
+	})
+	commit := git(t, remote, "", "rev-parse", "refs/entire/checkpoints/FA/01JFFFFFFFFFFFFFFFFFFFFFFA")
+	git(t, remote, "", "update-ref", "refs/entire/state/latest", commit)
+
+	local := gitRepoWithOrigin(t, remote)
+	if got := RemoteCheckpoints(local); got != 1 {
+		t.Errorf("one checkpoint and one other ref under refs/entire, counted %d", got)
+	}
+}
+
+func TestDoctorSaysWhenOriginHasCheckpointsYouHaveNot(t *testing.T) {
+	remote := checkpointRepo(t,
+		checkpoint{ulid: "01JGGGGGGGGGGGGGGGGGGGGGGA", sessions: []cpSession{session("a", "2026-09-01T10:00:00Z", 10)}},
+		checkpoint{ulid: "01JGGGGGGGGGGGGGGGGGGGGGGB", sessions: []cpSession{session("b", "2026-09-01T11:00:00Z", 10)}},
+		checkpoint{ulid: "01JGGGGGGGGGGGGGGGGGGGGGGC", sessions: []cpSession{session("c", "2026-09-01T12:00:00Z", 10)}},
+	)
+	// A repository that fetched one of the three, which is the shape of the
+	// real failure: not empty, so nothing looks wrong.
+	local := checkpointRepo(t, checkpoint{
+		ulid:     "01JGGGGGGGGGGGGGGGGGGGGGGA",
+		sessions: []cpSession{session("a", "2026-09-01T10:00:00Z", 10)},
+	})
+	git(t, local, "", "remote", "add", "origin", remote)
+	if err := os.MkdirAll(filepath.Join(local, MetadataDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var found *Check
+	checks := Diagnose(local)
+	for i := range checks {
+		if checks[i].Name == "checkpoints on origin" {
+			found = &checks[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("a repository with a third of its history must be told so")
+	}
+	if found.OK {
+		t.Error("holding one checkpoint of three is not OK")
+	}
+	if !strings.Contains(found.Found, "3 on origin against 1 here") {
+		t.Errorf("the check must say how many each side has, got %q", found.Found)
+	}
+	if !strings.Contains(found.Fix, FetchCheckpoints) {
+		t.Errorf("the fix must be the fetch command that works, got %q", found.Fix)
+	}
+}
+
+func TestNoGapReportedWhenOriginHasNothingExtra(t *testing.T) {
+	// The check must stay quiet when the repository is whole, or it is noise
+	// that teaches people to ignore it.
+	remote := checkpointRepo(t, checkpoint{
+		ulid:     "01JHHHHHHHHHHHHHHHHHHHHHHA",
+		sessions: []cpSession{session("a", "2026-09-01T10:00:00Z", 10)},
+	})
+	local := checkpointRepo(t, checkpoint{
+		ulid:     "01JHHHHHHHHHHHHHHHHHHHHHHA",
+		sessions: []cpSession{session("a", "2026-09-01T10:00:00Z", 10)},
+	})
+	git(t, local, "", "remote", "add", "origin", remote)
+	if err := os.MkdirAll(filepath.Join(local, MetadataDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range Diagnose(local) {
+		if c.Name == "checkpoints on origin" {
+			t.Errorf("nothing is missing, so nothing should be reported: %+v", c)
+		}
 	}
 }
