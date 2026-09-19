@@ -2,4 +2,17 @@
 # Installed by scripts/install-hooks.sh. Runs the same checks as CI, in fast
 # mode. Skip a one-off with `git commit --no-verify`.
 set -euo pipefail
+
+# Git exports GIT_DIR, GIT_INDEX_FILE and friends into a hook, and they are
+# inherited by everything the hook starts. Several tests create a throwaway
+# repository in a temp directory and shell out to git inside it; with GIT_DIR
+# still pointing at *this* repository they operate on this one instead, and
+# the suite fails here while passing when run by hand. Worse in a linked
+# worktree, where GIT_DIR is an absolute path that always resolves.
+#
+# So the hook runs the checks in a clean git environment. Nothing in
+# scripts/checks.sh wants to know which commit is being made.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR \
+  GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_QUARANTINE_PATH
+
 exec "$(git rev-parse --show-toplevel)/scripts/checks.sh" fast
