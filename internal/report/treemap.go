@@ -25,6 +25,7 @@ const dataPlaceholder = "__TOKENAMUN_DATA__"
 // the reader switches mode. It is deliberately NOT a picture of the context
 // window, and the report says so in its own footer rather than only here.
 type TreemapPayload struct {
+	SchemaVersion int `json:"schema_version"`
 	// Title is set by the caller, so an agent generating this for a
 	// particular repository can say whose session it is.
 	Title   string         `json:"title"`
@@ -66,10 +67,11 @@ func BuildTreemapFrom(tree *Node, session treemapSession, title string) TreemapP
 		title = "Tokenamun"
 	}
 	return TreemapPayload{
-		Title:   title,
-		Session: session,
-		Tree:    tree,
-		RampMax: maxRoundTrips(tree),
+		SchemaVersion: SchemaVersion,
+		Title:         title,
+		Session:       session,
+		Tree:          tree,
+		RampMax:       maxRoundTrips(tree),
 	}
 }
 

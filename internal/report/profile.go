@@ -89,7 +89,15 @@ import (
 // of it that happened in the parent context: a session that dispatched most
 // of its work to subagents sorted far below sessions it cost several times
 // over. `cost_eit` itself is unchanged and still that one context.
-const SchemaVersion = 11
+//
+// 12: the viewer payload -- what `report --json` prints -- carries
+// `schema_version` like every other payload. It was the one that did not,
+// and the one where it mattered most: it is the whole hierarchy in a single
+// call, so it is what something automating this reads instead of walking
+// `tree --at` down every branch, and it was the only output here a consumer
+// could not pin to a contract. No key changed; a versionless payload simply
+// stopped being one of the shapes this tool emits.
+const SchemaVersion = 12
 
 // Profile is a session overview.
 type Profile struct {

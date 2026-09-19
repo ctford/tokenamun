@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -690,5 +691,49 @@ func TestCacheWarnsWhenTheSetSpansPricings(t *testing.T) {
 	}}
 	if !warned(two) {
 		t.Error("no warning on a set spanning 0.1x and 0.025x cache reads")
+	}
+}
+
+// TestEveryJSONPayloadCarriesItsSchemaVersion locks the rule in AGENTS.md
+// that JSON output is an API. An agent reading a payload has to be able to
+// tell which contract it got, and it can only do that if every payload says
+// so -- including the one that is hardest to notice, because `report --json`
+// prints the viewer's own payload rather than a type built for the CLI.
+func TestEveryJSONPayloadCarriesItsSchemaVersion(t *testing.T) {
+	// Every type that reaches writeJSON in cmd/tokenamun.
+	for _, payload := range []any{
+		SessionList{}, Lengths{}, Profile{}, Retrieval{}, Carry{}, Cache{},
+		Scan{}, Hotspots{}, Compare{}, Series{}, TreeView{}, Hypothetical{},
+		TreemapPayload{},
+	} {
+		name := reflect.TypeOf(payload).Name()
+		f, ok := reflect.TypeOf(payload).FieldByName("SchemaVersion")
+		if !ok {
+			t.Errorf("%s has no SchemaVersion: a consumer cannot tell which contract it got", name)
+			continue
+		}
+		if got := f.Tag.Get("json"); got != "schema_version" {
+			t.Errorf("%s: json tag = %q, want schema_version", name, got)
+		}
+	}
+}
+
+// A declared field nothing sets is the same missing version with more
+// ceremony, so the builder has to populate it too.
+func TestTheViewerPayloadStatesItsSchemaVersion(t *testing.T) {
+	p := BuildTreemapFrom(&Node{Name: "root"}, TreemapSession("s", 1, "local"), "")
+	if p.SchemaVersion != SchemaVersion {
+		t.Errorf("schema version = %d, want %d", p.SchemaVersion, SchemaVersion)
+	}
+	var raw map[string]any
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["schema_version"]; !ok {
+		t.Error("schema_version is absent from the marshalled payload")
 	}
 }
