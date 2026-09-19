@@ -35,12 +35,15 @@ func requireGit(t *testing.T) {
 
 // git runs one plumbing command against the fixture, with the ambient
 // configuration neutralised: a developer's commit.gpgsign or init.defaultBranch
-// must not decide whether these tests pass.
+// must not decide whether these tests pass. Nor must the caller's GIT_DIR,
+// which is set whenever git itself invoked us -- these tests run under the
+// pre-commit hook, and there every one of them was operating on the real
+// repository rather than on its own fixture.
 func git(t *testing.T, dir, stdin string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := gitCommand(dir, args...)
 	cmd.Stdin = strings.NewReader(stdin)
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(cmd.Env,
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_AUTHOR_NAME=fixture", "GIT_AUTHOR_EMAIL=fixture@example.invalid",
@@ -455,5 +458,34 @@ func TestNoGapReportedWhenOriginHasNothingExtra(t *testing.T) {
 		if c.Name == "checkpoints on origin" {
 			t.Errorf("nothing is missing, so nothing should be reported: %+v", c)
 		}
+	}
+}
+
+// Tokenamun is routinely run from inside a hook or a `git rebase --exec`, and
+// git sets GIT_DIR for anything it invokes. GIT_DIR beats `-C`, so without
+// scrubbing it every reader in this package answers about the hook's
+// repository while reporting the answer as the one it was pointed at. That is
+// not an error a caller can notice: it is somebody else's checkpoints under
+// this directory's name.
+func TestAnotherRepositoriesGitEnvironmentIsNotObeyed(t *testing.T) {
+	elsewhere := checkpointRepo(t, checkpoint{
+		ulid:     "01JGGGGGGGGGGGGGGGGGGGGGGA",
+		sessions: []cpSession{session("a", "2026-09-01T10:00:00Z", 10)},
+	})
+	t.Setenv("GIT_DIR", filepath.Join(elsewhere, ".git"))
+	t.Setenv("GIT_WORK_TREE", elsewhere)
+
+	empty := t.TempDir()
+	git(t, empty, "", "init", "-q", ".")
+
+	if n := Checkpoints(empty); n != 0 {
+		t.Errorf("counted %d checkpoints in an empty repository, from GIT_DIR's", n)
+	}
+	refs, err := DiscoverCheckpoints(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 0 {
+		t.Errorf("discovered %d sessions in an empty repository, from GIT_DIR's", len(refs))
 	}
 }

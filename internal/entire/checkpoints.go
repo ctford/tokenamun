@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -212,7 +214,7 @@ func batchRead(repo string, specs []string) (map[string][]byte, error) {
 	if len(specs) == 0 {
 		return out, nil
 	}
-	cmd := exec.Command("git", "-C", repo, "cat-file", "--batch")
+	cmd := gitCommand(repo, "cat-file", "--batch")
 	cmd.Stdin = strings.NewReader(strings.Join(specs, "\n") + "\n")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -252,7 +254,7 @@ func batchRead(repo string, specs []string) (map[string][]byte, error) {
 // Streamed rather than extracted to a temp file: transcripts reach 9 MB, and
 // nothing else in this tool loads a whole one.
 func OpenBlob(repo, spec string) (io.ReadCloser, error) {
-	cmd := exec.Command("git", "-C", repo, "cat-file", "-p", spec)
+	cmd := gitCommand(repo, "cat-file", "-p", spec)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -283,9 +285,47 @@ func gitRoot(dir string) string {
 }
 
 func gitOutput(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	out, err := cmd.Output()
+	out, err := gitCommand(dir, args...).Output()
 	return string(out), err
+}
+
+// gitCommand runs git against one repository and nothing else.
+//
+// `-C dir` does not settle which repository git works on: GIT_DIR and its
+// relatives take precedence over it, and they are set in the environment of
+// anything git itself invoked. So a profiler run from inside a pre-commit
+// hook, or from a `git rebase --exec`, reads the hook's repository however
+// carefully the caller passed --dir. The answer is not an error -- it is
+// somebody else's checkpoints, reported as this directory's -- which makes it
+// exactly the kind of quietly wrong number this tool exists to refuse.
+//
+// Scrubbed rather than overridden, because -C already says where to look;
+// what these variables do is override it.
+func gitCommand(dir string, args ...string) *exec.Cmd {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = scrubbed(os.Environ())
+	return cmd
+}
+
+// repositorySelectors are the environment variables that decide which
+// repository git operates on, overriding -C.
+var repositorySelectors = []string{
+	"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_PREFIX", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES",
+}
+
+// scrubbed removes those variables from an environment.
+func scrubbed(env []string) []string {
+	out := env[:0:0]
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		if slices.Contains(repositorySelectors, name) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 // RemoteCheckpoints counts the checkpoint refs the remote has, so a report

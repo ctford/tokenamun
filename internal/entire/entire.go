@@ -16,7 +16,6 @@ package entire
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -137,9 +136,8 @@ func Checkpoints(dir string) int {
 	if err != nil {
 		abs = dir
 	}
-	cmd := exec.Command("git", "-C", abs, "for-each-ref", "--format=%(refname)",
-		"refs/entire/checkpoints/**")
-	out, err := cmd.Output()
+	out, err := gitCommand(abs, "for-each-ref", "--format=%(refname)",
+		"refs/entire/checkpoints/**").Output()
 	if err != nil {
 		return 0
 	}
