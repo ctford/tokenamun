@@ -111,5 +111,5 @@ Details in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
 
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — how every number is computed and labelled
 - [`ENTIRE.md`](ENTIRE.md) — what Entire's data contains, measured
-- [`docs/experiments.md`](docs/experiments.md) — using `series` for before/after
-- [`docs/interventions.md`](docs/interventions.md) — what people try to cut tokens, and what can be checked
+- [`docs/RUNNING-EXPERIMENTS.md`](docs/RUNNING-EXPERIMENTS.md) — using `series` for before/after
+- [`docs/COMMON-INTERVENTIONS.md`](docs/COMMON-INTERVENTIONS.md) — what people try to cut tokens, and what can be checked

@@ -185,7 +185,7 @@ as truncated rather than counted as complete content.
 | Monitor / Skill / others | 6 / 4 / 10 |
 
 **Zero `mcp__*` tool calls across all 8 sessions.** MCP-to-CLI analysis has no
-test data here — see [`docs/interventions.md`](docs/interventions.md).
+test data here — see [`docs/COMMON-INTERVENTIONS.md`](docs/COMMON-INTERVENTIONS.md).
 
 Bash at 87% of calls is a property of *this* dataset (the repo runs Claude Code
 in auto mode, which pushes file reads through `cat`/`sed`). It matters for

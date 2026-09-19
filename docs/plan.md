@@ -13,8 +13,8 @@ Where the delivered work is now written down:
 | the conventions and the quality gates | [`AGENTS.md`](../AGENTS.md) |
 | the commands and flags | `tokenamun help` |
 | what Entire's data contains | [`ENTIRE.md`](../ENTIRE.md) |
-| what people try, and what can be checked | [`interventions.md`](interventions.md) |
-| before-and-after experiments | [`experiments.md`](experiments.md) |
+| what people try, and what can be checked | [`COMMON-INTERVENTIONS.md`](COMMON-INTERVENTIONS.md) |
+| before-and-after experiments | [`RUNNING-EXPERIMENTS.md`](RUNNING-EXPERIMENTS.md) |
 
 ## Content classification: removed
 
@@ -87,7 +87,7 @@ disclosure means the body costs nothing until it is invoked.
 Not an MCP server. An MCP server loads tool schemas into the context of every
 session it is connected to, whether or not anyone profiles anything -- which
 is precisely the overhead
-[`interventions.md`](interventions.md#trimming-instructions-and-the-preamble)
+[`COMMON-INTERVENTIONS.md`](COMMON-INTERVENTIONS.md#trimming-instructions-and-the-preamble)
 says cannot even be measured from a transcript. Shipping a profiler whose own
 footprint is invisible to it would be a poor joke.
 

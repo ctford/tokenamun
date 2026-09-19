@@ -5,7 +5,7 @@ usage, taken from the September 2026 Tech Radar blip candidates and followed out
 to primary sources. The point is not to pick winners. It is to work out which
 claims Tokenamun would need to adjudicate, and what it has to measure to do it.
 
-Read with [`interventions.md`](interventions.md), which says which of these this
+Read with [`COMMON-INTERVENTIONS.md`](COMMON-INTERVENTIONS.md), which says which of these this
 data can actually settle.
 
 ## The one thing everybody agrees on
