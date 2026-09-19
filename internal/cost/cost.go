@@ -123,10 +123,14 @@ func (w Weights) OutputCost(u model.TokenUsage) float64 {
 // PerCall prices one invocation using its own model's weights.
 //
 // Weights used to be chosen once per session, from the first model seen, and
-// applied to every call in it. That is wrong the moment a session switches
-// model -- which `opusplan` does on every plan-mode toggle -- and badly wrong
-// for a model whose cache reads are priced differently: Fable reads at 0.025x
-// against 0.1x, a fourfold error on the class that is 98% of the volume.
+// applied to every call in it. Every weight is the same for every model
+// except the cache read, so a session that switches between two models of
+// the same generation is priced identically either way -- an Opus/Sonnet
+// toggle changes no figure at all. What the session-wide choice gets wrong
+// is a session that mixes the 5.1 generation with anything else, where the
+// read is 0.025x against 0.1x. Narrow, and the worst field to be wrong
+// about: cache reads are ~97% of prompt volume, so the error is close to
+// fourfold on the session.
 //
 // The model is recorded on every invocation, so there is no reason to guess.
 func PerCall(inv model.ModelInvocation) (prompt, output float64) {
@@ -142,6 +146,46 @@ func SessionCost(invocations []model.ModelInvocation) (prompt, output float64) {
 		output += o
 	}
 	return prompt, output
+}
+
+// WriteCost is the part of the prompt bill that is cache writes, priced per
+// call.
+//
+// Kept here rather than derived by subtraction at the call site, because the
+// subtraction needs the input and cache-read terms at each call's own rate,
+// and doing it against session totals is the error this package exists to
+// prevent: it was subtracting the first model's rates from a correctly
+// per-call total, which is a share that does not belong to either pricing.
+func WriteCost(invocations []model.ModelInvocation) float64 {
+	var writes float64
+	for _, inv := range invocations {
+		w := For(inv.Model)
+		prompt := w.PromptCost(inv.Usage)
+		writes += prompt - float64(inv.Usage.Input)*w.Input -
+			float64(inv.Usage.CacheRead)*w.CacheRead
+	}
+	return writes
+}
+
+// MaxCacheRead is the highest cache-read multiple among the models here.
+//
+// For a figure that is deliberately a ceiling rather than an estimate. A
+// ceiling computed at the cheapest rate in the session is not a ceiling, so
+// where the alternative is one rate for a mixed set, the honest one is the
+// dearest. Where a quantity can be priced per call instead, price it per
+// call: this is for the ones that cannot, because the residency behind them
+// is not observed.
+func MaxCacheRead(invocations []model.ModelInvocation) float64 {
+	rate := 0.0
+	for _, inv := range invocations {
+		if r := For(inv.Model).CacheRead; r > rate {
+			rate = r
+		}
+	}
+	if rate == 0 {
+		return Default.CacheRead
+	}
+	return rate
 }
 
 // Mixed reports whether more than one pricing applies across these calls.

@@ -209,18 +209,22 @@ func unattributedDetail() string {
 }
 
 func unattributedMore(s *model.Session, carry analysis.CarryReport, rest float64) string {
-	w := cost.For(firstModel(s))
+	// Both figures below are ceilings on quantities whose residency the
+	// transcript does not confirm, so they are priced at the dearest cache
+	// read in the session rather than at the first model's. A ceiling
+	// computed with the cheapest rate in a mixed session is not a ceiling.
+	read := cost.MaxCacheRead(s.Invocations)
 	var b strings.Builder
 	b.WriteString("Re-read thinking, the preamble after a compaction, the harness's " +
 		"per-call envelope, and the error in estimating tokens from bytes.")
 
 	if carry.ThinkingTokens > 0 && carry.AssistantRoundTrips > 0 {
-		ceiling := float64(carry.ThinkingTokens) * carry.AssistantRoundTrips * w.CacheRead
+		ceiling := float64(carry.ThinkingTokens) * carry.AssistantRoundTrips * read
 		fmt.Fprintf(&b, " Thinking would be up to %s of this, or %s.",
 			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
 	}
 	if beyond := float64(carry.Calls-1) - carry.PreambleRoundTrips; beyond > 0 {
-		ceiling := float64(carry.Preamble) * beyond * w.CacheRead
+		ceiling := float64(carry.Preamble) * beyond * read
 		fmt.Fprintf(&b, " The preamble past the first reset, a further %s, or %s.",
 			num(int(ceiling)), pctStr(ceiling/nonZero(rest)))
 	}

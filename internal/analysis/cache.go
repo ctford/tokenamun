@@ -111,12 +111,14 @@ type CacheReport struct {
 
 // ttlBucket accumulates the counterfactual's inputs for one pricing.
 //
-// One bucket per set of weights, not one per session. A session switches model
-// whenever `opusplan` toggles plan mode, and the 5.1 generation reads cache at
-// 0.025x against 0.1x -- which is one of the two terms the break-even is made
-// of. Summing everybody's tokens and pricing the total at the first model seen
-// is the mistake cost.PerCall exists to avoid, and it survived in here until
-// the weights were bucketed.
+// One bucket per set of weights, not one per session. `opusplan` switches
+// model on every plan-mode toggle, but that alone changes no figure: Opus and
+// Sonnet are priced identically here. What does is a session that mixes the
+// 5.1 generation with anything else, because it reads cache at 0.025x against
+// 0.1x -- one of the two terms the break-even is made of, and the class that
+// is most of the volume. Summing everybody's tokens and pricing the total at
+// the first model seen is the mistake cost.PerCall exists to avoid, and it
+// survived in here until the weights were bucketed.
 type ttlBucket struct {
 	w         cost.Weights
 	writes5m  int64

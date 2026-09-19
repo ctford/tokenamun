@@ -199,12 +199,12 @@ type ToolSummary struct {
 // BuildProfile computes a profile from a parsed session.
 func BuildProfile(s *model.Session) Profile {
 	u := s.Usage()
-	w := cost.Default
-	if ms := s.Models(); len(ms) > 0 {
-		w = cost.For(ms[0])
-	}
-	promptCost := w.PromptCost(u)
-	outputCost := w.OutputCost(u)
+	// Each call at its own model's weights. This is total_cost, the headline
+	// figure, and it used to be the session's summed usage priced at the
+	// first model seen -- which on a session mixing the 5.1 generation with
+	// anything else misprices cache reads fourfold, on the class that is
+	// most of the bill.
+	promptCost, outputCost := cost.SessionCost(s.Invocations)
 	volume := float64(u.PromptTokens())
 
 	ratio := 0.0
@@ -216,7 +216,9 @@ func BuildProfile(s *model.Session) Profile {
 		readShare = float64(u.CacheRead) / volume
 	}
 	if promptCost > 0 {
-		writeShare = (promptCost - float64(u.Input)*w.Input - float64(u.CacheRead)*w.CacheRead) / promptCost
+		// The same treatment: the input and cache-read terms are accumulated
+		// per call, not taken off the total at one model's rates.
+		writeShare = cost.WriteCost(s.Invocations) / promptCost
 	}
 
 	retrieval := BuildRetrieval(s)
