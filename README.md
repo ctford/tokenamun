@@ -110,6 +110,6 @@ Details in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
 ## Also here
 
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — how every number is computed and labelled
-- [`ENTIRE.md`](ENTIRE.md) — what Entire's data contains, measured
+- [`docs/ENTIRE.md`](docs/ENTIRE.md) — what Entire's data contains, measured
 - [`docs/RUNNING-EXPERIMENTS.md`](docs/RUNNING-EXPERIMENTS.md) — using `series` for before/after
 - [`docs/COMMON-INTERVENTIONS.md`](docs/COMMON-INTERVENTIONS.md) — what people try to cut tokens, and what can be checked

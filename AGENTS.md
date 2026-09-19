@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 Tokenamun is an **experimental** profiler for coding-agent token usage.
 [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) is canonical on how every number is
-computed; [`ENTIRE.md`](ENTIRE.md) on what the
+computed; [`docs/ENTIRE.md`](docs/ENTIRE.md) on what the
 data contains. Read the latter before touching an adapter — most non-obvious
 decisions there follow from something measured in it.
 
@@ -143,3 +143,20 @@ same commit.
 * No developer-level metrics or leaderboards.
 * No fabricated precision. Where the evidence is not in the data, the command
   says `not measurable from this data`. That output is a feature.
+* **No MCP server.** It would load tool schemas into every session it is
+  connected to, whether or not anyone profiles anything — which is precisely
+  the overhead
+  [`docs/COMMON-INTERVENTIONS.md`](docs/COMMON-INTERVENTIONS.md#trimming-instructions-and-the-preamble)
+  says cannot be measured from a transcript. A profiler whose own footprint is
+  invisible to it would be a poor joke. If a wrapper is ever wanted it is a
+  thin skill: a question-to-command table and the epistemic rules, nothing
+  else.
+* **No content-category taxonomy.** There was one — ADRs, specs, plans, tests,
+  source — declared per repository and otherwise guessed from directory names.
+  A repository's layout already carries the category: `docs/decisions` *is* the
+  decision records. On the reference dataset 8 of 9 categories were being
+  filled by naming heuristics rather than declarations, and only one category's
+  content spanned more than one directory. What it cost was the ability to
+  aggregate content scattered by convention, and to declare that a path is not
+  what it looks like. If a misleading path ever justifies it, the answer is a
+  narrow override file, not a second taxonomy.
