@@ -115,10 +115,12 @@ same commit.
   finding only a browser can show is one the agent must ask a human to read
   out.
 * **The checks are gates, not reports.** `scripts/checks.sh` runs gofmt, vet,
-  race tests, the private-data guards, dead code, an 80% coverage floor and
-  file-length, complexity and duplication budgets from the tool's own scanner.
-  The budgets are ratchets set just above where the code is; raise one only
-  with the reason in the commit message.
+  race tests, golangci-lint, the private-data guards, dead code, an 80%
+  coverage floor and file-length, complexity and duplication budgets from the
+  tool's own scanner. The budgets are ratchets set just above where the code
+  is; raise one only with the reason in the commit message. golangci-lint is
+  the one step that skips when it is missing locally, which is why CI
+  installs a pinned copy before running the script.
 * **Tests before green.** Table-driven unit tests per package; golden-file
   tests over `testdata/` with no network and no API key. `-update` regenerates
   goldens — read the diff.

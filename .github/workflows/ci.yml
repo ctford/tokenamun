@@ -32,5 +32,29 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # checks.sh skips golangci-lint when it is not on PATH, so without this
+      # the lint gate printed "skipped" and the run went green having linted
+      # nothing -- on every run this repository has ever had.
+      #
+      # Installed here rather than run here. golangci-lint-action would lint
+      # as well as install, which would make the workflow a second definition
+      # of a gate that lives in scripts/checks.sh, and the two would drift.
+      #
+      # Pinned, and the release binary rather than a piped install script:
+      # a new release of the linter must not change the verdict on an
+      # unchanged commit, for the same reason deadcode is a pinned tool
+      # dependency.
+      - name: install golangci-lint
+        env:
+          VERSION: 2.13.2
+        run: |
+          set -euo pipefail
+          archive="golangci-lint-${VERSION}-linux-amd64"
+          curl -sSfL -o /tmp/golangci-lint.tar.gz \
+            "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/${archive}.tar.gz"
+          tar -xzf /tmp/golangci-lint.tar.gz -C /tmp
+          sudo install "/tmp/${archive}/golangci-lint" /usr/local/bin/golangci-lint
+          golangci-lint --version
+
       - name: scripts/checks.sh
         run: ./scripts/checks.sh

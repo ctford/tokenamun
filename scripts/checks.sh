@@ -141,7 +141,11 @@ step "golangci-lint"
 if command -v golangci-lint >/dev/null 2>&1; then
   golangci-lint run || bad "golangci-lint reported problems"
 else
-  echo "skipped: golangci-lint not installed"
+  # Not a failure locally, because CI installs it and runs this same script,
+  # so nothing reaches the default branch unlinted. Worth saying out loud all
+  # the same: this step skipped silently on every run for as long as it
+  # existed, and a gate that is always skipped is a gate nobody has.
+  echo "skipped: golangci-lint not installed locally (CI runs it; brew install golangci-lint)"
 fi
 
 if [[ "$fail" -ne 0 ]]; then
