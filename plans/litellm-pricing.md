@@ -162,6 +162,7 @@ exists to avoid.
 Per-node and per-cause dollars, as above. The attribution they need is now
 partly in place after [`per-call-pricing.md`](per-call-pricing.md).
 
-`--prices` also does not reach the subagent block, which on a fan-out
-session is most of the cost — see
+`--prices` did not reach the subagent block either, which on a fan-out
+session is most of the cost. Built since, along with a soundness fix to the
+combined total it sits beside: see
 [`subagent-dollars.md`](subagent-dollars.md).
