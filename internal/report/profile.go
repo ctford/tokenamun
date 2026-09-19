@@ -81,7 +81,15 @@ import (
 // under `session` as what the work cost was reading what this context cost:
 // on a session that fans out, most of the spend is in the other block, and
 // there was no dollar figure for it anywhere.
-const SchemaVersion = 10
+//
+// 11: `sessions` rows grew `subagent_cost_eit` and `combined_cost_eit`, the
+// latter with a `combined_mixed_pricing` twin, and `--sort cost` now ranks
+// by the combined figure. A consumer that ranked a week by `cost_eit`, or
+// trusted the order the tool returned, was ranking each session by the part
+// of it that happened in the parent context: a session that dispatched most
+// of its work to subagents sorted far below sessions it cost several times
+// over. `cost_eit` itself is unchanged and still that one context.
+const SchemaVersion = 11
 
 // Profile is a session overview.
 type Profile struct {

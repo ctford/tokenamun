@@ -150,3 +150,97 @@ func TestTheSessionListLabelsEveryFigureItPrints(t *testing.T) {
 		}
 	}
 }
+
+// dispatcher is a cheap parent that sent expensive work to a subagent: the
+// shape --sort cost used to rank by the wrong half of.
+func dispatcher(id string, own, sub int64, when time.Time) *model.Session {
+	s := priced(id, own, when)
+	s.Subagents = []model.SubagentRun{{
+		ID: "agent-a",
+		Invocations: []model.ModelInvocation{{
+			Seq: 1, RequestID: "sa", Model: "claude-opus-5", Timestamp: when,
+			Usage: model.TokenUsage{CacheRead: sub},
+		}},
+	}}
+	return s
+}
+
+// TestCostRanksAWeekByWhatEachSessionCaused. The parent context is the part
+// of a fan-out session that a list can see, and it is not the part that cost
+// the money.
+func TestCostRanksAWeekByWhatEachSessionCaused(t *testing.T) {
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	solo := priced("solo", 100_000, now)
+	fanned := dispatcher("fanned", 1_000, 900_000, now.Add(-time.Hour))
+
+	l := listOf(t, SortCost, solo, fanned)
+	if ids(l)[0] != "fanned" {
+		t.Errorf("the dispatching session cost the most and sorted %v", ids(l))
+	}
+
+	var row SessionRow
+	for _, r := range l.Sessions {
+		if r.ID == "fanned" {
+			row = r
+		}
+	}
+	if row.CostEIT.Value >= row.CombinedCostEIT.Value {
+		t.Error("the session's own figure must keep its meaning beside the combined one")
+	}
+	if got, want := row.CombinedCostEIT.Value,
+		row.CostEIT.Value+row.SubagentCostEIT.Value; got != want {
+		t.Errorf("combined %.0f is not own plus subagents %.0f", got, want)
+	}
+}
+
+// TestASessionThatLaunchedNothingReportsZeroRatherThanNothing. Zero is a
+// measurement here: the session made no subagent calls. Absent means the
+// transcript would not parse, which is a different claim.
+func TestASessionThatLaunchedNothingReportsZeroRatherThanNothing(t *testing.T) {
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	l := listOf(t, SortCost, priced("solo", 1_000, now))
+	row := l.Sessions[0]
+	if row.SubagentCostEIT == nil || row.SubagentCostEIT.Value != 0 {
+		t.Errorf("a session with no subagents should report zero, got %v", row.SubagentCostEIT)
+	}
+	if row.CombinedCostEIT == nil || row.CombinedCostEIT.Value != row.CostEIT.Value {
+		t.Error("with nothing launched, the combined total is the session's own")
+	}
+
+	var b bytes.Buffer
+	if err := RenderSessionList(&b, l); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(b.String(), "WITH SUBAGENTS") {
+		t.Error("a week that fanned out nowhere should not grow a column of repeats")
+	}
+}
+
+// TestTheListSaysWhenACombinedTotalSpansTwoPricings. The row's own figure is
+// exact -- the parent never switched model -- and the column the list is
+// sorted by is not.
+func TestTheListSaysWhenACombinedTotalSpansTwoPricings(t *testing.T) {
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	s := dispatcher("fanned", 1_000, 900_000, now)
+	s.Subagents[0].Invocations[0].Model = "claude-fable-5-1"
+	l := listOf(t, SortCost, s)
+	row := l.Sessions[0]
+	if row.MixedPricing {
+		t.Error("the parent never switched model")
+	}
+	if !row.CombinedMixedPricing {
+		t.Fatal("the combined total spans two pricings and does not say so")
+	}
+
+	var b bytes.Buffer
+	if err := RenderSessionList(&b, l); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "WITH SUBAGENTS") {
+		t.Error("a week with fan-out in it should show the combined column")
+	}
+	if !strings.Contains(out, "priced differently") {
+		t.Errorf("the row does not say its sort key is unsound:\n%s", out)
+	}
+}

@@ -45,10 +45,26 @@ type SessionRow struct {
 	// parse. Zero is a measurement; this is the absence of one.
 	Calls   *model.Quantity `json:"calls,omitempty"`
 	CostEIT *model.Quantity `json:"cost_eit,omitempty"`
+	// SubagentCostEIT is what the subagents this session launched cost, and
+	// CombinedCostEIT is the two together. Absent on the same terms as the
+	// figures above: zero where a session launched nothing, because that is
+	// a measurement, and missing where the transcript would not parse.
+	//
+	// Beside CostEIT rather than folded into it. CostEIT is one context and
+	// is what every other command reports; the fan-out ratio between the two
+	// is itself the interesting number on a week of dispatching work out.
+	SubagentCostEIT *model.Quantity `json:"subagent_cost_eit,omitempty"`
+	CombinedCostEIT *model.Quantity `json:"combined_cost_eit,omitempty"`
 	// MixedPricing marks a session that switched model, where the EIT total
 	// adds quantities of different sizes. Comparing two of these rows against
 	// each other is the thing that goes wrong quietly.
 	MixedPricing bool `json:"mixed_pricing,omitempty"`
+	// CombinedMixedPricing marks a row whose combined total spans two
+	// pricings, which a parent that never switched model can do by
+	// dispatching a subagent elsewhere. It is what --sort cost ranks by, so
+	// a row that is unsound in that column is worth saying so about even
+	// when the session's own figure is exact.
+	CombinedMixedPricing bool `json:"combined_mixed_pricing,omitempty"`
 }
 
 // Session sort orders.
@@ -58,6 +74,13 @@ const (
 	SortRecent = "recent"
 	// SortCost ranks by what each session cost, which is the question the
 	// list could not answer before.
+	//
+	// By the combined total, not the session's own. Ranking a week is the
+	// whole purpose of the order, and a session that dispatched most of its
+	// work to subagents caused that spend whichever context it landed in;
+	// sorting on the parent's part of it put fan-out-heavy sessions many
+	// places below where their cost warrants. The per-context figure is
+	// still in the row, and is still what every other command reports.
 	SortCost = "cost"
 	// SortCalls ranks by API calls, which is volume of turns rather than
 	// spend. Kept apart from cost deliberately: they disagree, and which one
@@ -92,8 +115,9 @@ func BuildSessionList(refs []model.SessionRef, sortBy string,
 				"switched say so.",
 			"Calls are API requests, deduplicated by requestId. A transcript line is a " +
 				"content block, not a call, and counting lines overstates everything.",
-			"Subagent spend is not in these totals. `tokenamun profile <session>` reports " +
-				"it beside the session's own, because a subagent runs in its own context.",
+			"Cost is this session's own context. With subagents adds what the subagents " +
+				"it launched cost in theirs, which is what --sort cost ranks by: the spend " +
+				"happened elsewhere but the session caused it.",
 		},
 	}
 	for _, ref := range refs {
@@ -109,6 +133,12 @@ func BuildSessionList(refs []model.SessionRef, sortBy string,
 		cost := p.Usage.TotalCost
 		row.Calls, row.CostEIT = &calls, &cost
 		row.MixedPricing = p.Session.MixedPricing
+		sub, combined := model.Der(0, model.EIT), cost
+		if sa := p.Subagents; sa != nil {
+			sub, combined = sa.TotalCost, sa.CombinedCost
+			row.CombinedMixedPricing = sa.CombinedMixedPricing
+		}
+		row.SubagentCostEIT, row.CombinedCostEIT = &sub, &combined
 		l.Sessions = append(l.Sessions, row)
 	}
 	sortSessions(l.Sessions, sortBy)
@@ -120,8 +150,8 @@ func BuildSessionList(refs []model.SessionRef, sortBy string,
 func sortSessions(rows []SessionRow, by string) {
 	value := func(r SessionRow) float64 {
 		switch {
-		case by == SortCost && r.CostEIT != nil:
-			return r.CostEIT.Value
+		case by == SortCost && r.CombinedCostEIT != nil:
+			return r.CombinedCostEIT.Value
 		case by == SortCalls && r.Calls != nil:
 			return r.Calls.Value
 		}
@@ -137,10 +167,23 @@ func sortSessions(rows []SessionRow, by string) {
 }
 
 // RenderSessionList writes the list as a table.
+//
+// The combined column appears only on a set where something fanned out. A
+// column that repeats the one beside it on every row of most weeks is a
+// column people learn to stop reading, and the figure it would repeat is
+// already the sort key.
 func RenderSessionList(w io.Writer, l SessionList) error {
 	b := &strings.Builder{}
-	fmt.Fprintf(b, "%-38s %-8s %-17s %8s %13s  %s\n",
-		"SESSION", "SOURCE", "LAST ACTIVE", "CALLS", "COST (EIT)", "")
+	fanOut := false
+	for _, r := range l.Sessions {
+		if r.SubagentCostEIT != nil && r.SubagentCostEIT.Value > 0 {
+			fanOut = true
+			break
+		}
+	}
+	fmt.Fprintf(b, "%-38s %-8s %-17s %8s %13s%s  %s\n",
+		"SESSION", "SOURCE", "LAST ACTIVE", "CALLS", "COST (EIT)",
+		combinedCell("WITH SUBAGENTS", fanOut), "")
 	for _, r := range l.Sessions {
 		marker := ""
 		if r.Current {
@@ -149,9 +192,13 @@ func RenderSessionList(w io.Writer, l SessionList) error {
 		if r.MixedPricing {
 			marker = strings.TrimSpace(marker + " (switched model)")
 		}
-		fmt.Fprintf(b, "%-38s %-8s %-17s %8s %13s  %s\n",
+		if r.CombinedMixedPricing && !r.MixedPricing {
+			marker = strings.TrimSpace(marker + " (subagents priced differently)")
+		}
+		fmt.Fprintf(b, "%-38s %-8s %-17s %8s %13s%s  %s\n",
 			trunc(r.ID, 38), r.Origin, r.Modified.Format("2006-01-02 15:04"),
-			figure(r.Calls), figure(r.CostEIT), marker)
+			figure(r.Calls), figure(r.CostEIT),
+			combinedCell(figure(r.CombinedCostEIT), fanOut), marker)
 	}
 	b.WriteString("\n")
 	fmt.Fprintf(b, "Calls [%s], cost [%s]. Sorted by %s.\n\n",
@@ -169,6 +216,15 @@ func RenderSessionList(w io.Writer, l SessionList) error {
 	b.WriteString("\n")
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// combinedCell is the with-subagents column, or nothing at all on a set
+// where no session launched one.
+func combinedCell(text string, show bool) string {
+	if !show {
+		return ""
+	}
+	return fmt.Sprintf(" %15s", text)
 }
 
 // figure prints a quantity, or a dash where there is none. A dash rather than

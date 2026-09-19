@@ -142,6 +142,12 @@ The number stays and is qualified rather than withheld. It is exact whenever
 the parent and its subagents share a model, which is the common case, and
 where it is not exact the caveat names the flag that is.
 
+`tokenamun sessions` reports the same pair per row and **ranks on the
+combined one**. Ranking a week is what that order is for, and a session that
+dispatched its work to subagents caused the spend whichever context it landed
+in. The per-session figure stays what every other command reports: this
+context, and nothing else.
+
 `--prices` reaches both figures: what the subagents cost, and the combined
 total, each priced per call at its own model and so sound across the
 boundary that EIT is not. They are printed in the subagent block rather than
