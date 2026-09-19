@@ -138,9 +138,16 @@ func (b *ttlBuckets) at(modelID string) *ttlBucket {
 //
 // A session that never idles past five minutes avoids nothing and pays double
 // for every write, so this comes out positive, which is the point of computing
-// it rather than assuming. Break-even is avoided writes above 37.5% of all
-// writes -- at the standard 0.1x read. On the 5.1 generation the cheaper read
-// moves it, which is the reason each pricing is priced on its own.
+// it rather than assuming.
+//
+// Break-even at the standard rates is avoided writes at 39.5% of all writes:
+// 0.75W = 1.9a, from a premium of (2.0 - 1.25) on the writes that survive
+// against a saving of (1.25 - 0.1) on the ones that do not. This comment used
+// to say 37.5%, which is 0.75/2.0 -- the answer you get by treating the
+// avoided rewrite as free, which is the error the paragraph above it warns
+// about. On the 5.1 generation the cheaper read makes each avoided write
+// worth more and brings break-even down to 38.0%, which is the reason each
+// pricing is priced on its own.
 func longerTTL(r *CacheReport, buckets ttlBuckets) {
 	if r.Writes5m == 0 {
 		return

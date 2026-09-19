@@ -488,3 +488,66 @@ func TestSwitchingCostsMoneyWhenNothingIdles(t *testing.T) {
 		t.Errorf("net = %.1f, want positive: switching should cost money here", r.LongerTTLNetEIT)
 	}
 }
+
+func TestGapBoundariesAreConsistentAtBothLifetimes(t *testing.T) {
+	// A cache entry's clock runs from request start, so a call arriving at
+	// exactly the lifetime is the last one still warm. Both boundaries have
+	// to agree on that or the counterfactual contradicts the attribution:
+	// expiry needs gap > 5m, and staying warm at an hour needs gap <= 1h.
+	for _, tc := range []struct {
+		name      string
+		gap       time.Duration
+		cause     string
+		avoidable bool
+	}{
+		{"a second inside 5m", TTL5m - time.Second, CauseUnexplained, false},
+		{"exactly 5m", TTL5m, CauseUnexplained, false},
+		{"a second past 5m", TTL5m + time.Second, CauseTTLExpiry, true},
+		{"a second inside an hour", TTL1h - time.Second, CauseTTLExpiry, true},
+		{"exactly an hour", TTL1h, CauseTTLExpiry, true},
+		{"a second past an hour", TTL1h + time.Second, CauseTTLExpiry, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := session(
+				inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 10_000),
+				inv(1, tc.gap, "claude-opus-5", "2.1.246", "high", 1, 0, 50_000),
+			)
+			r := Cache(s, TTL5m)
+			var got Miss
+			for _, m := range r.Misses {
+				if m.Seq == 1 {
+					got = m
+				}
+			}
+			if got.Cause != tc.cause {
+				t.Errorf("cause = %q, want %q", got.Cause, tc.cause)
+			}
+			if got.AvoidableByTTL != tc.avoidable {
+				t.Errorf("avoidable = %v, want %v", got.AvoidableByTTL, tc.avoidable)
+			}
+		})
+	}
+}
+
+func TestBreakEvenIsWhereTheAvoidedReadIsPaidFor(t *testing.T) {
+	// 0.75W = 1.9a, so break-even is a/W = 39.47%, not the 0.75/2.0 = 37.5%
+	// you get by treating an avoided rewrite as free. Here W is 1,900,000 and
+	// the avoidable part 750,000, which lands exactly on it.
+	s := session(
+		inv(0, 0, "claude-opus-5", "2.1.246", "high", 1, 0, 1_150_000),
+		inv(1, 20*time.Minute, "claude-opus-5", "2.1.246", "high", 1, 0, 750_000),
+	)
+	r := Cache(s, TTL5m)
+
+	if r.Writes5m != 1_900_000 || r.AvoidableTokens != 750_000 {
+		t.Fatalf("setup drifted: writes %d avoidable %d", r.Writes5m, r.AvoidableTokens)
+	}
+	if math.Abs(r.LongerTTLNetEIT) > 1 {
+		t.Errorf("net = %.1f at break-even, want 0", r.LongerTTLNetEIT)
+	}
+	// Under the 37.5% reading the same session would look like a saving,
+	// because it treats 750,000 as 39.5% of the way to a free lunch.
+	if r.LongerTTLNetEIT < -1 {
+		t.Errorf("net = %.1f, which is the avoided-rewrite-is-free answer", r.LongerTTLNetEIT)
+	}
+}
