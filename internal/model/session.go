@@ -139,6 +139,59 @@ type Session struct {
 	// ClassifierSource says where content categories came from, so a reader
 	// can tell a declared layout from a guess at naming.
 	ClassifierSource string `json:"classifier_source,omitempty"`
+	// Subagents is the spend of the subagents this session launched, each
+	// recorded in its own transcript.
+	//
+	// Held apart from Invocations rather than appended to them, and the
+	// reason is the estimator. Calibration reads prompt growth between
+	// consecutive invocations, so interleaving a second context's calls
+	// would present its cold start as growth in this one and corrupt the
+	// bytes-per-token ratio for the whole session. A subagent's context is
+	// a different context; it is summed with this one, not merged into it.
+	Subagents []SubagentRun `json:"subagents,omitempty"`
+}
+
+// SubagentRun is one subagent's own context, from its own transcript.
+//
+// Invocations are kept rather than a total, because pricing is per model: a
+// subagent can run on a different model from its parent, and a total would
+// have to pick one set of weights for all of them.
+type SubagentRun struct {
+	ID          string            `json:"id"`
+	Transcript  string            `json:"transcript"`
+	Invocations []ModelInvocation `json:"invocations"`
+	// ToolCalls is a count rather than the calls themselves. What a subagent
+	// read is its own business and mostly noise to the parent's report; what
+	// it cost is not.
+	ToolCalls int `json:"tool_calls"`
+}
+
+// Usage totals one subagent run.
+func (r SubagentRun) Usage() TokenUsage {
+	var t TokenUsage
+	for _, inv := range r.Invocations {
+		t = t.Add(inv.Usage)
+	}
+	return t
+}
+
+// SubagentUsage totals every subagent this session launched. Zero when none
+// were launched, which is the common case.
+func (s *Session) SubagentUsage() TokenUsage {
+	var t TokenUsage
+	for _, r := range s.Subagents {
+		t = t.Add(r.Usage())
+	}
+	return t
+}
+
+// SubagentInvocations is every subagent call, flattened, for pricing.
+func (s *Session) SubagentInvocations() []ModelInvocation {
+	var out []ModelInvocation
+	for _, r := range s.Subagents {
+		out = append(out, r.Invocations...)
+	}
+	return out
 }
 
 // TokenEstimator records how content token counts were arrived at, so the

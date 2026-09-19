@@ -53,7 +53,83 @@ func LoadWith(ref model.SessionRef, opts Options) (*model.Session, error) {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }() // read-only: nothing to flush, nothing to lose
-	return ParseWith(f, ref, opts)
+	s, err := ParseWith(f, ref, opts)
+	if err != nil {
+		return nil, err
+	}
+	loadSubagents(s, ref, opts)
+	return s, nil
+}
+
+// loadSubagents parses the transcripts of the subagents a session launched
+// and attaches their spend to it.
+//
+// Only for local transcripts. An Entire recording is a single committed blob
+// with no sibling files, so there is nothing to look for -- and looking would
+// mean a git lookup per session on the "all" path.
+//
+// A subagent transcript that will not parse is dropped with a warning rather
+// than failing the session. The parent's numbers are still correct and still
+// worth having; what is lost is an addendum to them, and refusing to report
+// anything would be a worse trade than reporting most of it and saying so.
+func loadSubagents(s *model.Session, ref model.SessionRef, opts Options) {
+	if ref.InGit || ref.Transcript == "" {
+		return
+	}
+	for _, path := range claudecode.SubagentTranscripts(ref.Transcript) {
+		f, err := os.Open(path)
+		if err != nil {
+			s.Warn("subagent_unreadable", fmt.Sprintf(
+				"a subagent transcript could not be opened, so its spend is missing from this profile: %v", err))
+			continue
+		}
+		// Parsed as its own session, because that is what it is: its own
+		// context, its own requestId space, its own dedup.
+		sub, err := ParseWith(f, model.SessionRef{
+			ID:         claudecode.SubagentID(path),
+			Transcript: path,
+			Origin:     ref.Origin,
+			Repo:       ref.Repo,
+		}, opts)
+		_ = f.Close()
+		if err != nil {
+			s.Warn("subagent_unreadable", fmt.Sprintf(
+				"subagent transcript %s could not be parsed, so its spend is missing from this profile",
+				claudecode.SubagentID(path)))
+			continue
+		}
+		s.Subagents = append(s.Subagents, model.SubagentRun{
+			ID:          sub.Ref.ID,
+			Transcript:  path,
+			Invocations: sub.Invocations,
+			ToolCalls:   len(sub.ToolCalls),
+		})
+	}
+	if len(s.Subagents) > 0 {
+		retract(s, "subagent_usage_missing")
+	}
+}
+
+// retract removes a warning that later work proved wrong.
+//
+// Diagnosis runs inside ParseWith, over one transcript, and from there an
+// Agent call with no sidechain really does look like spend that cannot be
+// seen -- which is the right conclusion for a caller parsing a bare stream,
+// where there are no sibling files to find. Only LoadWith knows there is a
+// directory to look in, and it looks after parsing. So the warning is raised
+// on what was known and withdrawn once it is not true.
+//
+// Withdrawn rather than never raised, because the stream case still needs
+// it: Parse and ParseWith are the entry points for a transcript that has no
+// path, and there the spend genuinely is invisible.
+func retract(s *model.Session, code string) {
+	kept := s.Warnings[:0]
+	for _, w := range s.Warnings {
+		if w.Code != code {
+			kept = append(kept, w)
+		}
+	}
+	s.Warnings = kept
 }
 
 // Parse reads a transcript from r with the built-in classifier.
@@ -421,9 +497,16 @@ func diagnose(s *model.Session) {
 				"so their token cost is excluded from the byte-ratio estimate rather than guessed",
 			images, imageBytes))
 	}
-	if agentCalls > 0 && !hasSidechain(s) {
+	// Two different situations used to share one warning, and the one that
+	// mattered was the one it described wrongly. Subagent spend is recorded
+	// in sibling transcripts, so "not in this transcript" was true and read
+	// as unmeasurable. It is only really missing when those files are gone
+	// too -- which happens, because cleanup deletes them on the same
+	// schedule as everything else.
+	if agentCalls > 0 && len(s.Subagents) == 0 && !hasSidechain(s) {
 		s.Warn("subagent_usage_missing", fmt.Sprintf(
-			"%d Agent calls were made but no sidechain invocations are present; subagent token usage is not in this transcript",
+			"%d Agent calls were made, and neither sidechain invocations nor subagent "+
+				"transcripts were found; their token usage is not counted here",
 			agentCalls))
 	}
 }

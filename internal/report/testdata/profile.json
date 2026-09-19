@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "session": {
     "id": "fixture-session",
     "selector": "fixture-session",
@@ -184,7 +184,7 @@
     },
     {
       "code": "subagent_usage_missing",
-      "detail": "1 Agent calls were made but no sidechain invocations are present; subagent token usage is not in this transcript"
+      "detail": "1 Agent calls were made, and neither sidechain invocations nor subagent transcripts were found; their token usage is not counted here"
     }
   ],
   "notes": [

@@ -70,6 +70,18 @@ A session is named by id prefix, or by `current` or `latest`. `tree`,
 session discovered — with Entire, that is the whole team. `--since` and
 `--until` take a date or an age, so last week is `--since 7d`.
 
+## Subagents
+
+A session that calls `Agent` pays for the subagent's own context too, and
+Claude Code records it in a separate transcript beside the session's own.
+`profile` reads those and reports what they cost next to the session's own
+figures, with the two summed. They are not folded together: a subagent runs
+in its own context, so its cache reads are not part of this prompt, and
+every other figure in a report is about the context you were in.
+
+This used to be listed below as unmeasurable. It was not; the files were on
+disk and nothing opened them.
+
 ## What it cannot measure
 
 Some things are not visible in the transcript:
@@ -82,8 +94,6 @@ Some things are not visible in the transcript:
 - **Exact token counts for content**, which are estimated from bytes at a
   ratio calibrated against the session's own prompt growth. `tiktoken` is not
   Claude's tokenizer and is not used.
-- **Subagent-internal spend**, absent from every session examined despite
-  `Agent` being called.
 - **Whether the work came out right.** An agent that fails a task consumes the
   fewest tokens of all, so a reduction is not an improvement on its own.
 

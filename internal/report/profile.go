@@ -19,7 +19,12 @@ import (
 // `avoidable_by_longer_ttl_calls` and `_tokens`. The bool was ORed over the
 // group, so a consumer reading it as "this row is avoidable" was reading an
 // overclaim.
-const SchemaVersion = 2
+//
+// 3: profile grew a `subagents` block, and `subagent_usage_missing` stopped
+// firing when the subagent transcripts are on disk. A consumer that read
+// that warning as "this session fanned out and the spend is unknowable" was
+// reading something the data did not say.
+const SchemaVersion = 3
 
 // Profile is a session overview.
 type Profile struct {
@@ -28,9 +33,12 @@ type Profile struct {
 	Usage         UsageReport     `json:"usage"`
 	Caching       CachingReport   `json:"caching"`
 	Retrieved     RetrievalTotals `json:"retrieved_content"`
-	Tools         []ToolSummary   `json:"tools"`
-	Warnings      []model.Warning `json:"warnings,omitempty"`
-	Notes         []string        `json:"notes"`
+	// Subagents is absent for the great majority of sessions, which never
+	// call Agent at all.
+	Subagents *SubagentReport `json:"subagents,omitempty"`
+	Tools     []ToolSummary   `json:"tools"`
+	Warnings  []model.Warning `json:"warnings,omitempty"`
+	Notes     []string        `json:"notes"`
 }
 
 // SessionInfo identifies what was profiled.
@@ -79,6 +87,60 @@ type CachingReport struct {
 	TTL5m             model.Quantity `json:"cache_writes_5m"`
 	TTL1h             model.Quantity `json:"cache_writes_1h"`
 	TTLBucket         string         `json:"observed_ttl"`
+}
+
+// SubagentReport is what the subagents a session launched cost.
+//
+// Reported beside the session's totals rather than folded into them. A
+// subagent runs in its own context, so adding its cache reads to the
+// parent's would describe a prompt that never existed -- and the retrieval
+// tree, the carry figures and the estimator are all about this context. What
+// a reader wants is both numbers and the sum, which is what this gives.
+type SubagentReport struct {
+	Runs      model.Quantity `json:"runs"`
+	Calls     model.Quantity `json:"api_calls"`
+	ToolCalls model.Quantity `json:"tool_calls"`
+	CacheRead model.Quantity `json:"cache_read"`
+	Output    model.Quantity `json:"output"`
+	TotalCost model.Quantity `json:"total_cost"`
+	// CombinedCost is the session and its subagents together: what the work
+	// actually cost, as against what the session's own context cost.
+	CombinedCost model.Quantity `json:"combined_cost"`
+	// ShareOfCombined is how much of that total happened out of sight of
+	// every other figure in this report.
+	ShareOfCombined model.Quantity `json:"share_of_combined"`
+}
+
+// buildSubagents summarises subagent spend, or returns nil when there was
+// none. Priced per call with cost.SessionCost, because a subagent can run on
+// a different model from its parent.
+func buildSubagents(s *model.Session, sessionCost float64) *SubagentReport {
+	if len(s.Subagents) == 0 {
+		return nil
+	}
+	invs := s.SubagentInvocations()
+	prompt, output := cost.SessionCost(invs)
+	total := prompt + output
+	combined := sessionCost + total
+	share := 0.0
+	if combined > 0 {
+		share = total / combined
+	}
+	u := s.SubagentUsage()
+	var toolCalls int
+	for _, r := range s.Subagents {
+		toolCalls += r.ToolCalls
+	}
+	return &SubagentReport{
+		Runs:            model.Obs(float64(len(s.Subagents)), model.Calls),
+		Calls:           model.Obs(float64(len(invs)), model.Calls),
+		ToolCalls:       model.Obs(float64(toolCalls), model.Calls),
+		CacheRead:       model.Obs(float64(u.CacheRead), model.Tokens),
+		Output:          model.Obs(float64(u.Output), model.Tokens),
+		TotalCost:       model.Der(total, model.EIT),
+		CombinedCost:    model.Der(combined, model.EIT),
+		ShareOfCombined: model.Der(share, model.Ratio),
+	}
 }
 
 // ToolSummary aggregates one tool's calls.
@@ -147,6 +209,7 @@ func BuildProfile(s *model.Session) Profile {
 			TTLBucket:         ttl,
 		},
 		Retrieved: retrieval.Total,
+		Subagents: buildSubagents(s, promptCost+outputCost),
 		Tools:     toolSummaries(s),
 		Warnings:  s.Warnings,
 		Notes: []string{
@@ -255,6 +318,19 @@ func RenderText(w io.Writer, p Profile) error {
 	pct(b, "  Reads, % of volume", p.Caching.ReadShareOfVolume)
 	pct(b, "  Writes, % of cost", p.Caching.WriteShareOfCost)
 	b.WriteString("\n")
+
+	if sa := p.Subagents; sa != nil {
+		b.WriteString("Subagents (their own contexts, from their own transcripts)\n")
+		line(b, "  Subagent runs", sa.Runs)
+		line(b, "  Their API calls", sa.Calls)
+		line(b, "  Their cache reads", sa.CacheRead)
+		line(b, "  Their output", sa.Output)
+		line(b, "  Their cost", sa.TotalCost)
+		line(b, "  Session + subagents", sa.CombinedCost)
+		pct(b, "  Share out of sight", sa.ShareOfCombined)
+		b.WriteString("  Every other figure here is this session's own context.\n")
+		b.WriteString("\n")
+	}
 
 	if p.Retrieved.Items.Value > 0 {
 		b.WriteString("Retrieved content (observed size of what entered context)\n")
