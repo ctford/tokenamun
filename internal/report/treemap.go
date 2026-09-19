@@ -61,6 +61,7 @@ func BuildTreemapTitled(s *model.Session, carry analysis.CarryReport, title stri
 // So a team's whole history draws the same picture one session does: `all`
 // merges every session's tree and hands it here.
 func BuildTreemapFrom(tree *Node, session treemapSession, title string) TreemapPayload {
+	noteAggregates(tree)
 	if title == "" {
 		title = "Tokenamun"
 	}

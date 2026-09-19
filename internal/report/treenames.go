@@ -21,7 +21,17 @@ import (
 // is. Under cli output it must be the command: naming a command's report
 // after the file it was about -- `git log` of a plan, `wc` of a document --
 // made a report look like the document's contents.
-func leafNameFor(kind string, c model.RetrievedContent) string {
+//
+// command is the most specific name for the command that produced this
+// payload, which is not always c.CommandDetail: the wrapper split is a
+// property of the whole set of command lines, so it is decided where the tree
+// is built and handed down here. Passing the less specific name would leave
+// `mise run check` holding one leaf called `mise run`, which is the same row
+// twice with the wrong label on the inner one.
+func leafNameFor(kind string, c model.RetrievedContent, command string) string {
+	if command == "" {
+		command = c.CommandDetail
+	}
 	if kind == "file content" {
 		if c.Path != "" {
 			return c.Path
@@ -32,11 +42,11 @@ func leafNameFor(kind string, c model.RetrievedContent) string {
 			return "read via " + c.CommandBinary
 		}
 	}
-	if c.CommandDetail != "" {
+	if command != "" {
 		if c.Path != "" {
-			return c.CommandDetail + " — " + c.Path
+			return command + " — " + c.Path
 		}
-		return c.CommandDetail
+		return command
 	}
 	if c.Path != "" {
 		return c.Path
@@ -156,12 +166,20 @@ func inlineProgramNote(n *Node) string {
 	return "inline code, so there is no program name to group by."
 }
 
-func pluralRetrievals(n int) string {
-	if n == 1 {
-		return "1 retrieval"
-	}
-	return itoa(n) + " retrievals"
+// aggregateNote says that a leaf is several retrievals under one name.
+//
+// "Nothing inside: this is a leaf" reads identically for a genuine atom and
+// for several thousand retrievals the transcript gives no finer name. The
+// first is a fact about the content; the second is a limit of the data, and a
+// limit stated is worth more than a limit implied. The count is known either
+// way, so there is nothing to work out -- only something to say.
+func aggregateNote(n int) string {
+	return num(n) + " retrievals under one name; " + aggregateReason
 }
+
+// aggregateReason is the half of the note that does not vary, and so is also
+// how noteAggregates recognises a node it has already been over.
+const aggregateReason = "the transcript has no finer one."
 
 func itoa(n int) string {
 	if n == 0 {

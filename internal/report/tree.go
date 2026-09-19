@@ -395,11 +395,17 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 
 	var order []*Node
 	commands := map[string]string{}
+	var lines []string
 	for _, tc := range s.ToolCalls {
 		if tc.Command != "" {
 			commands[tc.ID] = tc.Command
+			lines = append(lines, tc.Command)
 		}
 	}
+	// Which command prefixes behave like wrappers is a property of the whole
+	// set of command lines, not of any one of them, so it is measured once
+	// here and consulted per retrieval. See content.ObserveWrappers.
+	wrappers := content.ObserveWrappers(lines)
 
 	groups := map[string]*Node{}
 	nested := map[string]*Node{}
@@ -415,18 +421,23 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 			order = append(order, g)
 		}
 		parent := g
+		// The deepest name the command levels reached, which the leaf is then
+		// named after so that it does not repeat its parent under a shorter
+		// label. Empty where the retrieval produced no command levels.
+		deepest := ""
 		if sub != "" {
 			// cli output opens up command by command: git, then git checkout,
 			// then git checkout AGENTS.md.
 			levels := []string{sub}
 			if kind == "cli output" {
-				if p := content.CommandPath(commands[c.ToolID]); len(p) > 0 {
+				if p := wrappers.Path(commands[c.ToolID]); len(p) > 0 {
 					// Inside a group the binary is its own level; where the
 					// group name already is the binary, do not repeat it.
 					if sub != p[0] {
 						levels = append(levels, p[0])
 					}
 					levels = append(levels, p[1:]...)
+					deepest = p[len(p)-1]
 				}
 			}
 			key := kind
@@ -454,7 +465,7 @@ func resultsNodes(s *model.Session, carry analysis.CarryReport) []*Node {
 			}
 		}
 
-		leafName := leafNameFor(kind, c)
+		leafName := leafNameFor(kind, c, deepest)
 		leaf := &Node{
 			Name: leafName, Kind: "item",
 			Tokens: c.Tokens, Carry: it.CarryEIT, CarryUncached: it.CarryUncachedEIT,

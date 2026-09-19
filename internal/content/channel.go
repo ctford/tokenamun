@@ -203,23 +203,7 @@ func CommandBinary(cmd string) string {
 // shell parser to fix. The arguments worth seeing are file paths, and those
 // are already recovered separately and attributed as content.
 func CommandPath(cmd string) []string {
-	text, _, _, ok := matchStage(cmd)
-	if !ok {
-		return nil
-	}
-	var words []string
-	for _, f := range strings.Fields(text) {
-		if strings.HasPrefix(f, "-") || strings.ContainsAny(f, "'\"$=(){}<>`") {
-			continue
-		}
-		if len(words) == 0 && wrappers[path.Base(strings.ToLower(f))] {
-			continue
-		}
-		words = append(words, f)
-		if len(words) == 2 {
-			break
-		}
-	}
+	words := commandWords(cmd, 2)
 	if len(words) == 0 {
 		return nil
 	}
@@ -251,6 +235,36 @@ func CommandPath(cmd string) []string {
 		out = append(out, out[0]+" "+words[1])
 	}
 	return out
+}
+
+// commandWords is the significant words of the stage that produced the
+// output, up to limit: the flags, quoting, redirections and assignments
+// removed, and a leading wrapper such as `time` or `xargs` stripped.
+//
+// Separate from CommandPath because two callers want different depths of it.
+// CommandPath takes two and stops, for the reasons in its own comment. The
+// wrapper split takes one more, and only where a corpus of command lines has
+// shown that the next token is a command rather than an argument -- see
+// ObserveWrappers.
+func commandWords(cmd string, limit int) []string {
+	text, _, _, ok := matchStage(cmd)
+	if !ok {
+		return nil
+	}
+	var words []string
+	for _, f := range strings.Fields(text) {
+		if strings.HasPrefix(f, "-") || strings.ContainsAny(f, "'\"$=(){}<>`") {
+			continue
+		}
+		if len(words) == 0 && wrappers[path.Base(strings.ToLower(f))] {
+			continue
+		}
+		words = append(words, f)
+		if len(words) == limit {
+			break
+		}
+	}
+	return words
 }
 
 // interpreters run a program named by their first argument.

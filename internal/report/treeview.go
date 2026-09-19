@@ -127,6 +127,7 @@ func BuildTreeViewFrom(root *Node, info SessionInfo, at []string, mode string) (
 		return TreeView{}, fmt.Errorf("unknown mode %q; use %q or %q",
 			mode, ModeCarry, ModeUncached)
 	}
+	noteAggregates(root)
 	here, path, err := resolve(root, at)
 	if err != nil {
 		return TreeView{}, err
@@ -317,7 +318,16 @@ func RenderTreeView(w io.Writer, v TreeView) error {
 	b.WriteString("\n")
 
 	if len(v.Children) == 0 {
-		b.WriteString("Nothing inside: this is a leaf.\n\n")
+		// An aggregate says so. A leaf holding one retrieval and a leaf
+		// holding three thousand read the same otherwise, and the difference
+		// is whether the tool has run out of structure or the content has.
+		if v.Here.Items > 1 {
+			// The count and the reason are in the detail above; this line
+			// only has to stop an aggregate reading as an atom.
+			b.WriteString("Nothing inside: this is an aggregate, not one retrieval.\n\n")
+		} else {
+			b.WriteString("Nothing inside: this is a leaf.\n\n")
+		}
 	} else {
 		fmt.Fprintf(b, "%-30s %8s %8s %12s %6s %18s  %s\n",
 			"INSIDE", "OF LEVEL", "SESSION", "COST", "TRIPS", "P50/P95/MAX", "CONTAINS")

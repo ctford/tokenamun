@@ -60,7 +60,13 @@ import (
 // `optimise` grew `parts`, and its `at`/`optimise`/`why` may now repeat. A
 // consumer that composed several single-node runs by hand was adding impacts,
 // which do not add, or adding savings over nodes that may contain one another.
-const SchemaVersion = 7
+// 8: a leaf a wrapper produced opens into the targets it ran, so `tree` and
+// the report payload can be a level deeper than before, and every leaf
+// holding more than one retrieval says so in its `detail`. A consumer reading
+// `mise run` or `npx` as a leaf was reading an aggregate of everything the
+// runner ran as though it were one thing, with the per-retrieval distribution
+// underneath it describing the worst target and no way to tell which.
+const SchemaVersion = 8
 
 // Profile is a session overview.
 type Profile struct {

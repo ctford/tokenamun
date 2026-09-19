@@ -151,7 +151,10 @@ func TestTreeViewCarriesTheSameExplanationsAsTheTooltips(t *testing.T) {
 	// it, an agent has to ask a person what the box says.
 	s := carrySession(t)
 	carry := analysis.Carry(s, analysis.Cache(s, analysis.TTL5m))
-	tree := BuildTree(s, carry)
+	// The viewer's own payload, not a bare tree: what the tooltips say is
+	// whatever went into the HTML, and anything the CLI adds or leaves out on
+	// the way is exactly what this test is for.
+	tree := BuildTreemap(s, carry).Tree
 
 	var withDetail int
 	var walk func(*Node, []string)

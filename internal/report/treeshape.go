@@ -215,9 +215,6 @@ func collapseByName(grp *Node) *Node {
 	out := &Node{Name: grp.Name, Kind: grp.Kind, Detail: grp.Detail}
 	for _, name := range order {
 		m := merged[name]
-		if m.Items > 1 {
-			m.Detail = pluralRetrievals(m.Items) + ", " + m.Detail
-		}
 		if m.Tokens > 0 {
 			m.CarryPerToken = m.Carry / m.Tokens
 			m.RoundTrips = m.tokenCalls / m.Tokens
@@ -295,5 +292,35 @@ func explainInlinePrograms(n *Node) {
 				c.Detail += " · " + note
 			}
 		}
+	}
+}
+
+// noteAggregates says, on every leaf that holds more than one retrieval, that
+// it is an aggregate and why it stops there.
+//
+// "Nothing inside: this is a leaf" reads identically for a genuine atom and
+// for several thousand retrievals that the transcript gives no finer name.
+// The first is a fact about the content and the second is a limit of the
+// data, and this tool is supposed to state its limits rather than let them
+// look like findings. The count is already known, so there is nothing to work
+// out here -- only something to say.
+//
+// Applied when a tree is presented rather than while it is built, because a
+// merged tree is built out of trees: baking the sentence into a node during
+// construction would either write it twice or write it before the counts are
+// final. Both presenters call this, so the CLI and the viewer say the same
+// thing.
+func noteAggregates(n *Node) {
+	if len(n.Children) == 0 {
+		// Idempotent, because both presenters call it and a tree could reach
+		// them both. Saying it twice would read as a bug in the tool, which
+		// is the wrong thing for a sentence about the tool's limits to do.
+		if n.Items > 1 && !strings.Contains(n.Detail, aggregateReason) {
+			n.Detail = strings.TrimSpace(aggregateNote(n.Items) + " " + n.Detail)
+		}
+		return
+	}
+	for _, c := range n.Children {
+		noteAggregates(c)
 	}
 }
