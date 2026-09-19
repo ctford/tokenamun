@@ -23,12 +23,14 @@ import (
 // Within one model it is exact and needs no price list, which is the reason to
 // have it. Across models there is nothing here that makes the total
 // commensurable: an earlier version of this comment sent the reader to a
-// Prices type that does not exist. Reports say when a set spans two pricings;
-// converting to money would need a price table, which is configuration rather
-// than measurement and is deliberately not read.
+// Prices type that does not exist. Reports say when a set spans two pricings.
 //
-// These are published Claude rates and are configuration, not measurement.
-// Check them against your own bill.
+// These are published Claude rates and are configuration, not measurement --
+// but they are no longer checked against nothing. litellm-prices.json is a
+// pinned extract of LiteLLM's published catalog, and catalog_test.go divides
+// each published rate by that model's input price and compares the quotient
+// with the constant below. That is a price list used to verify a ratio, not
+// to produce a figure: nothing here reads a price to report a number.
 type Weights struct {
 	Input        float64 `json:"input"`
 	CacheRead    float64 `json:"cache_read"`
@@ -56,6 +58,20 @@ var cheapCacheRead = Weights{
 	Output:       5.0,
 }
 
+// haiku3 is the one model in the catalog whose rates are not round multiples
+// of its input price: $0.25/MTok input against $0.03/MTok reads and
+// $0.30/MTok 5-minute writes, so 0.12x and 1.2x rather than 0.1x and 1.25x.
+// Found by the table test in catalog_test.go, which is what that test is for.
+// A 20% error on a model nobody profiles any more is not the Fable bug, but
+// the constants either agree with the published rates or they do not.
+var haiku3 = Weights{
+	Input:        1.0,
+	CacheRead:    0.12,
+	CacheWrite5m: 1.2,
+	CacheWrite1h: 2.0,
+	Output:       5.0,
+}
+
 // For returns the weights for a model ID. Unknown models get Default, which is
 // the right failure mode: it is the common case, not a guess about a new
 // model, and 0.1x over-states the cost of a model that turns out to be
@@ -68,11 +84,18 @@ var cheapCacheRead = Weights{
 // Fable 5 session's cache reads at a quarter of what they cost -- on the
 // class that is ~97% of prompt volume, so very nearly a fourfold
 // under-statement of the session.
+//
+// Every constant here is checked against a published rate by the table test in
+// catalog_test.go. That test is why haiku3 exists; it is not why this function
+// is right about which weights a given call should get, which is a separate
+// question with a separate failure mode.
 func For(modelID string) Weights {
 	id := strings.ToLower(modelID)
 	switch {
 	case strings.Contains(id, "fable-5-1"), strings.Contains(id, "mythos-5-1"):
 		return cheapCacheRead
+	case strings.Contains(id, "3-haiku"):
+		return haiku3
 	default:
 		return Default
 	}

@@ -58,3 +58,23 @@ jobs:
 
       - name: scripts/checks.sh
         run: ./scripts/checks.sh
+
+  # The price catalog, checked against upstream. Deliberately a second job:
+  # it is the one thing here that needs the network, and a fetch failure or an
+  # upstream rate change must not be confusable with a gate in checks.sh
+  # going red. checks.sh itself stays offline, because the pre-commit hook
+  # runs it.
+  #
+  # What this catches is a published rate moving under a constant in
+  # internal/cost. That arrives as a red build instead of as a quietly wrong
+  # report, which is the whole reason the extract is pinned rather than
+  # fetched at run time.
+  prices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: scripts/refresh-prices.sh --check
+        run: ./scripts/refresh-prices.sh --check

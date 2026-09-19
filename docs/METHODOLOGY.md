@@ -66,8 +66,8 @@ Prices are per-class multiples of a model's own input price:
 | Class | Multiplier |
 | --- | --- |
 | Fresh input | 1.0× |
-| Cache read | 0.1×, and 0.025× on Claude Fable 5.1 and Mythos 5.1 — the 5.1 generation, not the whole Fable family |
-| Cache write, 5-minute TTL | 1.25× |
+| Cache read | 0.1×, and 0.025× on Claude Fable 5.1 and Mythos 5.1 — the 5.1 generation, not the whole Fable family; 0.12× on Claude 3 Haiku |
+| Cache write, 5-minute TTL | 1.25×, and 1.2× on Claude 3 Haiku |
 | Cache write, 1-hour TTL | 2.0× |
 | Output | 5.0× |
 
@@ -79,6 +79,17 @@ spanning two differently priced models adds quantities of different sizes.
 Reports say when that applies; correcting it needs a price list, which is
 configuration this tool does not have and does not read. Within one model the
 unit is exact and needs no price list, which is the reason to use it.
+
+These multipliers are checked, not asserted. `scripts/refresh-prices.sh`
+vendors the Claude rows of LiteLLM's published catalog into
+`internal/cost/litellm-prices.json`, pinned to the upstream commit they came
+from, and a table test divides each published rate by that model's input price
+and compares the result with the constant. CI re-fetches and fails when a
+published rate moves. Nothing fetches a price while a report is rendered: a
+figure that depends on the day you ran it is not a measurement of the session.
+Claude 3 Haiku is in the table above because that check found it — its
+published rates are not round multiples of its input price, and the constants
+had assumed they were.
 
 On one session: cache reads were 94% of volume and 57% of cost; cache *writes*
 were 6% of volume and 43% of cost. That reordering is the point. A tool that
