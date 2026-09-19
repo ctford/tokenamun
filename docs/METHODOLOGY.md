@@ -37,19 +37,19 @@ The most important correctness rule here.
 
 In a Claude Code transcript an `assistant` entry is a **content block**, not an
 API call, and every entry sharing a `requestId` repeats the same `usage` object
-verbatim. Summing per entry overstates everything: on one 691-call session,
-1,132 assistant entries inflated cache reads by 71%, cache creation by 66% and
-output by 89%.
+verbatim, so summing per entry overstates everything — by up to 89% on the
+reference dataset, which
+[`ENTIRE.md`](ENTIRE.md#the-double-counting-trap) breaks down per class.
 
 Tokenamun deduplicates by `requestId`, falling back to `message.id`. It also
 ignores the placeholder entries Claude Code writes for failed requests, whose
 usage is all zeros.
 
-**Entire's per-checkpoint `token_usage` is never used for accounting.** On one
-reference repository it was a per-checkpoint delta in 28 of 41 checkpoints and
-cumulative from session start in the other 13, with the same `cli_version` and
-no field distinguishing them. Summing them gave 1.47 billion cache-read tokens
-against a transcript total of 443 million. Checkpoints are used only to find
+**Entire's per-checkpoint `token_usage` is never used for accounting.** It is
+a delta in some checkpoints and cumulative from session start in others, with
+the same `cli_version` and no field distinguishing them
+([`ENTIRE.md`](ENTIRE.md#token_usage-on-a-checkpoint-is-not-safe-to-sum) has the
+counts and what summing them cost). Checkpoints are used only to find
 transcripts.
 
 ## 3. Volume is not cost
@@ -93,19 +93,15 @@ models, and it is why the flag exists: EIT cannot add two models, dollars can.
 A model the catalog does not know is an error, not a zero — a total that drops
 the calls it could not price is a bill missing a model, and reads as a bill.
 
-The figures are labelled `derived`, not `derived-approx`. Nothing in them is
-estimated: the tokens are observed, the arithmetic is exact, and each call is
-converted at its own rate. What can be wrong is the published rate, which is
-staleness rather than approximation, and `derived-approx` promises the wrong
-caveat — an estimator whose error you can reason about. The honest mitigation
-is the pin, so every surface that prints dollars prints the catalog and commit
-beside them, and a test asserts that none of them can print one without the
-other.
+The figures are labelled `derived`, not `derived-approx`: the tokens are
+observed and the arithmetic is exact, so what can be wrong is the published
+rate, which is staleness rather than estimation. The mitigation is the pin —
+every surface that prints dollars prints the catalog and commit beside them,
+and a test asserts that none of them can print one without the other.
 
-Cost *within* a report stays in EIT. A tree node is a share of content, and
-this tool does not yet attribute a node's cost to the call, and so the model,
-that carried it; a per-node dollar figure would have to pick one model for the
-whole tree, which is the error the money total exists to avoid.
+Cost *within* a report stays in EIT, because a per-node dollar figure would
+have to price a whole tree at one model, which is the error the money total
+exists to avoid.
 
 These multipliers are checked, not asserted. `scripts/refresh-prices.sh`
 vendors the Claude rows of LiteLLM's published catalog into
@@ -119,9 +115,9 @@ published rates are not round multiples of its input price, and the constants
 had assumed they were.
 
 On one session: cache reads were 94% of volume and 57% of cost; cache *writes*
-were 6% of volume and 43% of cost. That reordering is the point. A tool that
-calls a 40K-token read expensive without knowing whether it was billed at 0.1×
-or 1.25× is not measuring cost.
+were 6% of volume and 43% of cost. A tool that calls a 40K-token read
+expensive without knowing whether it was billed at 0.1× or 1.25× is not
+measuring cost.
 
 ### Across the subagent boundary
 
@@ -138,9 +134,9 @@ its own mixed-pricing signal, computed over the parent's calls *and* its
 subagents' — the session-level one is about this context alone, which is what
 every other figure is about.
 
-The number stays and is qualified rather than withheld. It is exact whenever
-the parent and its subagents share a model, which is the common case, and
-where it is not exact the caveat names the flag that is.
+The number is qualified rather than withheld: it is exact whenever the parent
+and its subagents share a model, which is the common case, and where it is not
+the caveat names the flag that is.
 
 `tokenamun sessions` reports the same pair per row and **ranks on the
 combined one**. Ranking a week is what that order is for, and a session that
@@ -149,12 +145,9 @@ in. The per-session figure stays what every other command reports: this
 context, and nothing else.
 
 `--prices` reaches both figures: what the subagents cost, and the combined
-total, each priced per call at its own model and so sound across the
-boundary that EIT is not. They are printed in the subagent block rather than
-in the money block, which is this context like everything else, and the
-money block points at them. Both carry the catalog pin, because a consumer
-reading one block is reading a dollar figure and must be able to see where
-the rate came from.
+total, each priced per call at its own model and so sound across the boundary
+that EIT is not. They print in the subagent block, which the money block points
+at, because the money block is this context like everything else.
 
 ## 4. Carry: content is cheap, keeping it is not
 
@@ -301,7 +294,7 @@ session.
 **Prices are configuration.** The multipliers in §3 are published Claude rates.
 They change and vary by model and platform. Check them against your own bill.
 
-## 7a. Aggregate at the level the question is about
+## 8. Aggregate at the level the question is about
 
 A relationship measured over day totals is not the same relationship measured
 over sessions, and it can point the other way. A day is a mixture of session
@@ -318,11 +311,13 @@ Fixed geometric bands, no curve through them, and the two extreme sessions in
 each band printed so a band of three cannot be read as a property of that
 length. Where the rise stops is read off the table, not asserted.
 
-## 8. Not a productivity metric
+## 9. Not a productivity metric
 
 No command has a developer dimension, deliberately. Token spend is an input,
 not an outcome, and treating it as a productivity measure is a documented
-anti-pattern with real casualties. Findings are framed against the engineering
+anti-pattern with real casualties — the evidence is in
+[`COMMON-INTERVENTIONS.md`](COMMON-INTERVENTIONS.md#the-anti-pattern-to-avoid-building).
+Findings are framed against the engineering
 system — subsystems, file properties, retrieval patterns, cache behaviour —
 never against people. Fewer tokens for worse work is not an improvement, and
 this tool cannot see work quality, so it must not imply that it can.

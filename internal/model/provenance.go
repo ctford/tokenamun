@@ -43,6 +43,17 @@ const (
 	// counted; dollars are tokens multiplied by a third-party price list,
 	// so a quantity in USD is only as good as the catalog pin printed
 	// beside it, and something must print that pin.
+	//
+	// A USD quantity is nonetheless Derived and not DerivedApprox, which
+	// looks like the more modest label and is the wrong one. Nothing in
+	// the arithmetic is estimated: the tokens are observed and each call
+	// converts at its own model's rate. What can be wrong is the published
+	// rate, and that is staleness, not approximation. DerivedApprox
+	// promises a different caveat -- an estimator whose error you can
+	// reason about, like the byte-ratio token count -- so using it here
+	// would invite a reader to reason about an error bar that does not
+	// exist. The pin is the honest mitigation, which is why it is
+	// mandatory rather than advisory.
 	USD Unit = "usd"
 )
 
