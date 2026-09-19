@@ -245,11 +245,11 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	return positional, nil
 }
 
-// discover lists candidate sessions from the requested sources, most recently
-// active first.
 // window scopes discovery to a period. Zero means everything.
 var window model.Window
 
+// discover lists candidate sessions from the requested sources, most recently
+// active first.
 func discover(dir, source string) ([]model.SessionRef, error) {
 	var refs []model.SessionRef
 	if source == "any" || source == "entire" {
@@ -419,15 +419,6 @@ func cmdCache(dir, source, selector string, asJSON bool) error {
 	}
 	return report.RenderCache(os.Stdout, r)
 }
-
-// cmdHotspots joins code metrics onto session cost.
-//
-
-// cmdSeries aggregates previously-emitted profile JSON files.
-//
-
-// cmdTree serves one level of the drill-down the HTML viewer draws.
-//
 
 // loadSelected resolves a selector and parses the transcript it names.
 func loadSelected(dir, source, selector string) (*model.Session, error) {

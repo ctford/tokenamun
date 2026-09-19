@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ctford/tokenamun/internal/analysis"
 	"github.com/ctford/tokenamun/internal/model"
 )
 
@@ -124,12 +123,6 @@ func ParseOptimisation(at string, becomes *float64, label, why string) (Optimisa
 		label = "optimisation"
 	}
 	return Optimisation{Label: label, At: splitPath(at), Becomes: *becomes, Why: why}, nil
-}
-
-// BuildHypothetical resolves the node and applies the change.
-func BuildHypothetical(s *model.Session, carry analysis.CarryReport, o Optimisation) (
-	Hypothetical, error) {
-	return BuildHypotheticalFrom(BuildTree(s, carry), sessionInfo(s), o)
 }
 
 // BuildHypotheticalFrom prices a change to a tree that is already built, so

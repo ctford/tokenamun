@@ -17,6 +17,8 @@
 # Extended regular expressions, not Perl ones. The first version of these
 # used -P and a negative lookahead, which BSD grep does not support: every
 # rule matched nothing and the step passed on a file that was deliberately
+# leaking.
+#
 # A real home directory in a tracked file is a machine-specific path that
 # should have been a placeholder. Placeholders are allowed by subtraction
 # afterwards, since ERE cannot say "not these".
@@ -61,17 +63,6 @@ scan_tracked() {
   done < <(git ls-files)
 }
 
-# scan_private_names checks tracked contents and every commit message against
-# the local denylist.
-#
-# .private-names holds one extended regex per line: the projects whose data
-# this tool has been pointed at. It is local and gitignored, and its being
-# tracked is itself a failure -- a public repository carrying a list of
-# private project names publishes the list it was meant to protect, which is
-# why the names are not in this file.
-#
-# Commit messages are included because they are committed content, and a
-# filename check never sees them.
 # messages_match <regex> -- true when any commit message on any ref matches.
 #
 # Written as a single grep against a here-string, and not as
@@ -89,6 +80,17 @@ messages_match() {
   grep -qiE "$1" <<<"$_message_cache"
 }
 
+# scan_private_names checks tracked contents and every commit message against
+# the local denylist.
+#
+# .private-names holds one extended regex per line: the projects whose data
+# this tool has been pointed at. It is local and gitignored, and its being
+# tracked is itself a failure -- a public repository carrying a list of
+# private project names publishes the list it was meant to protect, which is
+# why the names are not in this file.
+#
+# Commit messages are included because they are committed content, and a
+# filename check never sees them.
 scan_private_names() {
   local name f
   if git ls-files --error-unmatch .private-names >/dev/null 2>&1; then

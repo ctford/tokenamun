@@ -399,7 +399,7 @@ func TestAHypotheticalAlwaysRendersItsUnknowns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := BuildHypothetical(s, carry, o)
+	h, err := BuildHypotheticalFrom(BuildTree(s, carry), sessionInfo(s), o)
 	if err != nil {
 		t.Fatal(err)
 	}

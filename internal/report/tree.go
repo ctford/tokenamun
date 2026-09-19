@@ -78,7 +78,7 @@ type Node struct {
 //	├─ your prompts                 you did
 //	├─ model output                 the model wrote it, then re-read it
 //	│  ├─ replies to you            what it said to you
-//	│  ├─ tool inputs            what it said to tools → by tool
+//	│  ├─ tool inputs               what it said to tools → by tool
 //	│  └─ thinking                  what it said to itself; carry not knowable
 //	├─ file content                 the environment answered → by file
 //	├─ cli output                   → by command family → by subcommand
