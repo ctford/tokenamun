@@ -1,10 +1,52 @@
 # Finding the one bad retrieval
 
-Status: **next up**. Decided 2026-09-19; nothing here is built yet.
+Status: **built**, 2026-09-19. All three additions are on main, in the order
+below; the separate `outliers` command stays unbuilt and `carry` is
+re-described in the help instead.
 
 > **Decided:** start here. Build `carry all` first, then distribution per
 > leaf, then the `EnteredAt` column. The separate `outliers` command stays
 > unbuilt; re-describe `carry` in the help instead.
+
+## What was built
+
+1. **`carry all`** (`report.MergeCarries`, `cmd/tokenamun` `carryOf`). Totals
+   are summed, shares recomputed against the new totals rather than averaged,
+   and the item ranking is merged across every session and cut afterwards --
+   cut per session first, a week's worst retrieval could be missing because
+   its own session had fifteen worse ones. Each row carries its session id.
+   What is dropped rather than merged: the final prompt and the reset call
+   numbers, which index into one session. `TestAllIsOfferedOnlyWhereItWorks`
+   now pins the narrower refusal.
+2. **Per-leaf distribution.** Every tree node reports p50/p95/max of what one
+   retrieval under it cost to carry, rolled up from the leaves and kept
+   across a merge. Below ten priced retrievals the percentiles are declined
+   and the maximum is printed alone, as `-/-/max`. Nearest-rank, so every
+   figure is a retrieval that really happened.
+3. **`EnteredAt` in the text table.** One column. The golden fixture now
+   shows three identical 59-token results costing 161, 155 and 80 EIT, which
+   is the arrival argument in one glance.
+
+### `retrieval all`: not built, and why
+
+[`field-feedback.md`](field-feedback.md) raises the same question for
+`retrieval`, and the answer is different because the report is different.
+
+`carry` composes because every figure in it is a cost, cost is additive
+across sessions, and `CarryEIT` is priced per call so rows from two sessions
+are comparable. `retrieval` reports volume, and its two headline structures
+are about one context: `repeated_retrieval` is content fetched more than
+once *into the same context*, which is what makes it redundant, and the
+token estimator is calibrated per session from that session's own prompt
+growth. Merged, the first would silently count a file read in two sessions
+as a repeat -- it is not one, the second session never had it -- and the
+second would have to average calibrations that were each fitted to different
+data.
+
+Both are fixable, neither is fixable by summing, and the fix would be a
+second report with its own meaning. `tokenamun tree all` already answers
+"what content cost the most across the week" in cost rather than volume,
+which is the question `retrieval all` would be reached for.
 
 Second round of feedback from the same week of use. The question behind it:
 can the tool detect a *pathological* event — one test run among 3,795 that
@@ -76,7 +118,7 @@ magnitude.
 
 ## What to build
 
-### 1. `carry all` — first, because it caused the rest
+### 1. `carry all` — first, because it caused the rest *(built)*
 
 The author knew about `carry`. They called it "the closest existing view" in
 the same breath as saying it "rejects the `all` selector, so it can't be used
@@ -95,7 +137,7 @@ compose fine. The item ranking also composes, as long as each row carries its
 session id — `CarryEIT` is comparable across sessions, since it is already
 priced per call at each call's own rate.
 
-### 2. Distribution per leaf, not just the mean (their 2)
+### 2. Distribution per leaf, not just the mean (their 2) *(built)*
 
 The genuinely new one, and the author is right that it is the cheapest and
 highest-value of their three.
@@ -117,11 +159,11 @@ Note for implementation: quantiles over a handful of retrievals are noise.
 Below some count — ten, say — print max alone and omit the percentiles rather
 than computing a p95 from four samples.
 
-### 3. `EnteredAt` in carry's text table
+### 3. `EnteredAt` in carry's text table *(built)*
 
 One column, as above.
 
-## Not building: a separate `outliers` command
+## Not building: a separate `outliers` command *(help re-described instead)*
 
 It would duplicate `carry`. But the naming problem behind the request is
 real: `carry` names its mechanism (residency), not its use (finding the

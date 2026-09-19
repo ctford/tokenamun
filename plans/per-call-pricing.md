@@ -1,6 +1,46 @@
 # Price every call at its own model
 
-Status: proposed, 2026-09-19. Nothing here is built.
+Status: **built**, 2026-09-19. All four sites are on main.
+
+## What was built
+
+The three cheap sites first, then the span walk, all against one shared
+fixture in `internal/cost/costtest` -- a session whose first call is on
+`claude-opus-5` and whose remaining calls are on `claude-fable-5-1`, with
+cache reads dominating. Shared because the recurrence pattern was four
+independent copies of one mistake, and a test written beside each fix would
+have covered that copy and let the next one in. Synthetic and hand-written,
+with counts chosen to make the error visible.
+
+- `report/profile.go` sums `cost.SessionCost`, and its write share uses the
+  new `cost.WriteCost`, which accumulates the input and cache-read terms per
+  call instead of subtracting one model's rates from a per-call total.
+- `report/treenames.go` prices its two ceilings at `cost.MaxCacheRead`, the
+  dearest read among the models present. A ceiling computed at the cheapest
+  rate in a mixed session is not a ceiling.
+- `report/tree.go` splits generation into thinking, which is observed per
+  call, and the rest, apportioned by byte share -- both at each call's own
+  output rate. It was never observably wrong and is not now.
+- `analysis/carry.go` walks the span. `spanPricer.arrived` prices the first
+  call of a residency span at its own model's write rate and each later call
+  at its own model's read or write rate; `spanPricer.carried` does the same
+  without a leading write, for the preamble. A bucket would not have done:
+  a bucket loses the order, and the order is what says which send was the
+  write.
+
+Two figures moved on the single-model golden, both corrections rather than
+reprices. A retrieval that arrived into a cold call used to be charged a
+write for the cold call *and* a second write for the first-send
+substitution -- 149 EIT where the content was written once; in call order it
+is 80, and the same item carries through hotspots' unattributed total. Two
+more rows moved in the last decimal place, from accumulating per call rather
+than multiplying counts.
+
+The counterfactual send counts were left exactly as they were, including the
+place where the item ranking and what-you-typed disagree by one send. Which
+sends a no-caching figure should count is a question about the
+counterfactual, not about which weights apply to it, and mixing the two into
+one change would have made the golden diff unreadable.
 
 Four places price a whole session at the weights of the first model they see.
 `cost.PerCall` and `cost.SessionCost` exist to prevent exactly this, and
@@ -124,3 +164,12 @@ verifies that the *weights* are right, where this plan is about *selecting*
 the right weights. Neither catches the other's bug. Worth stating in both
 places, because "we have a pricing test now" is exactly the sentence that
 would let this one survive.
+
+Stated again now that both are built, because the two now sit next to each
+other in the code and read as one thing: a catalog check that every
+`cache_read` multiple matches a published rate passes unchanged on a session
+priced entirely at the wrong model's multiple, and the fixture here passes
+unchanged if every multiple in the table is wrong by the same factor. The
+tests to keep are `internal/cost`'s catalog comparison and
+`internal/cost/costtest`'s mixed session, and neither substitutes for the
+other.
