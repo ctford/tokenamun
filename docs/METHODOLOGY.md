@@ -156,19 +156,25 @@ published multipliers. Claude Code exposes `promptCacheTtl` and
 v2.1.242. The main conversation defaults to 1 hour only on a subscription
 within plan usage; on an API key or a cloud provider it is 5 minutes.
 
-Three things the arithmetic must do, and each of them is a way to get the
-answer wrong by about 1.75×:
+Four things the arithmetic must do, and the first three are each a way to get
+the answer wrong by about 1.75×:
 
-1. An avoided rewrite is not free. The prefix is still sent, as a cache read at
-   0.1×.
+1. An avoided rewrite is not free. The prefix is still sent, as a cache read —
+   0.1× on most models, 0.025× on the 5.1 generation.
 2. Every write you still make reprices from 1.25× to 2.0×.
 3. Gaps longer than an hour expire under either lifetime, so they are excluded
    from the avoidable set and charged at the higher rate.
+4. Each pricing is priced on its own. A session switches model whenever
+   `opusplan` toggles plan mode, and summing everybody's tokens to price the
+   total once gets an answer that depends on which model came first.
 
-`tokenamun cache` does all three. Done by hand it is easy to miss the first two,
-which is why it is code and not arithmetic in a report. The result can be
-negative: on a session of short bursts that never idles past five minutes you
-would pay the 2× write premium for a lifetime you never use.
+`tokenamun cache` does all four, and prints the two halves rather than only
+the net: what the avoided rewrites stop costing, and what the surviving writes
+cost extra. Done by hand it is easy to miss the first two, and missing the
+first is what puts break-even at 37.5% instead of its real 39.5% — 0.75/2.0
+against 0.75/1.9. The result can be positive: on a session of short bursts
+that never idles past five minutes you would pay the 2× write premium for a
+lifetime you never use.
 
 ## 6. Counterfactuals
 
