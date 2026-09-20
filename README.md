@@ -75,7 +75,15 @@ Some things are not visible in the transcript:
 - **Whether the token spend was worth it.** Tokenamun doesn't judge the value
   of your tokens, just helps you to know where they went.
 
-Details in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
+## Methodology
+
+Costs are in cost-weighted tokens: every class on one scale where 1 is a
+full-price input token, a cache read is 0.1 and output is 5.0. That holds
+within one model, so for a total spanning two, `profile`, `cache` and `tree`
+take `--prices` and add it up in dollars instead.
+
+How each figure is computed and labelled is in
+[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
 
 ## Commands
 
