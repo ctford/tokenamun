@@ -163,7 +163,12 @@ same commit.
 * **JSON output is an API** — it is how agents consume this tool. It has a
   `schema_version` and golden tests; changing a key is a breaking change.
 * **Commit as you go.** Small working commits at each natural checkpoint, with
-  the message about *why*. Don't push without being asked.
+  the message about *why*. Don't push without being asked — which is not a
+  reason to sit on finished work: development here is mainline, and a change
+  reaches `main` directly rather than by pull request. A session working in a
+  linked worktree is told at start-up how its branch lands; do that at each
+  checkpoint that leaves `main` working rather than once at the end, because
+  the worktree does not outlive the session.
 * **Iconography: no pyramids.** Tutankhamun reigned around 1330 BC, twelve
   centuries after the pyramid age — New Kingdom references only.
 
