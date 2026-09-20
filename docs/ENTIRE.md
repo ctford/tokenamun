@@ -263,8 +263,7 @@ So per-item token costs come from the API's own accounting rather than from a
 tokenizer. It also makes the estimator *self-calibrating*: there is no public
 Claude tokenizer, so bytes-per-token is fitted per session by minimising that
 residual, labelled `derived-approx` with the residual printed. Good enough for
-ranking, never presented as exact. Why not `tiktoken` is in the
-`internal/tokens` package comment.
+ranking, never presented as exact.
 
 ## What is opinion, and what is not there at all
 
@@ -273,10 +272,7 @@ deterministic arithmetic labelled `derived`. Two categories are not.
 
 **Inferred** — a classifier's opinion, always labelled:
 which Bash invocations were retrieval rather than mutation, and the file paths
-parsed out of their command lines. Activity phases and a semantic content
-taxonomy were both candidates here; neither was built, and the reasons are in
-[`METHODOLOGY.md`](METHODOLOGY.md#7-what-it-cannot-measure) and the
-`internal/content` package comment.
+parsed out of their command lines.
 
 **Not available at all** — say so, don't estimate:
 system prompt, tool schemas and skill-definition sizes; the

@@ -297,10 +297,10 @@ Delegating exploration so the orchestrator's context never sees it.
 * **Measurable, on the parent side:** `subagent reports` is the returned summary,
   and the carry it avoided is the difference between that and doing the
   exploration inline.
-* **Not measurable, and this is the catch:** the subagent's own spend was
-  **absent from every session** in these datasets despite `Agent` being called.
-  Without it, a claimed net saving is unverifiable — you are comparing a
-  measured parent-side saving against an unmeasured child-side cost. Tokenamun
+* **Measurable on the child side too, when the transcript survives:** Claude
+  Code writes one beside the session's own, and `profile` prices it. Where the
+  files have been cleaned up the net saving is unverifiable — a measured
+  parent-side saving against an unmeasured child-side cost — and Tokenamun
   reports which half it has.
 * **The evidence, graded: vendor, both directions.** Delegation is reported to
   insure the tail rather than the median: on one easy slice the frontier model

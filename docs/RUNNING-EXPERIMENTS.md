@@ -21,8 +21,8 @@ make the change smaller, it made finding the place to make it cheaper.
 chars ÷ 4 approximation, and he notes that "accurate token accounting proved
 impossible." Per-call `input_tokens`, `cache_read_input_tokens`,
 `cache_creation_input_tokens` and `output_tokens` are **observed** in the
-transcript, straight from the API's own accounting: no tokenizer, no error bar,
-and none of the ~70% inflation that per-entry summing costs.
+transcript, straight from the API's own accounting: no tokenizer and no error
+bar.
 
 **The code metrics, in the same tool.** Total lines and largest-file size are
 two of his four metrics, and `tokenamun scan` produces both, plus duplication

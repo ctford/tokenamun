@@ -59,7 +59,7 @@ Raw token counts say how much text moved, not what it cost.
 "Cache" here always means Anthropic prompt caching, and every cache figure is
 read from the `usage` object the API returns — `cache_read_input_tokens`,
 `cache_creation_input_tokens`, and the `ephemeral_5m_input_tokens` /
-`ephemeral_1h_input_tokens` split. Nothing is simulated.
+`ephemeral_1h_input_tokens` split.
 
 Prices are per-class multiples of a model's own input price:
 
@@ -124,7 +124,8 @@ measuring cost.
 A subagent runs in its own context, so its spend is reported *beside* the
 session's totals and never folded into them: adding its cache reads to the
 parent's would describe a prompt that was never sent. `profile` prints both,
-and their sum.
+and their sum. Where those transcripts have been cleaned up, the child's spend
+is reported missing rather than estimated.
 
 That sum is the one figure that spans contexts, and so the one that can span
 models without the session having switched — dispatching cheap subagents from
@@ -281,16 +282,10 @@ schema cost. `tokenamun compare` is the command for that.
 text. They are billed, but whether they go round again is unknowable, which is
 a large part of `unattributed`.
 
-**Subagent-internal spend.** Sidechain transcripts were absent from every
-session examined, despite `Agent` being called. Missing is reported as missing,
-never folded into the parent.
-
 **Activity.** Whether a stretch of work was planning or debugging is not
-recorded, and no classifier is built. `Artifact` and `GitChange` are unbuilt
-too: what they were reaching for is which files a session touched and what it
-committed, which Entire records as `files_touched` and nothing here reads. That
-is the next question worth asking — cost per change rather than cost per
-session.
+recorded, and no classifier is built. The better question is cost per change
+rather than cost per session, and Entire records `files_touched` for it;
+nothing here reads that yet.
 
 **Prices are configuration.** The multipliers in §3 are published Claude rates.
 They change and vary by model and platform. Check them against your own bill.
