@@ -30,14 +30,18 @@ brew install --HEAD ctford/tap/tokenamun
 To work on it, `go build ./cmd/tokenamun` and run `./scripts/checks.sh` — the
 same script the pre-commit hook and CI run.
 
-## Using it directly
+## Commands
 
 ```sh
 tokenamun doctor     # can it read anything here?
 tokenamun report     # an HTML report of usage
 tokenamun profile    # what the session cost, and how it was billed
 tokenamun tree       # where the tokens went, one level at a time
+tokenamun cache      # why the prompt cache was rebuilt, and what that cost
 ```
+
+`tokenamun help` lists the rest, each by the question it answers, and
+`tokenamun help <command>` gives one command's flags and examples.
 
 Every command takes `[--dir directory]` for where to look, defaulting to the
 current directory: Claude Code's transcripts recorded for it, and Entire's
@@ -47,8 +51,8 @@ recordings in the repository containing it. `--source local` or
 The ones that read a session take `[current | latest | all | id prefix]`,
 and with none named they take the one you are in, or the latest for that
 directory. `all` sums every session found — with Entire, that is the whole
-team — and `tokenamun help` says which commands take it. `--since 7d`
-narrows it to the last week.
+team, though not every command takes it. `--since 7d` narrows it to the last
+week.
 
 ## The better way — driving it with Claude Code
 
@@ -86,13 +90,6 @@ take `--prices` and add it up in dollars instead.
 
 How each figure is computed and labelled is in
 [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
-
-## Commands
-
-`tokenamun help` lists them, each by the question it answers, and `tokenamun
-help <command>` gives one command's flags and examples. That is the only copy:
-an agent driving this tool has the help text and not this file, and a second
-list here would be the one that goes stale.
 
 ## Also here
 
