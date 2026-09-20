@@ -39,11 +39,10 @@ tokenamun profile current   # the session you are in
 tokenamun tree current      # where the tokens went, one level at a time
 ```
 
-Sessions are found per directory: run it in the repository you were working
-in, or pass `--dir`. Claude Code's transcripts are matched by the working
-directory each one records; Entire's are read from `.entire/metadata` in the
-repository. `--source local` or `--source entire` picks one when both are
-there.
+Every command takes `[--dir directory]` for where to look, defaulting to the
+current directory: Claude Code's transcripts recorded for it, and Entire's
+recordings in the repository containing it. `--source local` or
+`--source entire` picks one when both are there.
 
 Name a session by `current` — the one you are in — or by `latest`, or by id
 prefix. Most commands also take `all`, which sums every session found; with
