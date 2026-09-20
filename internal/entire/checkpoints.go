@@ -121,8 +121,9 @@ func fullestPerSession(repo string, blobs []blobRef, metas map[string][]byte) []
 	return out
 }
 
-// checkpointMeta is the part of a checkpoint's metadata.json we need to
-// identify the session it belongs to.
+// checkpointMeta is the part of a checkpoint's metadata.json we need:
+// session_id to tell which session a snapshot belongs to, created_at to
+// order the results.
 //
 // Deliberately not its token_usage: that field is a delta in some checkpoints
 // and cumulative in others, with nothing distinguishing them, so it is not
@@ -130,7 +131,6 @@ func fullestPerSession(repo string, blobs []blobRef, metas map[string][]byte) []
 // package comment.
 type checkpointMeta struct {
 	SessionID string    `json:"session_id"`
-	Model     string    `json:"model"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
