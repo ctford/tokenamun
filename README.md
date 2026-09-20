@@ -44,11 +44,11 @@ current directory: Claude Code's transcripts recorded for it, and Entire's
 recordings in the repository containing it. `--source local` or
 `--source entire` picks one when both are there.
 
-With no session named they take the one you are in, or the latest for that
-directory. Name one with `current`, `latest`, or an id prefix. Where the
-question composes across sessions, `all` sums every session found — with
-Entire, that is the whole team — and `tokenamun help` says which commands
-take it. `--since 7d` narrows it to the last week.
+The ones that read a session take `[current | latest | all | id prefix]`,
+and with none named they take the one you are in, or the latest for that
+directory. `all` sums every session found — with Entire, that is the whole
+team — and `tokenamun help` says which commands take it. `--since 7d`
+narrows it to the last week.
 
 ## The better way — driving it with Claude Code
 
