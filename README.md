@@ -34,7 +34,7 @@ same script the pre-commit hook and CI run.
 
 ```sh
 tokenamun doctor            # can it read anything here?
-tokenamun report current    # a standalone HTML viewer of the same tree
+tokenamun report current    # an HTML report of usage
 tokenamun profile current   # the session you are in
 tokenamun tree current      # where the tokens went, one level at a time
 ```
