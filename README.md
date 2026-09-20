@@ -45,8 +45,9 @@ recordings in the repository containing it. `--source local` or
 `--source entire` picks one when both are there.
 
 Name a session by `current` — the one you are in — or by `latest`, or by id
-prefix. Most commands also take `all`, which sums every session found; with
-Entire, that is the whole team. `--since 7d` narrows it to the last week.
+prefix. Where the question composes across sessions, `all` sums every session
+found — with Entire, that is the whole team — and `tokenamun help` says which
+commands take it. `--since 7d` narrows it to the last week.
 
 ## The better way — driving it with Claude Code
 
@@ -87,22 +88,10 @@ How each figure is computed and labelled is in
 
 ## Commands
 
-| command | what it answers |
-| --- | --- |
-| `doctor` | whether either source is set up to record here |
-| `sessions` | what transcripts it can see, and what each cost |
-| `length` | what a call cost, binned by how long the session ran |
-| `profile` | where the tokens went, and what they cost |
-| `tree` | the same, one level at a time; `--at` drills in |
-| `report` | a standalone HTML viewer of the same tree |
-| `carry` | the individual retrievals that cost the most to *keep*, worst first |
-| `cache` | why the prompt cache was rebuilt, and what that cost |
-| `retrieval` | what content entered the context, and from where |
-| `optimise` | what a hypothetical change to part of the tree is worth |
-| `scan` | code properties: size, complexity, duplication |
-| `hotspots` | those properties joined against session cost |
-| `compare` | two sessions side by side |
-| `series` | experiment probe runs: median, range, payback |
+`tokenamun help` lists them, each by the question it answers, and `tokenamun
+help <command>` gives one command's flags and examples. That is the only copy:
+an agent driving this tool has the help text and not this file, and a second
+list here would be the one that goes stale.
 
 ## Also here
 

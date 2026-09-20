@@ -7,8 +7,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -25,100 +27,6 @@ import (
 // version is overridden at build time with -X main.version.
 var version = "dev"
 
-const usage = `tokenamun - a profiler for coding-agent token usage
-
-Usage:
-  tokenamun sessions              list the sessions it can see, with what
-                                  each one cost; --sort cost ranks them
-  tokenamun length                what a call cost, binned by how many calls
-                                  the session made. Over every session in
-                                  the window, since one session has no bins.
-  tokenamun doctor                whether either source is set up to record here
-  tokenamun profile [session]     where the tokens went, and what they cost
-  tokenamun retrieval [session]   what content entered the context, and from where
-  tokenamun carry [session]       the individual retrievals that cost the most
-                                  to keep, worst first
-  tokenamun cache [session]       why the prompt cache was rebuilt, and what it cost
-  tokenamun scan [path]           code properties: size, complexity, duplication
-  tokenamun hotspots [session]    code properties joined against session cost
-  tokenamun compare <a> <b>       two sessions side by side
-  tokenamun tree [session]        where the tokens went, one level at a time;
-                                  drill in with --at. The HTML viewer as text.
-  tokenamun report [session]      a standalone HTML report: the same tree as
-                                  "tree", as boxes or as a table, drilling
-                                  down to individual files. --json prints the
-                                  report's own payload.
-  tokenamun optimise [session]    what a hypothetical optimisation of part of
-                                  the tree would have been worth
-  tokenamun series <file>...      probe runs from an experiment: median, range, payback
-  tokenamun version
-
-Session selector:
-  "all"      every session discovered, summed. With Entire this is the
-             whole team's history, which is what Entire is for. Taken by
-             tree, report, profile, cache, carry and optimise; the others
-             report on one session.
-  "current"  the session invoking this tool
-  "latest"   the most recently active (the default)
-  or a session-id prefix.
-
-Profiling a period, which is what an experiment needs:
-  tokenamun tree all --since 7d           the team's last week
-  tokenamun tree all --since 2026-09-16   since we changed the thing
-  tokenamun tree all --until 2026-09-16   before we changed it
-  tokenamun report all --since 7d -o week.html --title "Last week"
-
-Hypothetical optimisations:
-  tokenamun optimise --at "cli output" --optimise 0.5 --why "..."
-  Name a part of the tree and what it becomes. The part is measured; the
-  figure is yours, and so is the reason it is plausible.
-
-  Repeat the trio to price several changes at once; they are read as
-  columns of one table, and the parts must not contain one another:
-  tokenamun optimise --at "cli output" --optimise 0.5 --why "..." \
-                     --at "your prompts" --optimise 0.8 --why "..."
-
-Flags:
-  --json          machine-readable output
-  --prices        also total it in money, from a pinned published catalog.
-                  Taken by profile, cache and tree. EIT is the default unit
-                  and stays exact within a model; this is for the total that
-                  spans two of them, where EIT adds different-sized things.
-  --no-cache      re-read every transcript, ignoring the parse cache
-  --sort ORDER    order for sessions: recent (default) | cost | calls
-  --dir PATH      directory to look in (default: working directory)
-  --source SRC    entire | local | any (default: any)
-  -o FILE         output file (report; default tokenamun-report.html)
-  --title TEXT    heading for the report, e.g. "Payments service, last week"
-  --since WHEN    only sessions active on or after WHEN: a date (2026-09-16),
-                  a date and time, or an age (7d, 36h). For the before-and-
-                  after question, which is what an experiment is.
-  --until WHEN    only sessions active before WHEN, exclusive
-  --at PATH       which node of the tree to show, e.g. "cli output/version control".
-                  Names come from the level above; matching is case-insensitive.
-                  Repeatable for optimise, once per change.
-  --mode MODE     tree pricing: carry (as billed) | uncached (as if nothing
-                  cached). The difference is what prompt caching was worth.
-  --optimise N    what the matching --at becomes: 0.5 halves it, 0 removes it,
-                  1.1 is a change for the worse. Needs --why. Repeatable.
-  --why TEXT      why that figure is plausible. Required, one per --optimise,
-                  max 64 characters: a number without it is what this tool
-                  exists to avoid.
-  --name TEXT     what to call the hypothetical in the report
-  --cost N        measured intervention cost in EIT, for series payback
-  --scan PATH     tree to scan for code metrics (hotspots; default --dir).
-                  Point this at a checkout of the branch the session ran on.
-
-Code budgets (scan). Given a limit, the scan exits non-zero when it is
-exceeded, which is how it is used as a CI gate:
-  --max-file-lines N        fail on a file longer than N lines
-  --max-complexity N        fail on a function above complexity N
-  --max-duplication PCT     fail above PCT% of duplicated code lines
-  --skip-duplicates-in S    exclude paths containing S from the duplication
-                            measure, in the report as well as the check;
-                            repeatable
-`
-
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "tokenamun:", err)
@@ -128,12 +36,16 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		fmt.Print(usage)
+		fmt.Print(usage())
 		return nil
 	}
 	cmd, rest := args[0], args[1:]
 
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+	// The flag package answers both -h and a misspelled flag by dumping every
+	// flag in the binary, most of which whatever command you asked about
+	// refuses. Silence it and answer with the command's own page instead.
+	fs.SetOutput(io.Discard)
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	withPrices := fs.Bool("prices", false, "also total it in money, from the pinned catalog")
 	noCache := fs.Bool("no-cache", false, "re-read every transcript, ignoring the parse cache")
@@ -170,7 +82,13 @@ func run(args []string) error {
 	// mode available, so flags and positionals are allowed to intersperse.
 	positional, err := parseInterspersed(fs, rest)
 	if err != nil {
-		return err
+		// flag.ErrHelp means -h or --help followed the command. Answer it
+		// with that command's page: the flag package's own reply lists every
+		// flag in the binary, and most of them this command refuses.
+		if errors.Is(err, flag.ErrHelp) {
+			return cmdHelp([]string{cmd})
+		}
+		return fmt.Errorf("%w; try `tokenamun help %s`", err, cmd)
 	}
 	// A period to scope to, for the before-and-after question. Held in a
 	// package variable rather than threaded through every command: it
@@ -248,10 +166,10 @@ func run(args []string) error {
 		fmt.Println("validated against Entire CLI 0.10.2 and Claude Code 2.1.x transcripts")
 		return nil
 	case "help", "-h", "--help":
-		fmt.Print(usage)
-		return nil
+		return cmdHelp(positional)
 	default:
-		return fmt.Errorf("unknown command %q; try `tokenamun help`", cmd)
+		return fmt.Errorf("unknown command %q; one of %s, or `tokenamun help`",
+			cmd, strings.Join(commandNames(), " "))
 	}
 }
 
@@ -511,12 +429,15 @@ func loadSelected(dir, source, selector string) (*model.Session, error) {
 	// session matches \"all\"", which reads as though the selector were a
 	// typo when in fact the help text offers it for every command.
 	if selector == SelectAll {
+		// The list comes from the command table, so it cannot drift from the
+		// help text that offers the selector in the first place.
+		var over []string
+		for _, name := range selectAllTakers() {
+			over = append(over, "`tokenamun "+name+" all`")
+		}
 		return nil, fmt.Errorf("%q is a set of sessions, and this command reports on one. "+
-			"Over a set: `tokenamun tree all` for where the tokens went, "+
-			"`tokenamun profile all` for what they cost, `tokenamun cache all` for the "+
-			"prompt cache, `tokenamun carry all` for the retrievals that cost the most "+
-			"to keep, `tokenamun optimise all` for a hypothetical. Or name one "+
-			"session: `tokenamun sessions` lists them", SelectAll)
+			"Over a set: %s. Or name one session: `tokenamun sessions` lists them",
+			SelectAll, strings.Join(over, ", "))
 	}
 	refs, err := discover(dir, source)
 	if err != nil {
@@ -746,4 +667,19 @@ func dedupe(refs []model.SessionRef) []model.SessionRef {
 		out = append(out, best[id])
 	}
 	return out
+}
+
+// cmdHelp prints the index, or one command's page.
+func cmdHelp(args []string) error {
+	if len(args) == 0 {
+		fmt.Print(usage())
+		return nil
+	}
+	page, ok := helpFor(args[0])
+	if !ok {
+		return fmt.Errorf("no command %q; one of %s", args[0],
+			strings.Join(commandNames(), " "))
+	}
+	fmt.Print(page)
+	return nil
 }
