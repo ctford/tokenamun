@@ -108,10 +108,12 @@ All four token classes the spec asks for are present, plus thinking tokens and
  "skill_events": [...], "initial_attribution": {...}, "prompt_attributions": [...]}
 ```
 
-Not available anywhere else:
+Recorded nowhere else, and unread here so far — what a checkpoint would
+make answerable:
 
-* **`files_touched`** — ties token spend to the files a change actually landed in.
-  This is what makes "changes in subsystem X cost 2.3× more exploration" possible.
+* **`files_touched`** — would tie token spend to the files a change actually
+  landed in, which is what "changes in subsystem X cost 2.3× more exploration"
+  needs.
 * **`skill_events`** — explicit, confidence-tagged skill invocations with
   `transcript_anchor` line ranges. Better evidence than sniffing for the `Skill`
   tool, and it is marked `confidence: "explicit"` by Entire itself.
@@ -144,9 +146,11 @@ declares which semantics apply.
 
 **Design consequence:** Tokenamun derives *all* token
 accounting from `full.jsonl` (deduplicated by `requestId`) and never from
-checkpoint `token_usage`. Checkpoints are used for slicing, git attribution,
-`files_touched` and skill events only. Where a checkpoint lacks an offset, the
-slice boundary is unknown and the CLI says so rather than guessing.
+checkpoint `token_usage`. What it takes from a checkpoint is the transcript
+in its tree, `session_id` and `created_at`, and nothing else: `full.jsonl` is
+cumulative, so a session's fullest snapshot is its largest across every
+checkpoint, and that is the one loaded. The rest of the metadata above is
+recorded by Entire and unread here.
 
 ## Tool calls and tool results
 

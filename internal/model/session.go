@@ -3,8 +3,10 @@ package model
 import "time"
 
 // Origin records where a session's transcript came from. The two sources carry
-// different evidence, so it is not a cosmetic field: Entire adds checkpoints,
-// git attribution and files_touched that a local transcript does not have.
+// different evidence, so it is not a cosmetic field: an Entire session's
+// transcript can come out of a checkpoint commit, which travels with a clone
+// where .entire/metadata does not, and the checkpoint records git attribution
+// and files_touched beside it that nothing reads yet.
 type Origin string
 
 const (
