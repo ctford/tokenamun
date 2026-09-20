@@ -1,24 +1,16 @@
 # 𓂀 Tokenamun
 
-A token profiler for coding agents. It tells you and your coding agent where
-the tokens went, and what they actually cost — for the session you are in, or
-for a whole team's history.
+A token profiler for Claude. Gives you the evidence to decide which
+optimisations matter.
 
-Costs are in cost-weighted tokens: every class on one scale where 1 is a
-full-price input token, a cache read is 0.1 and output is 5.0. Exact within
-one model, and only within one model — for a total that spans two, `profile`,
-`cache` and `tree` take `--prices` and add it up in dollars instead, from a
-published catalog pinned in the repository and printed beside the figure.
-
-> **Experimental, and vibed rather than rigorous.**
+> **Experimental.**
 
 ## For Claude and Entire
 
-It reads two formats and prices them with Anthropic's published caching rates.
-Not portable to other providers.
+It reads data from two sources:
 
 - **Claude Code's transcripts**, under `~/.claude/projects/`.
-- **[Entire](https://entire.io)'s recordings**, when a repository uses it.
+- **[Entire](https://entire.io) recordings** of teams using Claude Code.
 
 ## Installing
 
@@ -26,7 +18,8 @@ Not portable to other providers.
 go install github.com/ctford/tokenamun/cmd/tokenamun@latest
 ```
 
-That lands in `$(go env GOPATH)/bin`, which is often not on your `PATH`.
+That lands in `$(go env GOPATH)/bin`, which you may have to add to your
+`PATH`.
 
 Or with Homebrew:
 
@@ -37,27 +30,29 @@ brew install --HEAD ctford/tap/tokenamun
 To work on it, `go build ./cmd/tokenamun` and run `./scripts/checks.sh` — the
 same script the pre-commit hook and CI run.
 
-## Using it
+## Using it directly
 
 ```sh
 tokenamun doctor            # can it read anything here?
+tokenamun report current    # a standalone HTML viewer of the same tree
 tokenamun profile current   # the session you are in
 tokenamun tree current      # where the tokens went, one level at a time
 ```
 
-## Driven by an agent
+Sessions are found per directory: run it in the repository you were working
+in, or pass `--dir`. Claude Code's transcripts are matched by the working
+directory each one records; Entire's are read from `.entire/metadata` in the
+repository. `--source local` or `--source entire` picks one when both are
+there.
+
+Name a session by `current` — the one you are in — or by `latest`, or by id
+prefix. Most commands also take `all`, which sums every session found; with
+Entire, that is the whole team. `--since 7d` narrows it to the last week.
+
+## The better way — driving it with Claude Code
 
 The intent is that you ask about your own usage in conversation and your agent
-answers with measurements. Every command takes `--json`, and each level of the
-drill-down prints the command that goes one deeper, so an agent can navigate
-without guessing at names.
-
-Figures that are not plain measurements say so. Every command that prints a
-table of figures labels each one — `[observed]`, `[derived]`, or
-`[derived-approx]` where a stated estimator is involved — and the two that
-answer a what-if label that `[counterfactual]`: `cache` for a TTL change,
-`optimise` for a part of the tree. In `optimise` the figure you supply is
-`[given]`, because it is the one number here this tool did not produce.
+answers with measurements.
 
 > *"Where did my tokens go this week?"*
 > → `tokenamun tree all --since 7d`
@@ -68,37 +63,18 @@ answer a what-if label that `[counterfactual]`: `cache` for a TTL change,
 > *"What would halving the shell output be worth?"*
 > → `tokenamun optimise --at "cli output" --optimise 0.5 --why "..."`
 
-A session is named by id prefix, or by `current` or `latest`. `tree`,
-`report`, `profile`, `cache` and `optimise` also take `all`, which sums every
-session discovered — with Entire, that is the whole team. `--since` and
-`--until` take a date or an age, so last week is `--since 7d`.
-
-## Subagents
-
-A session that calls `Agent` pays for the subagent's own context too, and
-Claude Code records it in a separate transcript beside the session's own.
-`profile` reads those and reports what they cost next to the session's own
-figures, with the two summed. They are not folded together: a subagent runs
-in its own context, so its cache reads are not part of this prompt, and
-every other figure in a report is about the context you were in.
-
-This used to be listed below as unmeasurable. It was not; the files were on
-disk and nothing opened them.
-
 ## What it cannot measure
 
 Some things are not visible in the transcript:
 
-- **Tool schemas**, so every MCP and tool-loading question is bounded by the
-  preamble rather than measured.
-- **Thinking that gets re-read.** Claude Code records thinking blocks with
-  empty text, so it is billed but its residency is unknowable. A large part of
-  the `unattributed` box.
+- **Tool schemas**, so data around MCP and tool loading is bundled up in the
+  preamble.
+- **Thinking that gets re-read.** Claude Code records thinking boxes with
+  empty text. This is a large part of the unattributed usage.
 - **Exact token counts for content**, which are estimated from bytes at a
-  ratio calibrated against the session's own prompt growth. `tiktoken` is not
-  Claude's tokenizer and is not used.
-- **Whether the work came out right.** An agent that fails a task consumes the
-  fewest tokens of all, so a reduction is not an improvement on its own.
+  ratio calibrated against the session's own prompt growth.
+- **Whether the token spend was worth it.** Tokenamun doesn't judge the value
+  of your tokens, just helps you to know where they went.
 
 Details in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
 
