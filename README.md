@@ -33,10 +33,10 @@ same script the pre-commit hook and CI run.
 ## Using it directly
 
 ```sh
-tokenamun doctor            # can it read anything here?
-tokenamun report current    # an HTML report of usage
-tokenamun profile current   # the session you are in
-tokenamun tree current      # where the tokens went, one level at a time
+tokenamun doctor     # can it read anything here?
+tokenamun report     # an HTML report of usage
+tokenamun profile    # what the session cost, and how it was billed
+tokenamun tree       # where the tokens went, one level at a time
 ```
 
 Every command takes `[--dir directory]` for where to look, defaulting to the
@@ -44,10 +44,11 @@ current directory: Claude Code's transcripts recorded for it, and Entire's
 recordings in the repository containing it. `--source local` or
 `--source entire` picks one when both are there.
 
-Name a session by `current` — the one you are in — or by `latest`, or by id
-prefix. Where the question composes across sessions, `all` sums every session
-found — with Entire, that is the whole team — and `tokenamun help` says which
-commands take it. `--since 7d` narrows it to the last week.
+With no session named they take the one you are in, or the latest for that
+directory. Name one with `current`, `latest`, or an id prefix. Where the
+question composes across sessions, `all` sums every session found — with
+Entire, that is the whole team — and `tokenamun help` says which commands
+take it. `--since 7d` narrows it to the last week.
 
 ## The better way — driving it with Claude Code
 
